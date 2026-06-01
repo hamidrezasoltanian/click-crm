@@ -696,6 +696,17 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
 .wp-fcl-act-remove:hover{background:#fecaca}
 .wp-fcl-no-data{text-align:center;padding:30px;color:var(--text-muted);font-size:12px}
 .wp-fcl-footer{padding:7px 14px;font-size:11px;color:var(--text-muted);background:var(--bg-raised);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.bulk-toolbar{display:none;background:#1e40af;color:#fff;padding:8px 12px;border-radius:8px;margin-bottom:8px;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;font-weight:600}
+.bulk-toolbar.active{display:flex}
+.row-cb{width:14px;height:14px;cursor:pointer;accent-color:#2563eb}
+tr.bulk-selected td{background:#eff6ff!important}
+tr.row-overdue td{background:#fef2f2!important}
+tr.row-upcoming td{background:#fffbeb!important}
+tr.row-stalled td{background:#f8f8f8!important;color:var(--text-muted)}
+tr.row-contracted td{background:#f0fdf4!important}
+.qf-btn{font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:12px;background:var(--bg-raised);cursor:pointer;font-family:inherit;color:var(--text-secondary);transition:.15s}
+.qf-btn:hover,.qf-btn.active{background:#dbeafe;border-color:#3b82f6;color:#1e40af}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('XLSX CDN failed - only TSV format supported offline')"></script>
 </head>
@@ -788,11 +799,35 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
     <button class="vb" id="vb_pipeline" onclick="setViewMode('pipeline')" title="Pipeline">🔀</button>
   </span>
   <button class="btn-act btn-excel" id="csvBtn" style="display:none" onclick="exportCSV()">📊 CSV</button>
+  <button class="btn-act" id="xlsBtn" style="display:none" onclick="exportCurrentXlsx()">📊 Excel</button>
+  <select id="filterPresetSel" style="display:none;padding:5px 8px;border:1px solid var(--border-input);border-radius:5px;font-size:11px;background:var(--bg-input);color:var(--text-primary);font-family:inherit" onchange="loadFilterPreset(this.value)">
+    <option value="">📁 پریست‌ها</option>
+  </select>
+  <button id="savePresetBtn" style="display:none;font-size:10px;padding:4px 8px;border:1px solid #0ea5e9;border-radius:5px;background:#f0f9ff;color:#0369a1;cursor:pointer;font-family:inherit" onclick="saveFilterPreset()">💾 ذخیره فیلتر</button>
   <button class="btn-act btn-print no-print" id="printBtn" style="display:none" onclick="doPrint()">🖨 چاپ</button>
   <button class="btn-act btn-addcenter" id="addCenterBtn" style="display:none" onclick="addCenter()">➕ مرکز جدید</button>
   <button id="distWizardBtn" class="btn-act" onclick="openDistributionWizard()" style="background:#8b5cf6;color:#fff;display:none">🔀 تقسیم مراکز</button>
 </div>
 
+<!-- BULK TOOLBAR -->
+<div id="centersBulkBar" class="bulk-toolbar">
+  <span id="centersBulkCount"></span>
+  <button onclick="bulkAddToWeekPlan()" style="background:#0ea5e9;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px">&#x1F4CB; افزودن به هفته</button>
+  <button onclick="bulkChangeOwner()" style="background:#8b5cf6;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px">&#x1F464; تغییر مسئول</button>
+  <button onclick="bulkChangeStatus()" style="background:#f59e0b;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px">&#x1F504; تغییر وضعیت</button>
+  <button onclick="bulkExport()" style="background:#22c55e;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px">&#x2B07; خروجی</button>
+  <button onclick="clearCenterSelection()" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px">&#x2715; انصراف</button>
+</div>
+<!-- QUICK FILTERS -->
+<div id="quickFilters" style="display:none;padding:4px 8px;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);background:var(--bg-page)">
+  <span style="font-size:11px;color:var(--text-muted);font-weight:600">فیلتر سریع:</span>
+  <button class="qf-btn" onclick="applyQuickFilter('overdue')" id="qf_overdue">&#x1F534; پیگیری سررسیده</button>
+  <button class="qf-btn" onclick="applyQuickFilter('nofollowup')" id="qf_nofollowup">&#x1F4EB; بدون follow-up</button>
+  <button class="qf-btn" onclick="applyQuickFilter('noowner')" id="qf_noowner">&#x1F464; بدون مسئول</button>
+  <button class="qf-btn" onclick="applyQuickFilter('stalled')" id="qf_stalled">&#x23F8; بدون فعالیت ۳۰+ روز</button>
+  <button class="qf-btn" onclick="applyQuickFilter('pot1')" id="qf_pot1">&#x2B50; پتانسیل ۱</button>
+  <button class="qf-btn" onclick="applyQuickFilter('none')" id="qf_none" style="color:var(--text-muted)">&#x2715; پاک</button>
+</div>
 <!-- TABLE AREA -->
 <div id="tableArea">
   <div id="emptyDBMsg" style="display:none;text-align:center;padding:60px 20px">
@@ -803,6 +838,7 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
   </div>
   <div id="provGrid" class="prov-grid" style="display:none"></div>
   <div class="table-wrap">
+    <div id="centerStatsBar" style="display:none;padding:6px 10px;background:var(--bg-raised);border-radius:6px;margin-bottom:6px;font-size:11px;gap:12px;flex-wrap:wrap;align-items:center"></div>
     <table id="mainTable" style="display:none"><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
     <div id="kanbanView" style="display:none"></div>
     <div id="cardView" style="display:none"></div>
@@ -942,6 +978,10 @@ var _tagPickerKey=null;
 var _bannerFilterUser='';
 var _bannerFilterTag=0;
 var _globalOwnerFilter='';
+var _quickFilter='';
+var _sortField='';
+var _sortDir=1;
+var _selectedCenters=new Set();
 var _provView='grid'; // 'grid' | 'list' | 'kanban'
 var _nextTagId=1;var _nextWkId=1;var _nextEvId=1;
 
@@ -1989,9 +2029,10 @@ function openProvince(provId){
   var pb=document.getElementById('provBackBtn');if(pb)pb.style.display='';
   var ab=document.getElementById('addCenterBtn');if(ab)ab.style.display='';
   // نمایش filter controls
-  ['srch','fPot','lblPot','fStatus','lblSt','fLead','lblLd','fOwner','lblOw','fTag','lblTg','fType','lblTp','viewSw','csvBtn','printBtn'].forEach(function(id){
+  ['srch','fPot','lblPot','fStatus','lblSt','fLead','lblLd','fOwner','lblOw','fTag','lblTg','fType','lblTp','viewSw','csvBtn','printBtn','xlsBtn','savePresetBtn'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.style.display='';
   });
+  var qf=document.getElementById('quickFilters');if(qf)qf.style.display='flex';
   ['srch','fPot','fStatus','fLead','fOwner','fTag'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   rebuildFilters();
   renderProvTable();
@@ -2003,9 +2044,13 @@ function backToProvinces(){
   var pb=document.getElementById('provBackBtn');if(pb)pb.style.display='none';
   var ab=document.getElementById('addCenterBtn');if(ab)ab.style.display='none';
   var hd=document.getElementById('provViewHead');if(hd)hd.textContent='';
-  ['srch','fPot','lblPot','fStatus','lblSt','fLead','lblLd','fOwner','lblOw','fTag','lblTg','viewSw','csvBtn','printBtn','hardToggleBtn'].forEach(function(id){
+  ['srch','fPot','lblPot','fStatus','lblSt','fLead','lblLd','fOwner','lblOw','fTag','lblTg','viewSw','csvBtn','printBtn','hardToggleBtn','xlsBtn','savePresetBtn','filterPresetSel'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.style.display='none';
   });
+  var qf=document.getElementById('quickFilters');if(qf)qf.style.display='none';
+  var sb=document.getElementById('centerStatsBar');if(sb)sb.style.display='none';
+  _quickFilter='';_selectedCenters=new Set();
+  var bar=document.getElementById('centersBulkBar');if(bar)bar.classList.remove('active');
   // reset view
   _viewMode='list';
   // allCentersToggle را نمایش بده
@@ -2346,6 +2391,12 @@ function getFiltered(){
     var owner=e.owner||r.owner||'';if(effectiveOwner&&owner!==effectiveOwner)return false;
     if(ftp){var ctype=e.type||r.type||'';if(ctype.indexOf(ftp)<0)return false;}
     if(ft){var tgs=rTags(rtype,r.id);if(tgs.indexOf(ft)===-1)return false;}
+    // Quick filter
+    if(_quickFilter==='overdue')return isOverdue(rtype,r.id);
+    if(_quickFilter==='nofollowup'){return !e.followupDate;}
+    if(_quickFilter==='noowner'){return !(e.owner||r.owner);}
+    if(_quickFilter==='stalled')return isStalled(rtype,r.id);
+    if(_quickFilter==='pot1'){return (e.potential||r.potential)==1;}
     return true;
   });
 }
@@ -2461,10 +2512,44 @@ function renderProvTable(){
   var rtype=getProvType(_currentProvId);
   var data=getFiltered();
   var today=todayStr();
+  clearCenterSelection();
+  // Pin sort: pinned at top, then apply _sortField within each group
+  var pinnedKeys=new Set((DB.settings&&DB.settings.pinnedCenters)||[]);
+  var pinnedData=data.filter(function(r){return pinnedKeys.has(recK(rtype,r.id));});
+  var unpinnedData=data.filter(function(r){return !pinnedKeys.has(recK(rtype,r.id));});
+  function sortGroup(arr){
+    if(!_sortField)return arr;
+    return arr.slice().sort(function(a,b){
+      var ea=getE(rtype,a.id),eb=getE(rtype,b.id);
+      var va,vb;
+      if(_sortField==='name'){va=a.name;vb=b.name;}
+      else if(_sortField==='potential'){va=parseInt(ea.potential||a.potential||9);vb=parseInt(eb.potential||b.potential||9);}
+      else if(_sortField==='status'){va=STATUS_LIST.indexOf(ea.status||'بدون تماس');vb=STATUS_LIST.indexOf(eb.status||'بدون تماس');}
+      else if(_sortField==='followupDate'){va=ea.followupDate||'9999';vb=eb.followupDate||'9999';}
+      else if(_sortField==='lastActivity'){va=ea._lastActivity||ea._ts||0;vb=eb._lastActivity||eb._ts||0;}
+      if(va<vb)return -_sortDir;if(va>vb)return _sortDir;return 0;
+    });
+  }
+  data=sortGroup(pinnedData).concat(sortGroup(unpinnedData));
   var head=document.getElementById('tableHead');
   var body=document.getElementById('tableBody');
   if(!head||!body)return;
-  head.innerHTML='<tr><th>#</th><th>نام مرکز</th><th>پتانسیل</th><th>نوع</th><th>سرنخ</th><th>مسئول</th><th>وضعیت</th><th>پیگیری بعدی</th><th>یادداشت</th><th>هفته</th></tr>';
+  function _sortTh(field,label){
+    var arrow=_sortField===field?(_sortDir===1?' ↑':' ↓'):'';
+    return '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="setCenterSort(\''+field+'\')" title="مرتب‌سازی">'+label+arrow+'</th>';
+  }
+  head.innerHTML='<tr><th><input type="checkbox" id="selectAllCb" onclick="toggleSelectAll(this)" style="width:14px;height:14px;cursor:pointer;accent-color:#2563eb"></th>'
+    +_sortTh('name','نام مرکز')
+    +'<th>پتانسیل</th>'
+    +'<th>نوع</th>'
+    +'<th>سرنخ</th>'
+    +'<th>مسئول</th>'
+    +'<th>وضعیت</th>'
+    +_sortTh('followupDate','پیگیری بعدی')
+    +'<th>یادداشت</th>'
+    +'<th>هفته</th>'
+    +_sortTh('lastActivity','آخرین تماس')
+    +'</tr>';
   body.innerHTML=data.length?data.map(function(r){
     var e=getE(rtype,r.id);
     var st=e.status||'بدون تماس';var sc=stCls(st);
@@ -2473,13 +2558,38 @@ function renderProvTable(){
     var fd=e.followupDate||'';
     var fdCls='fd-inp'+(fd&&fd<today?' ov':fd&&fd===today?' today':'');
     var notes=DB.notes[recK(rtype,r.id)]||[];
-    var stall=isStalled(rtype,r.id);var ov=isOverdue(rtype,r.id);
-    return'<tr data-rowid="'+r.id+'"'+(stall?' style="background:#fef2f2"':ov?' style="background:#fffbeb"':'')+'>'
-      +'<td>'+r.row+'</td>'
+    var lastNote=notes.length?notes[notes.length-1]:null;
+    var notePreview=lastNote?'<div style="font-size:9px;color:var(--text-muted);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px" title="'+esc(lastNote.text||'')+'">'+esc((lastNote.text||'').substring(0,40))+'</div>':'';
+    // Row color class (Improvement 2)
+    var rowCls='';
+    if(st==='قرارداد بسته شد')rowCls='row-contracted';
+    else if(isOverdue(rtype,r.id))rowCls='row-overdue';
+    else if(fd&&fd<=addDaysToJalali(today,3))rowCls='row-upcoming';
+    else if(isStalled(rtype,r.id))rowCls='row-stalled';
+    // Pin
+    var pinned=isPinned(rtype,r.id);
+    var pinBtn='<button onclick="event.stopPropagation();togglePin(\''+rtype+'\',\''+r.id+'\')" title="'+(pinned?'رفع پین':'پین')+'" style="background:none;border:none;cursor:pointer;font-size:12px;padding:0 2px;opacity:'+(pinned?'1':'.3')+'" class="pin-btn">⭐</button>';
+    // Phone
+    var firstPhone=e.phones&&e.phones.length?e.phones[0]:'';
+    var phoneHtml=firstPhone?'<a href="tel:'+esc(firstPhone)+'" style="display:block;font-size:9px;color:#0369a1;direction:ltr;text-decoration:none;margin-top:1px" onclick="event.stopPropagation()">📞 '+esc(firstPhone)+'</a>':'';
+    // Last contact
+    var lastTs=e._lastActivity||e._ts||0;
+    var daysSince=lastTs?Math.floor((nowTs()-lastTs)/86400000):null;
+    var lastContactHtml=daysSince===null
+      ?'<span style="color:var(--text-muted);font-size:10px">—</span>'
+      :daysSince===0?'<span style="color:#16a34a;font-size:10px;font-weight:600">امروز</span>'
+      :daysSince<=7?'<span style="color:#0ea5e9;font-size:10px">'+daysSince+' روز</span>'
+      :daysSince<=30?'<span style="color:#f59e0b;font-size:10px">'+daysSince+' روز</span>'
+      :'<span style="color:#dc2626;font-size:10px;font-weight:600">'+daysSince+' روز 🔴</span>';
+    return'<tr data-rowid="'+r.id+'" class="'+rowCls+'">'
+      +'<td><input type="checkbox" class="row-cb" data-rid="'+r.id+'" data-rtype="'+rtype+'" onclick="toggleCenterSelect(this,\''+r.id+'\')" style="width:14px;height:14px;cursor:pointer;accent-color:#2563eb"></td>'
       +'<td>'
-        +(stall?'<span class="risk-badge" title="۳۰+ روز بدون فعالیت">🔴</span>':'')
-        +(ov&&!stall?'<span class="risk-badge" title="پیگیری معوق">🟠</span>':'')
-        +(function(){var _mi=typeof MTR_BY_CENTER!=='undefined'?MTR_BY_CENTER[r.id]:null;if(!_mi||!_mi.length)return '';var _ov=_mi.filter(function(x){return x.od>45;});var _warn=_mi.filter(function(x){return x.od>20&&x.od<=45;});var _col=_ov.length?'#dc2626':_warn.length?'#d97706':'#0ea5e9';var _tot=_mi.reduce(function(s,x){return s+x.rem;},0);return '<span title="مطالبات باز" style="background:'+_col+';color:var(--text-primary);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px;cursor:default">💰 '+_mi.length+'</span>';})()+'<button class="ctr-link" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'+esc(r.name)+'</button>'
+        +pinBtn
+        +(isStalled(rtype,r.id)&&rowCls!=='row-contracted'?'<span class="risk-badge" title="۳۰+ روز بدون فعالیت">🔴</span>':'')
+        +(isOverdue(rtype,r.id)&&rowCls!=='row-stalled'?'<span class="risk-badge" title="پیگیری معوق">🟠</span>':'')
+        +(function(){var _mi=typeof MTR_BY_CENTER!=='undefined'?MTR_BY_CENTER[r.id]:null;if(!_mi||!_mi.length)return '';var _ov=_mi.filter(function(x){return x.od>45;});var _warn=_mi.filter(function(x){return x.od>20&&x.od<=45;});var _col=_ov.length?'#dc2626':_warn.length?'#d97706':'#0ea5e9';return '<span title="مطالبات باز" style="background:'+_col+';color:var(--text-primary);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px;cursor:default">💰 '+_mi.length+'</span>';})()
+        +'<button class="ctr-link" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'+esc(r.name)+'</button>'
+        +phoneHtml
         +renderTagCell(rtype,r.id)+'</td>'
       +'<td><select class="pot-btn pot-'+pot+'" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'potential\',parseInt(this.value));this.className=\'pot-btn pot-\'+this.value">'
         +[1,2,3,4].map(function(v){return'<option value="'+v+'"'+(pot==v?' selected':'')+'>'+v+'</option>';}).join('')+'</select></td>'
@@ -2495,14 +2605,17 @@ function renderProvTable(){
         +'<span class="st-print">'+st+'</span></td>'
       +'<td><input type="text" class="'+fdCls+'" value="'+fd+'" readonly onclick="openJDP(this,function(v){setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);this.value=v;renderBanner();renderProvTable();}.bind(this))" style="cursor:pointer"></td>'
       +'<td><button class="note-btn'+(notes.length?' has':'')+'" onclick="openNotes(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">📝'+(notes.length?' '+notes.length:'')+'</button>'
-        +'<input style="margin-right:4px;width:100px;border:1px solid var(--border-input);border-radius:4px;padding:2px 5px;font-size:10px;direction:rtl" placeholder="یادداشت سریع" onkeydown="if(event.key===\'Enter\'&&this.value.trim()){addNote(\''+rtype+'\',\''+r.id+'\',this.value,this);}"></td>'
+        +'<input style="margin-right:4px;width:100px;border:1px solid var(--border-input);border-radius:4px;padding:2px 5px;font-size:10px;direction:rtl" placeholder="یادداشت سریع" onkeydown="if(event.key===\'Enter\'&&this.value.trim()){addNote(\''+rtype+'\',\''+r.id+'\',this.value,this);}">'
+        +notePreview+'</td>'
       +'<td><button class="btn-assignweek" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">📋 هفته</button></td>'
+      +'<td>'+lastContactHtml+'</td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:#94a3b8">نتیجه‌ای یافت نشد</td></tr>';
+  }).join(''):'<tr><td colspan="12" style="text-align:center;padding:40px;color:#94a3b8">نتیجه‌ای یافت نشد</td></tr>';
   rebuildFilters();
+  buildPresetSelector();
+  _renderCenterStatsBar(data,rtype);
   var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent='نمایش '+data.length+' مرکز';
 }
-
 function onStatus(type,id,sel){
   var v=sel.value;sel.className='st-sel '+stCls(v);
   setE(type,id,'status',v);
@@ -2555,7 +2668,9 @@ function _doAddCenter(){
 
     var centers=getProvCenters(_currentProvId);
     var dup=centers.find(function(c){return fNorm(c.name)===fNorm(name);});
+    var similar=!dup&&centers.find(function(c){return _centerNameSimilar(c.name,name);});
     if(dup){showToast('⚠ مرکز «'+dup.name+'» قبلاً ثبت شده',3000);return;}
+    if(similar){if(!confirm('⚠ مرکز مشابه «'+similar.name+'» در این استان وجود دارد.\nآیا می‌خواهید «'+name+'» را اضافه کنید؟'))return;}
 
     var type=(document.getElementById('ac_type').value||'').trim()||'سایر';
     var pot=parseInt((document.getElementById('ac_pot')||{}).value)||2;
@@ -8864,6 +8979,267 @@ function mtrLazyInit(){
   }
 }
 
+
+// ════════ IMPROVEMENT 1: Bulk Selection ════════
+function toggleCenterSelect(cb,id){
+  var rtype=cb.getAttribute('data-rtype');
+  var key=rtype+'_'+id;
+  if(cb.checked)_selectedCenters.add(key);
+  else _selectedCenters.delete(key);
+  var row=cb.closest('tr');
+  if(row)row.classList.toggle('bulk-selected',cb.checked);
+  _updateCenterBulkBar();
+}
+function toggleSelectAll(cb){
+  document.querySelectorAll('.row-cb').forEach(function(c){
+    c.checked=cb.checked;
+    var rtype2=c.getAttribute('data-rtype');
+    var rid=c.getAttribute('data-rid');
+    var key=rtype2+'_'+rid;
+    if(cb.checked)_selectedCenters.add(key);
+    else _selectedCenters.delete(key);
+    var row=c.closest('tr');
+    if(row)row.classList.toggle('bulk-selected',cb.checked);
+  });
+  _updateCenterBulkBar();
+}
+function _updateCenterBulkBar(){
+  var bar=document.getElementById('centersBulkBar');
+  var cnt=document.getElementById('centersBulkCount');
+  if(!bar)return;
+  if(_selectedCenters.size>0){
+    bar.classList.add('active');
+    if(cnt)cnt.textContent=_selectedCenters.size+' مرکز انتخاب شده';
+  }else{
+    bar.classList.remove('active');
+    var allCb=document.getElementById('selectAllCb');
+    if(allCb)allCb.checked=false;
+  }
+}
+function clearCenterSelection(){
+  _selectedCenters.clear();
+  document.querySelectorAll('.row-cb').forEach(function(c){c.checked=false;});
+  document.querySelectorAll('tr.bulk-selected').forEach(function(r){r.classList.remove('bulk-selected');});
+  var allCb=document.getElementById('selectAllCb');
+  if(allCb)allCb.checked=false;
+  _updateCenterBulkBar();
+}
+function bulkAddToWeekPlan(){
+  var keys=Array.from(_selectedCenters);
+  if(!keys.length)return;
+  var sel=document.getElementById('wpSel');
+  var weekId=sel?sel.value:null;
+  if(!weekId){var ws=wpGetWeeks();if(ws.length){var nw=ws.find(function(w){return !w.isPast;});weekId=nw?nw.id:ws[ws.length-1].id;}}
+  if(!weekId){showToast('⚠ هیچ هفته‌ای یافت نشد');return;}
+  var added=0;
+  keys.forEach(function(key){
+    var parts=key.split('_');var rtype=parts[0];var rid=parts.slice(1).join('_');
+    var eKey=wpEntryKey(weekId,rtype,rid);
+    if(!DB.weekEntries[eKey]){
+      DB.weekEntries[eKey]={scheduledDate:null,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:key,addedBy:currentUser,actionType:'call'};
+      added++;
+    }
+  });
+  saveDB();clearCenterSelection();
+  showToast('📋 '+added+' مرکز به برنامه هفته اضافه شد',2500);
+}
+function bulkChangeOwner(){
+  var keys=Array.from(_selectedCenters);
+  if(!keys.length)return;
+  var body='<div style="font-size:12px;margin-bottom:10px;color:var(--text-muted)">'+keys.length+' مرکز انتخابی</div>'
+    +'<select id="bulkOwnerSel" style="width:100%;padding:8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:13px">'
+    +'<option value="">— بدون مسئول —</option>'
+    +Object.keys(USERS).map(function(u){return'<option value="'+u+'">'+USERS[u]+'</option>';}).join('')
+    +'</select>';
+  openModal('bulkOwnerModal','👤 تغییر مسئول',body,
+    '<button class="btn-secondary" onclick="closeModal(\'bulkOwnerModal\')">انصراف</button>'
+    +'<button class="btn-primary" onclick="_doBulkOwner()">✅ تأیید</button>');
+}
+function _doBulkOwner(){
+  var val=(document.getElementById('bulkOwnerSel')||{}).value||'';
+  var keys=Array.from(_selectedCenters);
+  keys.forEach(function(key){
+    var parts=key.split('_');var rtype=parts[0];var rid=parts.slice(1).join('_');
+    setE(rtype,rid,'owner',val);
+  });
+  closeModal('bulkOwnerModal');clearCenterSelection();renderTable();
+  showToast('✅ مسئول '+keys.length+' مرکز تغییر کرد',2000);
+}
+function bulkChangeStatus(){
+  var keys=Array.from(_selectedCenters);
+  if(!keys.length)return;
+  var body='<div style="font-size:12px;margin-bottom:10px;color:var(--text-muted)">'+keys.length+' مرکز انتخابی</div>'
+    +'<select id="bulkStatusSel" style="width:100%;padding:8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:13px">'
+    +STATUS_LIST.map(function(s){return'<option>'+s+'</option>';}).join('')
+    +'</select>';
+  openModal('bulkStatusModal','🔄 تغییر وضعیت',body,
+    '<button class="btn-secondary" onclick="closeModal(\'bulkStatusModal\')">انصراف</button>'
+    +'<button class="btn-primary" onclick="_doBulkStatus()">✅ تأیید</button>');
+}
+function _doBulkStatus(){
+  var val=(document.getElementById('bulkStatusSel')||{}).value||STATUS_LIST[0];
+  var keys=Array.from(_selectedCenters);
+  keys.forEach(function(key){
+    var parts=key.split('_');var rtype=parts[0];var rid=parts.slice(1).join('_');
+    setE(rtype,rid,'status',val);
+  });
+  closeModal('bulkStatusModal');clearCenterSelection();renderTable();
+  showToast('✅ وضعیت '+keys.length+' مرکز تغییر کرد',2000);
+}
+function bulkExport(){
+  var keys=Array.from(_selectedCenters);
+  if(!keys.length)return;
+  if(typeof XLSX==='undefined'){showToast('⚠ کتابخانه Excel بارگذاری نشده');return;}
+  var rtype=getProvType(_currentProvId);
+  var rows=[['نام مرکز','پتانسیل','نوع','مسئول','وضعیت','تاریخ پیگیری']];
+  keys.forEach(function(key){
+    var parts=key.split('_');var rt=parts[0];var rid=parts.slice(1).join('_');
+    var centers=getProvCenters(_currentProvId);
+    var r=centers.find(function(x){return x.id===rid;});
+    if(!r)return;
+    var e=getE(rt,rid);
+    rows.push([r.name,e.potential||r.potential||'',e.type||r.type||'',USERS[e.owner||r.owner||'']||'',e.status||'بدون تماس',e.followupDate||'']);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'مراکز');
+  XLSX.writeFile(wb,'centers_selected_'+todayStr().replace(/\//g,'-')+'.xlsx');
+}
+
+// ════════ IMPROVEMENT 2: addDaysToJalali ════════
+function addDaysToJalali(dateStr,days){
+  if(!dateStr)return '';
+  var parts=dateStr.split('/').map(Number);
+  if(parts.length!==3)return dateStr;
+  var d=jAdd(parts[0],parts[1],parts[2],days);
+  return d[0]+'/'+p2(d[1])+'/'+p2(d[2]);
+}
+
+// ════════ IMPROVEMENT 3: Quick filters ════════
+function applyQuickFilter(f){
+  _quickFilter=(_quickFilter===f)?'':f;
+  document.querySelectorAll('.qf-btn').forEach(function(b){b.classList.remove('active');});
+  if(_quickFilter){var btn=document.getElementById('qf_'+_quickFilter);if(btn)btn.classList.add('active');}
+  renderTable();
+}
+
+// ════════ IMPROVEMENT 4: Filter presets ════════
+function saveFilterPreset(){
+  var name=prompt('نام پریست را وارد کنید:');
+  if(!name||!name.trim())return;
+  var preset={
+    q:(document.getElementById('srch')||{}).value||'',
+    pot:(document.getElementById('fPot')||{}).value||'',
+    status:(document.getElementById('fStatus')||{}).value||'',
+    lead:(document.getElementById('fLead')||{}).value||'',
+    owner:(document.getElementById('fOwner')||{}).value||'',
+    type:(document.getElementById('fType')||{}).value||'',
+    qf:_quickFilter
+  };
+  if(!DB.settings)DB.settings={};
+  if(!DB.settings.filterPresets)DB.settings.filterPresets={};
+  DB.settings.filterPresets[name.trim()]=preset;
+  saveDB();buildPresetSelector();
+  showToast('💾 پریست «'+name.trim()+'» ذخیره شد',2000);
+}
+function loadFilterPreset(name){
+  if(!name)return;
+  var presets=(DB.settings&&DB.settings.filterPresets)||{};
+  var p=presets[name];
+  if(!p)return;
+  var set=function(id,v){var el=document.getElementById(id);if(el)el.value=v||'';};
+  set('srch',p.q);set('fPot',p.pot);set('fStatus',p.status);
+  set('fLead',p.lead);set('fOwner',p.owner);set('fType',p.type);
+  _quickFilter=p.qf||'';
+  document.querySelectorAll('.qf-btn').forEach(function(b){b.classList.remove('active');});
+  if(_quickFilter){var btn=document.getElementById('qf_'+_quickFilter);if(btn)btn.classList.add('active');}
+  var sel=document.getElementById('filterPresetSel');if(sel)sel.value='';
+  renderTable();
+}
+function buildPresetSelector(){
+  var sel=document.getElementById('filterPresetSel');
+  if(!sel)return;
+  var presets=(DB.settings&&DB.settings.filterPresets)||{};
+  var names=Object.keys(presets);
+  sel.innerHTML='<option value="">📁 پریست‌ها</option>'
+    +names.map(function(n){return'<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  sel.style.display=names.length?'':'none';
+}
+
+// ════════ IMPROVEMENT 5: Stats bar ════════
+function _renderCenterStatsBar(data,rtype){
+  var bar=document.getElementById('centerStatsBar');
+  if(!bar)return;
+  var counts={};
+  STATUS_LIST.forEach(function(s){counts[s]=0;});
+  var overdueCnt=0,stalledCnt=0;
+  data.forEach(function(r){
+    var e=getE(rtype,r.id);
+    var st=e.status||'بدون تماس';
+    counts[st]=(counts[st]||0)+1;
+    if(isOverdue(rtype,r.id))overdueCnt++;
+    if(isStalled(rtype,r.id))stalledCnt++;
+  });
+  var ST_COLORS2=['#94a3b8','#3b82f6','#8b5cf6','#f59e0b','#22c55e','#ef4444'];
+  var ST_ICONS2=['⬜','📞','🤝','📋','✅','🚫'];
+  bar.style.display='flex';
+  bar.innerHTML='<span style="font-weight:700;color:var(--text-primary)">جمع: '+data.length+'</span>'
+    +STATUS_LIST.map(function(s,i){
+      if(!counts[s])return '';
+      return'<span style="background:'+ST_COLORS2[i]+'20;color:'+ST_COLORS2[i]+';border:1px solid '+ST_COLORS2[i]+'44;border-radius:10px;padding:2px 8px">'+ST_ICONS2[i]+' '+s+': '+counts[s]+'</span>';
+    }).join('')
+    +(overdueCnt?'<span style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;font-weight:700">🔴 سررسیده: '+overdueCnt+'</span>':'')
+    +(stalledCnt?'<span style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;border-radius:10px;padding:2px 8px">⏸ بی‌فعالیت: '+stalledCnt+'</span>':'');
+}
+
+// ════════ IMPROVEMENT 7: Sort ════════
+function setCenterSort(field){
+  if(_sortField===field)_sortDir*=-1;
+  else{_sortField=field;_sortDir=1;}
+  renderTable();
+}
+
+// ════════ IMPROVEMENT 9: Pin centers ════════
+function isPinned(rtype,id){
+  var pins=(DB.settings&&DB.settings.pinnedCenters)||[];
+  return pins.indexOf(recK(rtype,id))>=0;
+}
+function togglePin(rtype,id){
+  if(!DB.settings)DB.settings={};
+  if(!DB.settings.pinnedCenters)DB.settings.pinnedCenters=[];
+  var key=recK(rtype,id);
+  var idx=DB.settings.pinnedCenters.indexOf(key);
+  if(idx>=0)DB.settings.pinnedCenters.splice(idx,1);
+  else DB.settings.pinnedCenters.push(key);
+  saveDB();renderTable();
+}
+
+// ════════ IMPROVEMENT 10: Province Excel export ════════
+function exportCurrentXlsx(){
+  if(!_currentProvId){showToast('ابتدا یک استان را باز کنید');return;}
+  if(typeof XLSX==='undefined'){showToast('⚠ SheetJS بارگذاری نشده');return;}
+  var rtype=getProvType(_currentProvId);
+  var data=getFiltered();
+  var rows=[['ردیف','نام مرکز','پتانسیل','نوع','سرنخ','مسئول','وضعیت','پیگیری بعدی','تلفن']];
+  data.forEach(function(r){
+    var e=getE(rtype,r.id);
+    rows.push([r.row,r.name,e.potential||r.potential||'',e.type||r.type||'',e.lead||r.lead||'',USERS[e.owner||r.owner||'']||'',e.status||'بدون تماس',e.followupDate||'',(e.phones&&e.phones[0])||'']);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'مراکز');
+  XLSX.writeFile(wb,'centers_'+(_currentProvId||'all')+'_'+todayStr().replace(/\//g,'-')+'.xlsx');
+  showToast('✅ Excel دانلود شد ('+data.length+' مرکز)',2500);
+}
+
+// ════════ IMPROVEMENT 11: Duplicate detection ════════
+function _centerNameSimilar(a,b){
+  var na=fNorm(a),nb=fNorm(b);
+  if(na===nb)return true;
+  if(na.length>4&&nb.indexOf(na)>=0)return true;
+  if(nb.length>4&&na.indexOf(nb)>=0)return true;
+  return false;
+}
 </script>
 
 <!-- ══ RECEIVABLES PANEL ══ -->
