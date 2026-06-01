@@ -47,6 +47,7 @@ app.use('/api/ai', require('./routes/ai'));
 const { router: eventsRouter } = require('./routes/events');
 app.use('/api/events', eventsRouter);
 app.use('/api/audit', require('./routes/audit'));
+app.use('/api/contacts', require('./routes/contacts'));
 
 // Health check
 app.get('/api/health', function (req, res) {

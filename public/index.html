@@ -1879,7 +1879,7 @@ function _getCenterName(type,id){
   return ex?ex.name:id;
 }
 function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]={};
-  var _auditFields=['status','owner','lead','potential','followupDate'];
+  var _auditFields=['status','owner','lead','potential','followupDate','contactName','contactTitle','phones','address'];
   if(_auditFields.indexOf(field)>=0){
     var _oldV=DB.edits[k][field]!==undefined?DB.edits[k][field]:'';
     if(String(_oldV)!==String(val)){
@@ -1889,7 +1889,7 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
       }).catch(function(){});
     }
   }
-  DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);}
+  DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);var _cFields=['contactName','contactTitle','phones','address'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contactName:_ce.contactName||'',contactTitle:_ce.contactTitle||'',      phones:_ce.phones||[],address:_ce.address||''})  }).catch(function(){});}}
 function rTags(type,id){return DB.rTags[recK(type,id)]||[];}
 function tagById(id){return(DB.tags||[]).find(function(t){return t.id===id;});}
 
