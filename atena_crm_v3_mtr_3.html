@@ -654,6 +654,35 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
 [data-theme="dark"] #mtrPanel .date-btn{background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
 [data-theme="dark"] #mtrPanel .mtr-search-inp{background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
 [data-theme="dark"] #mtrPanel .mtr-search-inp::placeholder{color:var(--text-muted)}
+
+/* ══ WP FULL CENTER LIST ══ */
+.wp-fcl-wrap{background:var(--bg-card);border-radius:10px;margin-top:14px;border:1px solid var(--border);overflow:hidden;box-shadow:0 1px 4px var(--shadow)}
+.wp-fcl-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-raised);border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none}
+.wp-fcl-title{font-size:13px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:7px}
+.wp-fcl-badge{background:#0ea5e9;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+.wp-fcl-toggle{font-size:11px;color:var(--text-muted);transition:transform .2s}
+.wp-fcl-body{display:none}
+.wp-fcl-body.open{display:block}
+.wp-fcl-filters{padding:8px 12px;background:var(--bg-raised);border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.wp-fcl-filters input,.wp-fcl-filters select{padding:5px 8px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);direction:rtl}
+.wp-fcl-filters input{min-width:160px;flex:1}
+.wp-fcl-table-wrap{overflow-x:auto}
+.wp-fcl-table{width:100%;border-collapse:collapse;font-size:12px}
+.wp-fcl-table th{background:var(--th-bg);color:var(--th-color);font-size:11px;font-weight:700;padding:7px 10px;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:0;z-index:1}
+.wp-fcl-table td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.wp-fcl-table tr:hover{background:var(--bg-hover)}
+.wp-fcl-table tr.fcl-in-week{background:#f0fdf4}
+.wp-fcl-table tr.fcl-in-week:hover{background:#dcfce7}
+.wp-fcl-owner-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:5px;vertical-align:middle;flex-shrink:0}
+.wp-fcl-act-btn{font-size:10px;padding:3px 8px;border-radius:5px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap}
+.wp-fcl-act-add{background:#dbeafe;color:#1e40af;border:1px solid #93c5fd}
+.wp-fcl-act-add:hover{background:#bfdbfe}
+.wp-fcl-act-sched{background:#dcfce7;color:#166534;border:1px solid #86efac}
+.wp-fcl-act-sched:hover{background:#bbf7d0}
+.wp-fcl-act-remove{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.wp-fcl-act-remove:hover{background:#fecaca}
+.wp-fcl-no-data{text-align:center;padding:30px;color:var(--text-muted);font-size:12px}
+.wp-fcl-footer{padding:7px 14px;font-size:11px;color:var(--text-muted);background:var(--bg-raised);border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('XLSX CDN failed - only TSV format supported offline')"></script>
 </head>
@@ -791,6 +820,7 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
     <div class="wp-unsched-head">📌 بدون تاریخ (نیاز به تعیین روز)</div>
     <div id="wpUnschedList"></div>
   </div>
+  <div id="wpFullCenterList"></div>
 </div>
 
 <!-- CALENDAR PANEL -->
@@ -3280,7 +3310,168 @@ function renderWeekPlan(){
       + '</div>';
     daysEl.parentNode.appendChild(pEl);
   }
+  renderWpFullCenterList();
 }
+// ════════════════════════ WP FULL CENTER LIST ════════════════════
+var _wpFclOpen = true;
+var _wpFclFilters = {q:'', owner:'', prov:''};
+
+function renderWpFullCenterList() {
+  var el = document.getElementById('wpFullCenterList');
+  if (!el) return;
+
+  var sel = document.getElementById('wpSel');
+  var weekId = sel && sel.value ? sel.value : null;
+
+  var inWeekMap = {};
+  if (weekId) {
+    Object.keys(DB.weekEntries || {}).forEach(function(k) {
+      if (!k.startsWith(weekId + ':::')) return;
+      var we = DB.weekEntries[k];
+      var rk = we.recKey || ((we.rtype || '') + '_' + (we.rid || ''));
+      inWeekMap[rk] = {scheduledDate: we.scheduledDate || null, done: we.done || false, eKey: k};
+    });
+  }
+
+  _buildPCCache();
+  var allCenters = [];
+  getAllProvinces().forEach(function(p) {
+    var tp = getProvType(p.id);
+    getProvCenters(p.id).forEach(function(c) {
+      var e = getE(tp, c.id);
+      var owner = e.owner || c.owner || '';
+      var rk = tp + '_' + c.id;
+      var inWk = inWeekMap[rk] || null;
+      allCenters.push({
+        id: c.id, rtype: tp, recKey: rk,
+        name: c.name || '',
+        provId: p.id, provName: p.name || '',
+        owner: owner,
+        ownerName: owner ? (USERS[owner] || owner) : '\u2014',
+        status: e.status || '\u0628\u062f\u0648\u0646 \u062a\u0645\u0627\u0633',
+        followupDate: e.followupDate || '',
+        inWeek: !!inWk,
+        scheduledDate: inWk ? inWk.scheduledDate : null,
+        done: inWk ? inWk.done : false,
+        weekEntryKey: inWk ? inWk.eKey : null
+      });
+    });
+  });
+
+  var unscheduled = allCenters.filter(function(c) {
+    return !c.inWeek || !c.scheduledDate;
+  });
+
+  var q = fNorm(_wpFclFilters.q || '');
+  var ownerF = _wpFclFilters.owner || '';
+  var provF = _wpFclFilters.prov || '';
+
+  var filtered = unscheduled.filter(function(c) {
+    if (ownerF && c.owner !== ownerF) return false;
+    if (provF && c.provId !== provF) return false;
+    if (q && fNorm(c.name).indexOf(q) < 0 && fNorm(c.provName).indexOf(q) < 0 && fNorm(c.ownerName).indexOf(q) < 0) return false;
+    return true;
+  });
+
+  var provOpts = '<option value="">همه استان‌ها</option>'
+    + getAllProvinces().map(function(p) {
+        return '<option value="'+p.id+'"'+(provF===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+      }).join('');
+
+  var members = typeof umGetActive === 'function' ? umGetActive() : [];
+  var ownerOpts = '<option value="">همه کارشناسان</option>'
+    + members.map(function(m) {
+        return '<option value="'+m.id+'"'+(ownerF===m.id?' selected':'')+'>'+esc(m.name)+'</option>';
+      }).join('');
+
+  var todaySt = todayStr();
+  var rows = filtered.map(function(c, idx) {
+    var ownerColor = typeof umGetColor === 'function' ? umGetColor(c.owner) : '#94a3b8';
+    var stCl = stCls(c.status);
+    var wkBadge = (c.inWeek && !c.scheduledDate)
+      ? '<span style="font-size:10px;background:#fef9c3;color:#854d0e;border:1px solid #fcd34d;border-radius:4px;padding:1px 5px;margin-right:4px">در هفته</span>'
+      : '';
+    var fdCell = c.followupDate
+      ? '<span style="font-size:10px;background:'+(c.followupDate < todaySt ? '#fee2e2' : '#dbeafe')+';color:'+(c.followupDate < todaySt ? '#991b1b' : '#1e40af')+';border-radius:4px;padding:1px 5px">'+c.followupDate+'</span>'
+      : '<span style="color:var(--text-muted);font-size:10px">—</span>';
+
+    var actBtns = '';
+    if (!c.inWeek && weekId) {
+      var ridEsc = String(c.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      actBtns = '<button class="wp-fcl-act-btn wp-fcl-act-add" onclick="wpFclAddToWeek(\'' + weekId + '\',\'' + c.rtype + '\',\'' + ridEsc + '\')">+ هفته</button>';
+    } else if (c.inWeek && !c.scheduledDate && c.weekEntryKey) {
+      var eKeyEsc = c.weekEntryKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      actBtns = '<button class="wp-fcl-act-btn wp-fcl-act-sched" onclick="wpSetScheduleFromKey(\'' + eKeyEsc + '\')">&#128197; تعیین روز</button>'
+        + ' <button class="wp-fcl-act-btn wp-fcl-act-remove" onclick="wpRemoveEntry(\'' + eKeyEsc + '\')">&#10005;</button>';
+    } else if (!weekId) {
+      actBtns = '<span style="font-size:10px;color:var(--text-muted)">هفته انتخاب نشده</span>';
+    }
+
+    return '<tr class="'+(c.inWeek && !c.scheduledDate ? 'fcl-in-week' : '')+'">'
+      + '<td style="color:var(--text-muted);font-size:10px;text-align:center">'+(idx+1)+'</td>'
+      + '<td><span style="font-weight:600">'+esc(c.name)+'</span> '+wkBadge+'</td>'
+      + '<td style="font-size:11px">'+esc(c.provName)+'</td>'
+      + '<td><span class="wp-fcl-owner-dot" style="background:'+ownerColor+'"></span><span style="font-size:11px">'+esc(c.ownerName)+'</span></td>'
+      + '<td><span class="'+stCl+'" style="padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600">'+esc(c.status)+'</span></td>'
+      + '<td>'+fdCell+'</td>'
+      + '<td style="white-space:nowrap">'+actBtns+'</td>'
+      + '</tr>';
+  }).join('');
+
+  var html = '<div class="wp-fcl-wrap">'
+    + '<div class="wp-fcl-header" onclick="wpFclToggle()">'
+    + '<div class="wp-fcl-title">&#128203; لیست کامل مراکز بدون تاریخ'
+    + ' <span class="wp-fcl-badge">'+filtered.length+'</span>'
+    + (filtered.length !== unscheduled.length ? '<span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-right:4px">از '+unscheduled.length+'</span>' : '')
+    + '</div>'
+    + '<span class="wp-fcl-toggle" id="wpFclArrow">'+(_wpFclOpen ? '\u25b2' : '\u25bc')+'</span>'
+    + '</div>'
+    + '<div class="wp-fcl-body'+(_wpFclOpen ? ' open' : '')+'" id="wpFclBody">'
+    + '<div class="wp-fcl-filters">'
+    + '<input type="text" placeholder="&#128269; جستجو مرکز / استان / کارشناس..." value="'+esc(_wpFclFilters.q)+'" oninput="_wpFclFilters.q=this.value;renderWpFullCenterList()">'
+    + '<select onchange="_wpFclFilters.owner=this.value;renderWpFullCenterList()">'+ownerOpts+'</select>'
+    + '<select onchange="_wpFclFilters.prov=this.value;renderWpFullCenterList()">'+provOpts+'</select>'
+    + '<button onclick="_wpFclFilters={q:\'\',owner:\'\',prov:\'\'};renderWpFullCenterList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;font-size:11px;color:var(--text-muted)">&#10005; پاک</button>'
+    + '</div>'
+    + '<div class="wp-fcl-table-wrap" style="max-height:440px;overflow-y:auto">'
+    + (filtered.length ? '<table class="wp-fcl-table"><thead><tr>'
+        + '<th style="width:36px">#</th><th>نام مرکز</th><th>استان</th><th>کارشناس</th><th>وضعیت</th><th>پیگیری</th><th>عملیات</th>'
+        + '</tr></thead><tbody>'+rows+'</tbody></table>'
+      : '<div class="wp-fcl-no-data">&#10003; هیچ مرکزی با این فیلتر بدون تاریخ نیست</div>')
+    + '</div>'
+    + '<div class="wp-fcl-footer">'
+    + '<span>'+filtered.length+' مرکز بدون تاریخ برنامه‌ریزی</span>'
+    + (weekId ? '<span style="color:var(--text-muted)">«+ هفته» برای افزودن به برنامه جاری &middot; «&#128197; تعیین روز» برای موجودین در هفته</span>'
+              : '<span style="color:#f59e0b">&#9888; برای عملیات ابتدا هفته انتخاب کنید</span>')
+    + '</div>'
+    + '</div>'
+    + '</div>';
+
+  el.innerHTML = html;
+}
+
+function wpFclToggle() {
+  _wpFclOpen = !_wpFclOpen;
+  var body = document.getElementById('wpFclBody');
+  var arrow = document.getElementById('wpFclArrow');
+  if (body) body.className = 'wp-fcl-body' + (_wpFclOpen ? ' open' : '');
+  if (arrow) arrow.textContent = _wpFclOpen ? '\u25b2' : '\u25bc';
+}
+
+function wpFclAddToWeek(weekId, rtype, rid) {
+  var eKey = wpEntryKey(weekId, rtype, rid);
+  if (DB.weekEntries[eKey]) { showToast('\u0627\u06cc\u0646 \u0645\u0631\u06a9\u0632 \u0642\u0628\u0644\u0627\u064b \u062f\u0631 \u0627\u06cc\u0646 \u0647\u0641\u062a\u0647 \u0627\u0633\u062a'); return; }
+  DB.weekEntries[eKey] = {
+    scheduledDate: null, done: false, doneDate: null,
+    rtype: rtype, rid: rid, recKey: rtype + '_' + rid,
+    centerName: getRecLabel(rtype + '_' + rid),
+    actionType: 'call', addedBy: currentUser
+  };
+  saveDB();
+  renderWeekPlan();
+  showToast('\u0645\u0631\u06a9\u0632 \u0628\u0647 \u0647\u0641\u062a\u0647 \u0627\u0636\u0627\u0641\u0647 \u0634\u062f \u2705', 2000);
+}
+
 function toggleWpActionType(eKey) {
   if (!DB.weekEntries[eKey]) return;
   var cur = DB.weekEntries[eKey].actionType || 'call';
