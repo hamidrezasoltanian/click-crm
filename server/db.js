@@ -79,20 +79,29 @@ async function initSchema() {
     )
   `);
 
-  // Seed admin user if not exists
+  // Seed default users if not exist
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const existing = await query(
-    'SELECT username FROM app_users WHERE username = $1',
-    ['Sarah.hosseini']
-  );
-  if (existing.rows.length === 0) {
-    const hash = await bcrypt.hash(adminPassword, 10);
-    await query(
-      `INSERT INTO app_users (username, display_name, role, color, active, password_hash)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      ['Sarah.hosseini', 'سارا حسینی', 'مدیر', '#8b5cf6', true, hash]
-    );
-    console.log('[DB] Admin user seeded: Sarah.hosseini');
+  const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'Atena@1234';
+
+  const defaultUsers = [
+    { username: 'Sarah.hosseini',        name: 'سارا حسینی',         role: 'مدیر',           color: '#8b5cf6', pwd: adminPassword },
+    { username: 'Reyhane.kashisaz',      name: 'ریحانه کاشی‌ساز',   role: 'کارشناس فروش',  color: '#0ea5e9', pwd: defaultPassword },
+    { username: 'Mohammad.seyedsalehi', name: 'محمد سید صالحی',     role: 'کارشناس فروش',  color: '#22c55e', pwd: defaultPassword },
+    { username: 'Rambod.ghasemi',        name: 'رامبد قاسمی',        role: 'کارشناس فروش',  color: '#f59e0b', pwd: defaultPassword },
+    { username: 'guest',                 name: 'مهمان',               role: 'مهمان',          color: '#64748b', pwd: 'guest' },
+  ];
+
+  for (const u of defaultUsers) {
+    const exists = await query('SELECT username FROM app_users WHERE username = $1', [u.username]);
+    if (exists.rows.length === 0) {
+      const hash = await bcrypt.hash(u.pwd, 10);
+      await query(
+        `INSERT INTO app_users (username, display_name, role, color, active, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [u.username, u.name, u.role, u.color, true, hash]
+      );
+      console.log('[DB] User seeded:', u.username);
+    }
   }
 
   console.log('[DB] Schema initialized');
