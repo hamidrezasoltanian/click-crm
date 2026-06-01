@@ -227,4 +227,33 @@ router.post('/restore', requireManager, async (req, res) => {
   }
 });
 
+// GET /api/data/kv/:key  — generic key-value read (for MTR meta etc.)
+router.get('/kv/:key', async (req, res) => {
+  const key = req.params.key.replace(/[^a-z0-9_-]/gi, '_');
+  try {
+    const result = await query('SELECT value FROM app_data WHERE key = $1', [key]);
+    return res.json(result.rows.length ? result.rows[0].value : null);
+  } catch (e) {
+    return res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// PUT /api/data/kv/:key  — generic key-value write
+router.put('/kv/:key', async (req, res) => {
+  const key = req.params.key.replace(/[^a-z0-9_-]/gi, '_');
+  const body = req.body;
+  if (body === undefined || body === null) return res.status(400).json({ error: 'داده الزامی' });
+  try {
+    await query(
+      `INSERT INTO app_data (key, value, updated_at, updated_by)
+       VALUES ($1, $2, NOW(), $3)
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW(), updated_by = $3`,
+      [key, JSON.stringify(body), req.user.username]
+    );
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
 module.exports = router;

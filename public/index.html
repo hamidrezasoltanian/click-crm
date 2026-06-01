@@ -3088,6 +3088,11 @@ function getRecLabel(recKey){
   if(_CNC&&_CNC[recKey])return _CNC[recKey];
   if(!recKey)return'?';
   var pts=recKey.split('_');var tp=pts[0];var id=pts.slice(1).join('_');
+  if(tp==='mtr'){
+    var mrow=typeof DATA!=='undefined'?DATA.find(function(r){return r.inv===id;}):null;
+    if(mrow){var lbl='📄 '+mrow.customer+' ('+id+')';_saveCNC(recKey,lbl);return lbl;}
+    return '📄 مطالبات: '+id;
+  }
   if(tp==='center'){
     var c=CENTERS.find(function(x){return x.id===id;});
     if(c){_saveCNC(recKey,c.name);return c.name;}
@@ -3213,7 +3218,7 @@ function wpNav(delta){
 function _isManager(){
   var members=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
   var me=members.find(function(m){return m.id===currentUser;});
-  return me&&(me.role==='مدیر'||me.role==='admin'||me.role==='manager');
+  return me&&(me.role==='مدیر'||me.role==='admin'||me.role==='manager'||me.role==='سوپر ادمین');
 }
 
 
@@ -3453,6 +3458,7 @@ function renderWpFullCenterList() {
   });
 
   var unscheduled = allCenters.filter(function(c) {
+    if(c.rtype==='mtr') return false; // مطالبات جداگانه نمایش داده می‌شه
     return !c.inWeek || !c.scheduledDate;
   });
 
@@ -3614,6 +3620,20 @@ function renderWpItem(entry,weekId){
   var rtype=entry.rtype||parsed.rtype||'center';var rid=entry.rid||parsed.rid||'?';
   var recKey=entry.recKey||(rtype+'_'+rid);
   var name=entry.centerName||entry._name||getRecLabel(recKey);var done=entry.done;
+  // نمایش ویژه پیگیری مطالبات
+  if(rtype==='mtr'){
+    var amtStr=entry.mtrAmount?Math.round(entry.mtrAmount).toLocaleString('fa')+' ت':'';
+    return '<div class="wp-item'+(done?' done':'')+'" style="border-right-color:#dc2626;background:'+(done?'var(--bg-raised)':'#fef2f2')+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+      +'<div class="wp-item-name" style="color:#991b1b">📄 '+esc(entry.mtrCustomer||rid)+'</div>'
+      +(amtStr?'<span style="font-size:9px;background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:10px;font-weight:700;white-space:nowrap">'+amtStr+'</span>':'')
+      +'</div>'
+      +'<div class="wp-item-meta" style="color:#dc2626">مطالبات — ف'+esc(rid)+(done?' ✓':'')+'</div>'
+      +'<div class="wp-item-actions">'
+      +(done?'':`<button class="wp-btn done-btn" onclick="wpMarkDoneKey('`+k+`')">✓ وصول شد</button>`)
+      +`<button class="wp-btn" style="border-color:#dc2626;color:#991b1b" onclick="wpRemoveEntry('`+k+`')">✕</button>`
+      +'</div></div>';
+  }
   
   var actType = entry.actionType || 'call';
   var actIcon = actType === 'visit' ? '🤝 ویزیت' : '📞 تماس';
@@ -6870,8 +6890,18 @@ var COMP_AT='';     // date label of comparison file
 var MERGE_LOG=[];   // [{name,at,cnt}] — merge history per rep
 
 // ═══════════ STORAGE ═══════════
-function saveMeta(){try{localStorage.setItem('am4',JSON.stringify(META));}catch(e){}}
-function loadMeta(){try{var s=localStorage.getItem('am4');if(s)META=JSON.parse(s);}catch(e){}}
+function saveMeta(){
+  try{localStorage.setItem('am4',JSON.stringify(META));}catch(e){}
+  // sync to server (non-blocking)
+  fetch('/api/data/kv/mtr-meta',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(META)}).catch(function(){});
+}
+function loadMeta(){
+  try{var s=localStorage.getItem('am4');if(s){META=JSON.parse(s);return;}}catch(e){}
+  // fallback: try server
+  fetch('/api/data/kv/mtr-meta').then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(d&&typeof d==='object'){META=d;try{localStorage.setItem('am4',JSON.stringify(META));}catch(e){}}
+  }).catch(function(){});
+}
 function saveUser(){try{localStorage.setItem('au2',JSON.stringify(USER));}catch(e){}}
 function loadUser(){try{var s=localStorage.getItem('au2');if(s)USER=JSON.parse(s);}catch(e){}}
 function saveMergeLog(){try{localStorage.setItem('aml',JSON.stringify(MERGE_LOG));}catch(e){}}
@@ -6886,7 +6916,42 @@ function saveSnap(rows){
 function loadSnap(){try{var s=localStorage.getItem('asnap');return s?JSON.parse(s):null;}catch(e){return null;}}
 function gm(inv){if(!META[inv])META[inv]={status:'',notes:[],nextFU:'',forecast:null};return META[inv];}
 function setStatus(inv,s){gm(inv).status=s;saveMeta();}
-function setNextFU(inv,d){gm(inv).nextFU=d;saveMeta();}
+function setNextFU(inv,d){
+  gm(inv).nextFU=d;
+  saveMeta();
+  // اضافه کردن خودکار به برنامه هفته
+  if(d && typeof wpEntryKey==='function' && typeof DB!=='undefined'){
+    var row=DATA.find(function(r){return r.inv===inv;});
+    if(row){
+      var parts=d.split('/').map(Number);
+      if(parts.length===3){
+        var ws=wkStart(parts[0],parts[1],parts[2]);
+        var weekId=ws[0]+'/'+p2(ws[1])+'/'+p2(ws[2]);
+        var eKey=weekId+':::mtr:::'+inv;
+        var remFmt=row.rem?Math.round(row.rem).toLocaleString('fa')+' ت':'';
+        var label='📄 '+row.customer+' — '+remFmt;
+        if(!DB.weekEntries[eKey]){
+          DB.weekEntries[eKey]={
+            scheduledDate:d, done:false, doneDate:null,
+            rtype:'mtr', rid:inv, recKey:'mtr_'+inv,
+            centerName:label, actionType:'call',
+            addedBy:currentUser,
+            mtrAmount:row.rem, mtrCustomer:row.customer,
+            mtrInv:inv
+          };
+          saveDB();
+          showToast('📄 پیگیری مطالبات به برنامه هفته اضافه شد',2500);
+        } else {
+          // به‌روزرسانی اگر تاریخ تغییر کرده
+          DB.weekEntries[eKey].scheduledDate=d;
+          DB.weekEntries[eKey].centerName=label;
+          DB.weekEntries[eKey].mtrAmount=row.rem;
+          saveDB();
+        }
+      }
+    }
+  }
+}
 function mtrAddNote(inv,txt){if(!txt.trim())return;gm(inv).notes.push({d:TODAY_STR,t:txt.trim(),by:USER.name||'—'});saveMeta();}
 function setForecast(inv,date,pct){gm(inv).forecast={date:date,pct:pct,by:USER.name||'—',at:TODAY_STR};saveMeta();}
 
