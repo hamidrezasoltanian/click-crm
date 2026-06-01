@@ -8361,7 +8361,7 @@ async function runAI(){
     var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:900,
         messages:[{role:'user',content:'مشاور وصول مطالبات تجهیزات پزشکی. سقف ۶۰ روز (بالاتر ممنوع). همکار فقط با چک ضمانت.\n\n'+cases+'\n\nاقدام مشخص (یک جمله) برای هر مورد. فرمت: [ف{شماره}] → اقدام. بحرانی‌ها اول.'}]})});
-    var j=await res.json();AI_TXT=j.content&&j.content[0]?j.content[0].text:'خطا.';
+    var j=await res.json();if(res.status===503){AI_TXT=j.error||'سرویس هوش مصنوعی در دسترس نیست';}else{AI_TXT=j.content&&j.content[0]?j.content[0].text:'خطا.';}
   }catch(e){AI_TXT='خطا: '+e.message;}
   AI_LOADING=false;render();
 }

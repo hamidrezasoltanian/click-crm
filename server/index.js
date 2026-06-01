@@ -43,6 +43,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/data', require('./routes/data'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/distribution', require('./routes/distribution'));
+app.use('/api/ai', require('./routes/ai'));
 
 // Health check
 app.get('/api/health', function (req, res) {
