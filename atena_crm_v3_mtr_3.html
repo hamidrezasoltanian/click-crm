@@ -903,7 +903,6 @@ tr.row-contracted td{background:#f0fdf4!important}
   <select id="fTag" onchange="renderTable()" style="display:none"><option value="">همه</option></select>
   <span class="view-sw" id="viewSw" style="display:none">
     <button class="vb active" id="vb_list" onclick="setViewMode('list')" title="لیست">📋</button>
-    <button class="vb" id="vb_kanban" onclick="setViewMode('kanban')" title="کانبان">📊</button>
     <button class="vb" id="vb_card" onclick="setViewMode('card')" title="کارت">🗂</button>
     <button class="vb" id="vb_pipeline" onclick="setViewMode('pipeline')" title="Pipeline">🔀</button>
   </span>
@@ -1456,6 +1455,7 @@ function umSaveUser(oldId){
   if(!DB.settings)DB.settings={};
   DB.settings.members=members;
   saveDB();buildUSERS();
+  fetch('/api/users/'+encodeURIComponent(newId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:newPhone})}).catch(function(){});
   showToast('✅ «'+newName+'» ذخیره شد');
   umTab('users');
 }
@@ -2083,6 +2083,7 @@ function onUserChange(u){
 function switchTab(tab){
   if(tab!=='provinces')_currentProvId=null;
   currentTab=tab;
+  try{localStorage.setItem('_st',tab);}catch(e){}
   ['provinces','weekplan','calendar','checklist','activity','manager','kpi','mtr','pricing'].forEach(function(t){
     var b=document.getElementById('tab_'+t);if(b)b.classList.toggle('active',t===tab);
   });
@@ -2120,6 +2121,7 @@ function switchTab(tab){
 // ════════════════════════ PROVINCE VIEW ═══════════════
 function openProvince(provId){
   _currentProvId=provId;
+  try{localStorage.setItem('_spid',provId);}catch(e){}
   currentTab='provinces';
   var prov=getAllProvinces().find(function(p){return p.id===provId;});
   var provName=prov?prov.name:provId;
@@ -2147,6 +2149,7 @@ function openProvince(provId){
 
 function backToProvinces(){
   _currentProvId=null;
+  try{localStorage.removeItem('_spid');}catch(e){}
   currentTab='provinces';
   var pb=document.getElementById('provBackBtn');if(pb)pb.style.display='none';
   var ab=document.getElementById('addCenterBtn');if(ab)ab.style.display='none';
@@ -2514,9 +2517,8 @@ function renderTable(){
     else renderAllCenters(_provView);
     return;
   }
-  if(_viewMode==='kanban'){renderKanban();return;}
   if(_viewMode==='card'){renderCards();return;}
-  if(_viewMode==='pipeline'){renderPipeline();return;}
+  if(_viewMode==='pipeline'){try{renderPipeline();}catch(e){_viewMode='list';renderProvTable();}return;}
   renderProvTable();
 }
 
@@ -2701,7 +2703,8 @@ function renderProvTable(){
         +renderTagCell(rtype,r.id)+'</td>'
       +'<td><select class="pot-btn pot-'+pot+'" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'potential\',parseInt(this.value));this.className=\'pot-btn pot-\'+this.value">'
         +[1,2,3,4].map(function(v){return'<option value="'+v+'"'+(pot==v?' selected':'')+'>'+v+'</option>';}).join('')+'</select></td>'
-      +'<td><input class="ed-inp" value="'+esc(e.type||r.type||'')+'" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)" style="width:80px"></td>'
+      +(function(){var typeOpts=['','بیمارستان','کلینیک','درمانگاه','مطب','آزمایشگاه','داروخانه','دیگر'];var curType=e.type||r.type||'';return'<td><select class="ed-inp" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)" style="width:90px">'+typeOpts.map(function(t){return'<option value="'+t+'"'+(curType===t?' selected':'')+'>'+(t||'-- نوع --')+'</option>';}).join('')+'</select></td>';})()
+
       +'<td><select class="ed-sel '+lc+'" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'lead\',this.value);this.className=\'ed-sel \'+(window.LEAD_CLS[this.value]||\'lead-none\')">'
         +LEAD_LIST.map(function(l){return'<option'+(l===lead?' selected':'')+'>'+l+'</option>';}).join('')+'</select></td>'
       +'<td style="white-space:nowrap"><span class="owner-dot" data-uid="'+encodeURIComponent(e.owner||r.owner||'')+'"></span>'
@@ -2741,7 +2744,7 @@ function addCenter(){
     +'<div style="grid-column:1/-1"><label style="'+labelStyle+'">نام مرکز <span style="color:#ef4444">*</span></label>'
     +'<input id="ac_name" placeholder="مثلاً: بیمارستان میلاد تهران" style="'+inputStyle+'" autofocus></div>'
     +'<div><label style="'+labelStyle+'">نوع</label>'
-    +'<input id="ac_type" placeholder="بیمارستان، کلینیک، ..." value="بیمارستان" style="'+inputStyle+'"></div>'
+    +'<select id="ac_type" style="'+inputStyle+'"><option value="">-- نوع --</option><option value="بیمارستان" selected>بیمارستان</option><option value="کلینیک">کلینیک</option><option value="درمانگاه">درمانگاه</option><option value="مطب">مطب</option><option value="آزمایشگاه">آزمایشگاه</option><option value="داروخانه">داروخانه</option><option value="دیگر">دیگر</option></select></div>'
     +'<div><label style="'+labelStyle+'">پتانسیل</label>'
     +'<select id="ac_pot" style="'+inputStyle+'">'
     +'<option value="1">۱ — بالا</option><option value="2" selected>۲ — متوسط</option>'
@@ -2805,7 +2808,8 @@ function _doAddCenter(){
 // ════════════════════════ KANBAN / CARD ═════════════
 function setViewMode(m){
   _viewMode=m;
-  ['list','kanban','card','pipeline'].forEach(function(v){
+  try{localStorage.setItem('_svm',m);}catch(e){}
+  ['list','card','pipeline'].forEach(function(v){
     var b=document.getElementById('vb_'+v);if(b)b.classList.toggle('active',_viewMode===v);
   });
   renderTable();
@@ -2871,6 +2875,7 @@ function renderCards(){
 }
 
 function renderPipeline() {
+  try{
   var tableEl = document.getElementById('tableArea');
   if (!tableEl) return;
   _buildPCCache();
@@ -2925,6 +2930,7 @@ function renderPipeline() {
         + '</div></div>';
     }).join('')
     + '</div></div>';
+  }catch(e){_viewMode='list';renderProvTable();}
 }
 
 
@@ -3715,6 +3721,7 @@ function openCenterModal(rtype,id){
     +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'owner\',this.value);var _d=this.previousElementSibling;if(_d)_d.style.background=window.umGetColor?umGetColor(this.value):\'#e2e8f0\'">'
     +'<option value="">—</option>'
     +Object.keys(USERS).map(function(u){return'<option value="'+u+'"'+((e.owner||r.owner||'')==u?' selected':'')+'>'+USERS[u]+'</option>';}).join('')+'</select></div>'
+    +(function(){var _typeOpts=['','بیمارستان','کلینیک','درمانگاه','مطب','آزمایشگاه','داروخانه','دیگر'];var _curType=e.type||r.type||'';return'<div><label>نوع مرکز</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)">'+_typeOpts.map(function(t){return'<option value="'+t+'"'+(_curType===t?' selected':'')+'>'+(t||'-- نوع --')+'</option>';}).join('')+'</select></div>';})()
     +'</div><div class="m-2col">'
     +'<div><label>وضعیت</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'status\',this.value)">'
     +STATUS_LIST.map(function(s){return'<option'+(s===st?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'
@@ -3764,6 +3771,7 @@ function openCenterModal(rtype,id){
     +'<textarea id="maddr_'+id+'" placeholder="آدرس کامل مرکز..." rows="2" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl" '
     +'onchange="setE(\''+rtype+'\',\''+r.id+'\',\'address\',this.value)">'+esc(e.address||'')+'</textarea>'
     +'</div>'
+    +'<div id="cmPricingInfo_'+r.id+'" style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);font-size:11px"><span style="color:var(--text-muted)">در حال بارگذاری قیمت‌گذاری...</span></div>'
    // برنامه هفته
     +(wkEntries.length?'<label>برنامه هفته</label><div style="background:var(--bg-raised);border-radius:5px;padding:7px;font-size:11px">'
     +wkEntries.map(function(we){
@@ -3796,6 +3804,23 @@ function openCenterModal(rtype,id){
   if(typeof mtrCenterSection==='function') body+=mtrCenterSection(r.id);
   openModal('cm_'+id,'🏥 '+esc(r.name),body,foot);
   if(window.umGetColor){setTimeout(function(){document.querySelectorAll('.owner-dot[data-uid]').forEach(function(d){var u=decodeURIComponent(d.dataset.uid);if(u)d.style.background=umGetColor(u);});},0);}
+  // ── قیمت‌گذاری ──
+  (function(_rid,_rname){
+    fetch('/api/pricing/center/'+encodeURIComponent(_rname))
+      .then(function(res){return res.json();})
+      .then(function(cfg){
+        var el=document.getElementById('cmPricingInfo_'+_rid);
+        if(!el)return;
+        var BUYER_FA={'public_hospital':'بیمارستان دولتی','private_hospital':'بیمارستان خصوصی','clinic':'کلینیک','lab':'آزمایشگاه','pharmacy':'داروخانه','other':'سایر'};
+        if(!cfg){el.innerHTML='<span style="color:var(--text-muted);font-size:10px">اطلاعات قیمت‌گذاری یافت نشد</span>';return;}
+        var parts=[];
+        if(cfg.buyer_type)parts.push('🏷 نوع خریدار: <b>'+(BUYER_FA[cfg.buyer_type]||cfg.buyer_type)+'</b>');
+        if(cfg.commission_level)parts.push('💼 سطح پورسانت: <b>'+cfg.commission_level+'</b>');
+        if(parseFloat(cfg.discount_ceiling_pct)>0)parts.push('⬇ سقف تخفیف: <b>'+cfg.discount_ceiling_pct+'%</b>');
+        if(cfg.payment_terms)parts.push('📅 شرایط پرداخت: <b>'+cfg.payment_terms+'</b>');
+        el.innerHTML=parts.length?'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:5px">💰 قیمت‌گذاری</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+parts.map(function(p){return'<span style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:2px 7px;color:var(--text-primary)">'+p+'</span>';}).join('')+'</div>':'<span style="color:var(--text-muted);font-size:10px">قیمت‌گذاری تنظیم نشده</span>';
+      }).catch(function(){var el=document.getElementById('cmPricingInfo_'+_rid);if(el)el.style.display='none';});
+  })(r.id, r.name);
 }
 
 function confirmDeleteCenter(rtype,id,name){
@@ -4567,10 +4592,10 @@ function renderWpItem(entry,weekId){
   return '<div class="wp-item'+(done?' done':'')+(!done&&isSel2?' wp-selected':'')+'" data-ekey="'+k+'" draggable="true" ondragstart="event.stopPropagation();wpDragStart(event,\''+k+'\')" ondragend="wpDragEnd(event)">'
     + '<input type="checkbox" class="wp-item-cb" '+(isSel2?'checked':'')+' onclick="event.stopPropagation();wpToggleSelect(\''+(k)+'\')" title="انتخاب">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-left:18px;">'
-    + '<div class="wp-item-name">'+esc(name)+'</div>'
+    + '<div class="wp-item-name" onclick="openCenterModal(\''+rtype+'\',\''+rid+'\')" style="cursor:pointer;text-decoration:underline dotted;color:var(--brand)">'+esc(name)+'</div>'
     + '<span style="font-size:9px; cursor:pointer; background:'+actBg+'; color:var(--text-primary); padding:2px 5px; border-radius:4px; white-space:nowrap;" onclick="toggleWpActionType(\''+k+'\')" title="تغییر نوع پیگیری با یک کلیک">'+actIcon+'</span>'
     + '</div>'
-    + '<div class="wp-item-meta">'+(done?'✓ '+entry.doneDate:'در انتظار')+'</div>'
+    + (function(){var _ce=getE(rtype,rid);var _st=_ce.status||'بدون تماس';var _ow=USERS[_ce.owner||'']||'';var _fd=_ce.followupDate||'';return '<div class="wp-item-meta" style="font-size:9px;color:var(--text-muted)">'+_st+((_ow)?' | 👤 '+esc(_ow):'')+( (_fd)?' 📅 '+_fd:'')+' '+(done?'✓ '+entry.doneDate:'')+'</div>';})()
     + '<div class="wp-item-actions">'
     + (done?'' : '<button class="wp-btn done-btn" onclick="wpMarkDoneKey(\''+ k +'\')">✓ انجام شد</button>')
     + '<button class="wp-btn move-btn" onclick="wpSetScheduleFromKey(\''+ k +'\')">📅 تنظیم</button>'
@@ -6550,13 +6575,22 @@ async function init(){
   loadMasterCenters().then(function(){
     _typeFilterBuilt=false;
     cleanupOrphanedEntries(false);
-    rebuildFilters();buildTypeFilter();switchTab('provinces');
+    rebuildFilters();buildTypeFilter();
+    try{
+      var _st=localStorage.getItem('_st');
+      var _spid=localStorage.getItem('_spid');
+      var _svm=localStorage.getItem('_svm');
+      if(_svm&&['list','card','pipeline'].indexOf(_svm)>=0)_viewMode=_svm;
+      if(_st&&['provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing'].indexOf(_st)>=0)currentTab=_st;
+      if(_spid)_currentProvId=_spid;
+    }catch(e){}
+    switchTab(currentTab);
     checkEmptyDB();
     // Build cache + populate CNC now that PC_RAW is ready
     _PC_CACHE=null;_buildPCCache();
     if(currentTab==='weekplan') setTimeout(renderWeekPlan,100);
   }).catch(function(){
-    rebuildFilters();buildTypeFilter();switchTab('provinces');
+    rebuildFilters();buildTypeFilter();switchTab(currentTab);
     checkEmptyDB();
     if(currentTab==='weekplan') setTimeout(renderWeekPlan,100);
   });
@@ -8155,29 +8189,14 @@ function openUnifiedBackup(){
     +'</label>'
     +'</div>';
 
-  // ── Tab: ادغام ──
-  var tabMerge='<div id="ubTab_merge" class="ub-tab-panel" style="display:none">'
-    +'<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:12px">'
-    +'<strong style="color:#5b21b6">📌 ادغام بک‌آپ نیروها</strong><br>'
-    +'هر نیرو بک‌آپ خود را می‌گیرد. شما چند فایل را یکجا آپلود می‌کنید. داده‌های CRM + مطالبات همه با هم ادغام می‌شوند — بدون حذف داده‌های موجود.'
-    +'</div>'
-    +'<label style="display:block;padding:14px;border:2px dashed #8b5cf6;border-radius:8px;text-align:center;cursor:pointer;background:#faf5ff;margin-bottom:12px" onclick="document.getElementById(\'unifiedMergeInp\').click()">'
-    +'<div style="font-size:22px;margin-bottom:4px">📁</div>'
-    +'<div style="font-size:12px;font-weight:700;color:#5b21b6">انتخاب فایل‌های بک‌آپ</div>'
-    +'<div style="font-size:11px;color:#7c3aed;margin-top:2px">می‌توانید چند فایل را یکجا انتخاب کنید</div>'
-    +'</label>'
-    +'<div id="ubMergeArea"><div style="text-align:center;color:var(--text-muted);padding:20px;font-size:12px">هنوز فایلی انتخاب نشده</div></div>'
-    +'<button id="ubApplyBtn" onclick="ubApplyAll()" style="display:none;width:100%;background:#8b5cf6;color:var(--text-primary);border:none;border-radius:7px;padding:10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;margin-top:10px">🔀 اعمال ادغام</button>'
-    +'</div>';
 
   var body='<div>'
     // Tab buttons
     +'<div style="display:flex;gap:4px;margin-bottom:14px;background:var(--bg-raised);border-radius:8px;padding:3px">'
     +'<button class="ub-tablink active" id="ubLink_export" onclick="ubSwitchTab(\'export\')" style="flex:1;padding:7px;border:none;border-radius:6px;background:#1e3a5f;color:var(--text-primary);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">💾 بک‌آپ</button>'
     +'<button class="ub-tablink" id="ubLink_restore" onclick="ubSwitchTab(\'restore\')" style="flex:1;padding:7px;border:none;border-radius:6px;background:transparent;color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">📂 بازیابی</button>'
-    +'<button class="ub-tablink" id="ubLink_merge" onclick="ubSwitchTab(\'merge\')" style="flex:1;padding:7px;border:none;border-radius:6px;background:transparent;color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">🔀 ادغام</button>'
     +'</div>'
-    +tabExport+tabRestore+tabMerge
+    +tabExport+tabRestore
     +'</div>';
 
   openModal('unifiedBackupModal','💾 مدیریت بک‌آپ', body,
@@ -8186,7 +8205,7 @@ function openUnifiedBackup(){
 }
 
 function ubSwitchTab(tab){
-  ['export','restore','merge'].forEach(function(t){
+  ['export','restore'].forEach(function(t){
     var panel=document.getElementById('ubTab_'+t);
     var link=document.getElementById('ubLink_'+t);
     if(panel)panel.style.display=t===tab?'':'none';
