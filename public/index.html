@@ -5264,7 +5264,7 @@ function qsSearch(q){
   });
   if(!results.length){r.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">نتیجه‌ای یافت نشد</div>';return;}
   r.innerHTML=results.slice(0,20).map(function(item){
-    return '<div onclick="'+item.action+'" style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;transition:.15s" onmouseover="this.style.background='var(--bg-raised)'" onmouseout="this.style.background=''">'
+    return '<div onclick="'+item.action+'" style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;transition:.15s" onmouseover="this.style.background=\'var(--bg-raised)\'" onmouseout="this.style.background=\'\'">'
       +'<span style="font-size:18px">'+item.icon+'</span>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(item.name)+'</div>'
