@@ -902,6 +902,7 @@ tr.row-contracted td{background:#f0fdf4!important}
     <button class="vb active" id="vb_list" onclick="setViewMode('list')" title="لیست">📋</button>
     <button class="vb" id="vb_card" onclick="setViewMode('card')" title="کارت">🗂</button>
     <button class="vb" id="vb_pipeline" onclick="setViewMode('pipeline')" title="Pipeline">🔀</button>
+    <button class="vb" id="vb_kanban" onclick="setViewMode('kanban')" title="کانبان">📊</button>
   </span>
   <button class="btn-act btn-excel" id="csvBtn" style="display:none" onclick="exportCSV()">📊 CSV</button>
   <button class="btn-act" id="xlsBtn" style="display:none" onclick="exportCurrentXlsx()">📊 Excel</button>
@@ -967,14 +968,6 @@ tr.row-contracted td{background:#f0fdf4!important}
       <button class="cal-nb" onclick="wpNav(1)" title="هفته بعد">›</button>
     </div>
     <button class="cal-nb cal-today-btn" onclick="wpGoThisWeek()" style="font-size:11px;padding:5px 10px">این هفته</button>
-    <button class="btn-secondary" onclick="wpOpenAssignAll()">📌 افزودن مراکز</button>
-    <input type="text" id="wpSearch" placeholder="🔍 جستجو..." oninput="renderWeekPlan()"
-      style="padding:6px 10px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:140px;font-family:inherit">
-    <select id="wpOwnerFilter" onchange="renderWeekPlan()"
-      style="padding:6px 8px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;background:var(--bg-input);color:var(--text-primary);font-family:inherit">
-      <option value="">همه کارشناسان</option>
-    </select>
-    <button onclick="wpClearFilters()" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:5px 9px;cursor:pointer;font-size:11px;color:var(--text-muted)">✕</button>
     <button onclick="wpExportExcel()" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit" title="دانلود Excel برنامه هفته">⬇ Excel</button>
   </div>
   <div id="wpBulkBar">
@@ -1687,7 +1680,6 @@ function buildUSERS(){
       if(DB.settings)DB.settings.members=_DEFAULT_MEMBERS;
       _buildUSERSUI();
       if(typeof buildOwnerFilter==='function')buildOwnerFilter();
-      if(typeof wpBuildOwnerFilter==='function')wpBuildOwnerFilter();
       // Show distribution button for managers
       var distBtn=document.getElementById('distWizardBtn');
       if(distBtn)distBtn.style.display=_isManager()?'':'none';
@@ -2384,6 +2376,7 @@ function renderTable(){
   }
   if(_viewMode==='card'){renderCards();return;}
   if(_viewMode==='pipeline'){try{renderPipeline();}catch(e){_viewMode='list';renderProvTable();}return;}
+  if(_viewMode==='kanban'){try{renderKanban();}catch(e){_viewMode='list';renderProvTable();}return;}
   renderProvTable();
 }
 
@@ -2674,7 +2667,7 @@ function _doAddCenter(){
 function setViewMode(m){
   _viewMode=m;
   try{localStorage.setItem('_svm',m);}catch(e){}
-  ['list','card','pipeline'].forEach(function(v){
+  ['list','card','pipeline','kanban'].forEach(function(v){
     var b=document.getElementById('vb_'+v);if(b)b.classList.toggle('active',_viewMode===v);
   });
   renderTable();
@@ -2700,6 +2693,7 @@ function renderKanban(){
           +'<div class="kanban-card-name">'+esc(r.name)+'</div>'
           +'<div class="kanban-card-meta">'
           +'<span class="pot-badge pot-'+(e.potential||r.potential)+'">'+(e.potential||r.potential)+'</span>'
+          +((e.type||r.type)?'<span class="cm-lead" style="font-size:10px">'+(e.type||r.type)+'</span>':'')
           +(fd?'<span class="kc-date">📅 '+fd+'</span>':'')
           +'</div></div>';
       }).join('')
@@ -2731,6 +2725,7 @@ function renderCards(){
       +'<span class="pot-badge pot-'+(e.potential||r.potential)+'">'+(e.potential||r.potential)+'</span></div>'
       +'<div class="card-st '+sc+'">'+st+'</div>'
       +'<div class="card-meta">'
+      +((e.type||r.type)?'<span class="cm-lead" style="background:var(--bg-raised);color:var(--text-secondary)">'+(e.type||r.type)+'</span>':'')
       +(lead?'<span class="cm-lead">'+lead+'</span>':'')
       +(fd?'<span class="cm-date'+(ov?' ov':'')+'">📅 '+fd+'</span>':'')
       +(notes.length?'<span class="cm-notes">📝 '+notes.length+'</span>':'')
@@ -9032,8 +9027,10 @@ function mtrFindMember(followerName){
   var candidates=members.filter(function(m){
     var mn=fNorm(m.name);
     var mnWords=mn.split(/\s+/).filter(Boolean);
+    // every word in Excel name is contained in member name
     var allIn=normWords.every(function(w){return mnWords.some(function(mw){return mw===w||mw.indexOf(w)===0||w.indexOf(mw)===0;});});
     if(allIn)return true;
+    // or member name is fully contained in Excel name (e.g. Excel has extra title)
     return mnWords.every(function(mw){return normWords.some(function(w){return w===mw||w.indexOf(mw)===0||mw.indexOf(w)===0;});});
   });
   if(candidates.length===1)return candidates[0];
@@ -9048,6 +9045,7 @@ function mtrFindMember(followerName){
   }
   return null;
 }
+// Auto-match all followers and save confident ones; returns count saved
 function mtrAutoMapFollowers(){
   if(!DATA||!DATA.length)return 0;
   if(!DB.mtrFollowerMap)DB.mtrFollowerMap={};
@@ -9056,6 +9054,7 @@ function mtrAutoMapFollowers(){
   var saved=0;
   Object.keys(unique).forEach(function(f){
     var norm=fNorm(f);
+    // skip if already mapped
     if(DB.mtrFollowerMap[norm]||DB.mtrFollowerMap[f])return;
     var m=mtrFindMember(f);
     if(m){
