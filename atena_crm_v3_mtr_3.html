@@ -962,6 +962,7 @@ tr.row-contracted td{background:#f0fdf4!important}
     <table id="mainTable" style="display:none"><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
     <div id="kanbanView" style="display:none"></div>
     <div id="cardView" style="display:none"></div>
+    <div id="pipelineView" style="display:none"></div>
     <div id="rowCount" class="row-count"></div>
   </div>
 </div>
@@ -2543,6 +2544,7 @@ function renderProvTable(){
   var tbl=document.getElementById('mainTable');
   var pg=document.getElementById('provGrid');
   var kb=document.getElementById('kanbanView');var cv=document.getElementById('cardView');
+  var pv=document.getElementById('pipelineView');if(pv)pv.style.display='none';
   if(tbl)tbl.style.display='';if(pg)pg.style.display='none';
   if(kb)kb.style.display='none';if(cv)cv.style.display='none';
   var rtype=getProvType(_currentProvId);
@@ -2747,8 +2749,8 @@ function setViewMode(m){
 
 function renderKanban(){
   var tbl=document.getElementById('mainTable');var pg=document.getElementById('provGrid');
-  var cv=document.getElementById('cardView');
-  if(tbl)tbl.style.display='none';if(pg)pg.style.display='none';if(cv)cv.style.display='none';
+  var cv=document.getElementById('cardView');var pv=document.getElementById('pipelineView');
+  if(tbl)tbl.style.display='none';if(pg)pg.style.display='none';if(cv)cv.style.display='none';if(pv)pv.style.display='none';
   var kb=document.getElementById('kanbanView');if(!kb)return;
   kb.style.display='';
   var rtype=getProvType(_currentProvId);
@@ -2791,8 +2793,8 @@ function onKbDrop(ev,rtype,st){
 
 function renderCards(){
   var tbl=document.getElementById('mainTable');var pg=document.getElementById('provGrid');
-  var kb=document.getElementById('kanbanView');
-  if(tbl)tbl.style.display='none';if(pg)pg.style.display='none';if(kb)kb.style.display='none';
+  var kb=document.getElementById('kanbanView');var pv=document.getElementById('pipelineView');
+  if(tbl)tbl.style.display='none';if(pg)pg.style.display='none';if(kb)kb.style.display='none';if(pv)pv.style.display='none';
   var cv=document.getElementById('cardView');if(!cv)return;
   cv.style.display='';
   var rtype=getProvType(_currentProvId);
@@ -2831,61 +2833,51 @@ function renderCards(){
 
 function renderPipeline() {
   try{
-  var tableEl = document.getElementById('tableArea');
-  if (!tableEl) return;
   _buildPCCache();
-  var rtype = getProvType(_currentProvId);
-  var data = getFiltered();
-  
-  // Group centers by status
-  var groups = {};
-  STATUS_LIST.forEach(function(s) { groups[s] = []; });
-  
-  data.forEach(function(r) {
-    var e = getE(rtype, r.id);
-    var st = e.status || 'بدون تماس';
-    if (!groups[st]) groups[st] = [];
-    groups[st].push({ r: r, e: e });
+  var rtype=getProvType(_currentProvId);
+  var data=getFiltered();
+  // hide sibling views, show pipeline container
+  var tbl=document.getElementById('mainTable');if(tbl)tbl.style.display='none';
+  var pg=document.getElementById('provGrid');if(pg)pg.style.display='none';
+  var cv=document.getElementById('cardView');if(cv)cv.style.display='none';
+  var kb=document.getElementById('kanbanView');if(kb)kb.style.display='none';
+  var pv=document.getElementById('pipelineView');if(!pv)return;
+  pv.style.display='';
+  var groups={};
+  STATUS_LIST.forEach(function(s){groups[s]=[];});
+  data.forEach(function(r){
+    var e=getE(rtype,r.id);var st=e.status||'بدون تماس';
+    if(!groups[st])groups[st]=[];
+    groups[st].push({r:r,e:e});
   });
-  
-  var ST_COLORS = ['#94a3b8','#3b82f6','#8b5cf6','#f59e0b','#22c55e','#ef4444'];
-  var ST_ICONS = ['⬜','📞','🤝','📋','✅','🚫'];
-  
-  var total = data.length;
-  
-  // Hide other views
-  var tbl = document.getElementById('mainTable');
-  var pg = document.getElementById('provGrid');
-  var cv = document.getElementById('cardView');
-  var kb = document.getElementById('kanbanView');
-  if (tbl) tbl.style.display = 'none';
-  if (pg) pg.style.display = 'none';
-  if (cv) cv.style.display = 'none';
-  if (kb) kb.style.display = 'none';
-  
-  tableEl.innerHTML = '<div class="pipeline-wrap"><div class="pipeline-cols">'
-    + STATUS_LIST.map(function(st, idx) {
-      var items = groups[st] || [];
-      var pct = total ? Math.round(items.length / total * 100) : 0;
-      return '<div class="pipeline-col">'
-        + '<div class="pipeline-col-head" style="background:' + ST_COLORS[idx] + '20;border-bottom:2px solid ' + ST_COLORS[idx] + '">'
-        + '<span>' + ST_ICONS[idx] + ' ' + st + '</span>'
-        + '<span style="background:' + ST_COLORS[idx] + ';color:#fff;border-radius:10px;padding:1px 7px">' + items.length + '</span>'
-        + '</div>'
-        + '<div style="padding:4px 8px;font-size:10px;color:var(--text-muted);border-bottom:1px solid var(--border)">' + pct + '% از کل</div>'
-        + '<div class="pipeline-col-body">'
-        + items.slice(0, 50).map(function(item) {
-          var owner = USERS[item.e.owner || item.r.owner || ''] || '';
-          return '<div class="pipeline-card" style="border-right-color:' + ST_COLORS[idx] + '" onclick="openCenterModal(\'' + rtype + '\',\'' + item.r.id + '\')">'
-            + '<div class="pc-name">' + esc(item.r.name) + '</div>'
-            + '<div class="pc-meta">' + (owner ? '👤 ' + esc(owner) : '') + (item.e.followupDate ? ' 📅 ' + item.e.followupDate : '') + '</div>'
-            + '</div>';
+  var ST_COLORS=['#94a3b8','#3b82f6','#8b5cf6','#f59e0b','#22c55e','#ef4444'];
+  var ST_ICONS=['⬜','📞','🤝','📋','✅','🚫'];
+  var total=data.length;
+  pv.innerHTML='<div class="pipeline-wrap"><div class="pipeline-cols">'
+    +STATUS_LIST.map(function(st,idx){
+      var items=groups[st]||[];
+      var pct=total?Math.round(items.length/total*100):0;
+      return'<div class="pipeline-col">'
+        +'<div class="pipeline-col-head" style="background:'+ST_COLORS[idx]+'20;border-bottom:2px solid '+ST_COLORS[idx]+'">'
+        +'<span>'+ST_ICONS[idx]+' '+st+'</span>'
+        +'<span style="background:'+ST_COLORS[idx]+';color:#fff;border-radius:10px;padding:1px 7px">'+items.length+'</span>'
+        +'</div>'
+        +'<div style="padding:4px 8px;font-size:10px;color:var(--text-muted);border-bottom:1px solid var(--border)">'+pct+'% از کل</div>'
+        +'<div class="pipeline-col-body">'
+        +items.slice(0,50).map(function(item){
+          var owner=USERS[item.e.owner||item.r.owner||'']||'';
+          return'<div class="pipeline-card" style="border-right-color:'+ST_COLORS[idx]+'" onclick="openCenterModal(\''+rtype+'\',\''+item.r.id+'\')">'
+            +'<div class="pc-name">'+esc(item.r.name)+'</div>'
+            +'<div class="pc-meta">'+(owner?'👤 '+esc(owner):'')+(item.e.followupDate?' 📅 '+item.e.followupDate:'')+'</div>'
+            +'</div>';
         }).join('')
-        + (items.length > 50 ? '<div style="text-align:center;font-size:10px;color:var(--text-muted);padding:4px">... و ' + (items.length - 50) + ' مورد دیگر</div>' : '')
-        + '</div></div>';
+        +(items.length>50?'<div style="text-align:center;font-size:10px;color:var(--text-muted);padding:4px">... و '+(items.length-50)+' مورد دیگر</div>':'')
+        +'</div></div>';
     }).join('')
-    + '</div></div>';
+    +'</div></div>';
+  var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent='نمایش '+data.length+' (پایپلاین)';
   }catch(e){_viewMode='list';renderProvTable();}
+}
 }
 
 
