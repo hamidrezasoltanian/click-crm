@@ -985,10 +985,6 @@ tr.row-contracted td{background:#f0fdf4!important}
     <button onclick="wpClearSelection()" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px">✕ انصراف</button>
   </div>
   <div class="wp-days" id="wpDays"></div>
-  <div id="wpUnsched" class="wp-unscheduled" style="display:none">
-    <div class="wp-unsched-head">📌 بدون تاریخ (نیاز به تعیین روز)</div>
-    <div id="wpUnschedList"></div>
-  </div>
   <div id="wpFullCenterList"></div>
 </div>
 
@@ -4071,11 +4067,9 @@ function renderWeekPlan(){
   var sel = document.getElementById('wpSel');
   var weekId = sel && sel.value ? sel.value : null;
   var daysEl = document.getElementById('wpDays');
-  var unscEl = document.getElementById('wpUnsched');
   if(!daysEl) return;
   if(!weekId || !wpGetWeeks().length){
     daysEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:50px;color:#94a3b8"><div style="font-size:32px;margin-bottom:10px">📋</div><div style="font-weight:600">سال را انتخاب کنید</div></div>';
-    if(unscEl) unscEl.style.display='none';
     return;
   }
   var wk = wpGetWeeks().find(function(w){return w.id===weekId;});
@@ -4139,20 +4133,11 @@ function renderWeekPlan(){
   });
 
   var byDay = {}; days.forEach(function(d){byDay[d.str]=[];});
-  var myUnsched = [];
-  var othersUnsched = {};
 
-  // تفکیک مراکز برنامه‌ریزی شده و برنامه‌ریزی نشده (با دسته‌بندی کاربر)
+  // مراکز با تاریخ → شبکه ۷ روزه | بقیه در صف انتظار یکپارچه
   allEntries.forEach(function(we){
-    if(we.scheduledDate && byDay[we.scheduledDate] !== undefined) {
+    if(we.scheduledDate && byDay[we.scheduledDate] !== undefined){
       byDay[we.scheduledDate].push(we);
-    } else {
-      if (we._owner === currentUser || we.addedBy === currentUser) {
-        myUnsched.push(we);
-      } else {
-        if (!othersUnsched[we._ownerName]) othersUnsched[we._ownerName] = [];
-        othersUnsched[we._ownerName].push(we);
-      }
     }
   });
 
@@ -4172,46 +4157,6 @@ function renderWeekPlan(){
       + '</div>';
   }).join('');
 
-  // رندر بخش بدون تاریخ (تفکیک شده)
-  if((myUnsched.length || Object.keys(othersUnsched).length) && unscEl){
-    unscEl.style.display = '';
-    var unschedHTML = '';
-    
-    var renderItem = function(entry){
-            var name = entry._name || '?';
-      var eKey = entry._key || '';
-      return '<div class="wp-unsched-item" style="cursor:default">'
-        + '<div style="font-weight:600;font-size:11px;margin-bottom:4px">'+esc(name)+'</div>'
-        + '<div style="font-size:10px;color:#0369a1;margin-bottom:6px">👤 '+esc(entry._ownerName)+'</div>'
-        + '<div style="display:flex;gap:4px">'
-        + '<button style="flex:1;font-size:9px;background:#f0f9ff;color:#0369a1;border:1px solid #0ea5e944;border-radius:5px;padding:3px 4px;cursor:pointer;font-family:inherit" onclick="event.stopPropagation();wpSetScheduleFromKey(\''+eKey+'\')">📅 تعیین روز</button>'
-        + '<button style="flex:1;font-size:9px;background:#f0f9ff;color:#0369a1;border:1px solid #0ea5e944;border-radius:5px;padding:3px 4px;cursor:pointer;font-family:inherit" onclick="event.stopPropagation();wpMoveEntry(\''+eKey+'\',\''+weekId+'\')">↪ هفته دیگر</button>'
-        + '</div>'
-        + '</div>';
-    };
-
-    if (myUnsched.length) {
-      unschedHTML += '<div style="margin-bottom:12px">'
-        + '<div style="font-size:12px;font-weight:bold;color:#16a34a;margin-bottom:8px;">👤 مراکز من</div>'
-        + '<div class="wp-unsched-grid">' + myUnsched.map(renderItem).join('') + '</div>'
-        + '</div>';
-    }
-
-    var otherKeys = Object.keys(othersUnsched);
-    if (otherKeys.length) {
-      unschedHTML += '<div style="border-top:1px dashed #cbd5e1; padding-top:10px;">'
-        + '<div style="font-size:12px;font-weight:bold;color:var(--text-secondary);margin-bottom:8px;">👥 مراکز سایر کارشناسان</div>';
-      otherKeys.forEach(function(oname) {
-        unschedHTML += '<div style="margin-bottom:6px; font-size:11px; font-weight:600; color:var(--text-muted);">مسئول: '+esc(oname)+'</div>'
-          + '<div class="wp-unsched-grid" style="margin-bottom:12px;">' + othersUnsched[oname].map(renderItem).join('') + '</div>';
-      });
-      unschedHTML += '</div>';
-    }
-
-    document.getElementById('wpUnschedList').innerHTML = unschedHTML;
-  } else if(unscEl) {
-    unscEl.style.display = 'none';
-  }
 
   // نوار پیشرفت (Progress Bar)
   var oldProg = daysEl.parentNode ? daysEl.parentNode.querySelector('.wp-progress') : null;
@@ -4240,167 +4185,250 @@ function renderWpFullCenterList() {
   var sel = document.getElementById('wpSel');
   var weekId = sel && sel.value ? sel.value : null;
 
+  // helper: center owner
+  var getCO = function(rtype, rid) {
+    var e = getE(rtype, rid);
+    if (e.owner) return e.owner;
+    if (rtype === 'center') {
+      var c = CENTERS.find(function(x){return x.id===rid;});
+      if (c && c.owner) return c.owner;
+    } else if (rtype === 'pc') {
+      var arr = (_PC_CACHE[rid.split('||')[0]])||[];
+      var c = arr.find(function(x){return x.id===rid;});
+      if (c && c.owner) return c.owner;
+    }
+    return '';
+  };
+  // helper: province from center id
+  var getPI = function(rtype, rid) {
+    if (rtype === 'pc') {
+      var pid = rid.split('||')[0];
+      var p = getAllProvinces().find(function(x){return x.id===pid;});
+      return {id:pid, name:p?p.name:''};
+    }
+    return {id:'tehran', name:'تهران'};
+  };
+
+  // ── Section 1: entries in this week WITHOUT a scheduled date ─────────
+  var unschedEntries = [];
   var inWeekMap = {};
   if (weekId) {
-    Object.keys(DB.weekEntries || {}).forEach(function(k) {
-      if (!k.startsWith(weekId + ':::')) return;
+    Object.keys(DB.weekEntries||{}).forEach(function(k){
+      if(!k.startsWith(weekId+':::')) return;
       var we = DB.weekEntries[k];
-      var rk = we.recKey || ((we.rtype || '') + '_' + (we.rid || ''));
-      inWeekMap[rk] = {scheduledDate: we.scheduledDate || null, done: we.done || false, eKey: k};
+      var rtype = we.rtype||'center', rid = we.rid||'';
+      var rk = we.recKey||(rtype+'_'+rid);
+      inWeekMap[rk] = true;
+      if (we.scheduledDate || we.done || rtype==='mtr') return;
+      var owner = getCO(rtype, rid);
+      if (!_isManager() && owner && owner !== currentUser) return;
+      var prov = getPI(rtype, rid);
+      unschedEntries.push({
+        _key:k, rtype:rtype, rid:rid, recKey:rk,
+        name: we.centerName||getRecLabel(rk)||'?',
+        owner:owner, ownerName:owner?(USERS[owner]||owner):'—',
+        provId:prov.id, provName:prov.name,
+        actionType:we.actionType||'call'
+      });
     });
   }
 
+  // ── Section 2: all province centers NOT in this week ─────────────────
   _buildPCCache();
   var allCenters = [];
-  getAllProvinces().forEach(function(p) {
+  getAllProvinces().forEach(function(p){
     var tp = getProvType(p.id);
-    getProvCenters(p.id).forEach(function(c) {
+    getProvCenters(p.id).forEach(function(c){
+      var rk = tp+'_'+c.id;
+      if (inWeekMap[rk]) return;
       var e = getE(tp, c.id);
-      var owner = e.owner || c.owner || '';
-      var rk = tp + '_' + c.id;
-      var inWk = inWeekMap[rk] || null;
+      var owner = e.owner||c.owner||'';
       allCenters.push({
-        id: c.id, rtype: tp, recKey: rk,
-        name: c.name || '',
-        provId: p.id, provName: p.name || '',
-        owner: owner,
-        ownerName: owner ? (USERS[owner] || owner) : '\u2014',
-        status: e.status || '\u0628\u062f\u0648\u0646 \u062a\u0645\u0627\u0633',
-        followupDate: e.followupDate || '',
-        inWeek: !!inWk,
-        scheduledDate: inWk ? inWk.scheduledDate : null,
-        done: inWk ? inWk.done : false,
-        weekEntryKey: inWk ? inWk.eKey : null
+        id:c.id, rtype:tp, recKey:rk,
+        name:c.name||'',
+        provId:p.id, provName:p.name||'',
+        owner:owner, ownerName:owner?(USERS[owner]||owner):'—',
+        status:e.status||'بدون تماس',
+        followupDate:e.followupDate||''
       });
     });
   });
 
-  var unscheduled = allCenters.filter(function(c) {
-    if(c.rtype==='mtr') return false; // مطالبات جداگانه نمایش داده می‌شه
-    return !c.inWeek || !c.scheduledDate;
+  // ── Apply unified filters ─────────────────────────────────────────────
+  var q = fNorm(_wpFclFilters.q||'');
+  var ownerF = _wpFclFilters.owner||'';
+  var provF = _wpFclFilters.prov||'';
+
+  var filtU = unschedEntries.filter(function(c){
+    if (ownerF && c.owner!==ownerF) return false;
+    if (provF && c.provId!==provF) return false;
+    if (q && fNorm(c.name).indexOf(q)<0 && fNorm(c.ownerName).indexOf(q)<0 && fNorm(c.provName).indexOf(q)<0) return false;
+    return true;
   });
-
-  var q = fNorm(_wpFclFilters.q || '');
-  var ownerF = _wpFclFilters.owner || '';
-  var provF = _wpFclFilters.prov || '';
-
-  var filtered = unscheduled.filter(function(c) {
-    if (ownerF && c.owner !== ownerF) return false;
-    if (provF && c.provId !== provF) return false;
-    if (q && fNorm(c.name).indexOf(q) < 0 && fNorm(c.provName).indexOf(q) < 0 && fNorm(c.ownerName).indexOf(q) < 0) return false;
+  var filtC = allCenters.filter(function(c){
+    if (ownerF && c.owner!==ownerF) return false;
+    if (provF && c.provId!==provF) return false;
+    if (q && fNorm(c.name).indexOf(q)<0 && fNorm(c.ownerName).indexOf(q)<0 && fNorm(c.provName).indexOf(q)<0) return false;
     return true;
   });
 
-  var provOpts = '<option value="">همه استان‌ها</option>'
-    + getAllProvinces().map(function(p) {
-        return '<option value="'+p.id+'"'+(provF===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
-      }).join('');
-
-  var members = typeof umGetActive === 'function' ? umGetActive() : [];
+  // ── Build filter controls ─────────────────────────────────────────────
+  var members = typeof umGetActive==='function' ? umGetActive() : [];
   var ownerOpts = '<option value="">همه کارشناسان</option>'
-    + members.map(function(m) {
-        return '<option value="'+m.id+'"'+(ownerF===m.id?' selected':'')+'>'+esc(m.name)+'</option>';
-      }).join('');
+    + members.map(function(m){return '<option value="'+m.id+'"'+(ownerF===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('');
+  var provOpts = '<option value="">همه استان‌ها</option>'
+    + getAllProvinces().map(function(p){return '<option value="'+p.id+'"'+(provF===p.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('');
 
   var todaySt = todayStr();
-  var rows = filtered.map(function(c, idx) {
-    var ownerColor = typeof umGetColor === 'function' ? umGetColor(c.owner) : '#94a3b8';
-    var stCl = stCls(c.status);
-    var wkBadge = (c.inWeek && !c.scheduledDate)
-      ? '<span style="font-size:10px;background:#fef9c3;color:#854d0e;border:1px solid #fcd34d;border-radius:4px;padding:1px 5px;margin-right:4px">در هفته</span>'
-      : '';
-    var fdCell = c.followupDate
-      ? '<span style="font-size:10px;background:'+(c.followupDate < todaySt ? '#fee2e2' : '#dbeafe')+';color:'+(c.followupDate < todaySt ? '#991b1b' : '#1e40af')+';border-radius:4px;padding:1px 5px">'+c.followupDate+'</span>'
+
+  // ── Row renderers ─────────────────────────────────────────────────────
+  var rowUnscheduled = function(c, n) {
+    var oc = typeof umGetColor==='function' ? umGetColor(c.owner) : '#94a3b8';
+    var ek = c._key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var ri = String(c.rid).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var aIcon = c.actionType==='visit' ? '🤝 ویزیت' : '📞 تماس';
+    var aBg = c.actionType==='visit' ? '#ede9fe' : '#e0f2fe';
+    var aCol = c.actionType==='visit' ? '#5b21b6' : '#0369a1';
+    return '<tr style="background:#fffbeb">'
+      +'<td style="color:var(--text-muted);font-size:10px;text-align:center;border-right:3px solid #f59e0b">'+n+'</td>'
+      +'<td style="cursor:pointer" onclick="openCenterModal(\''+c.rtype+'\',\''+ri+'\')">'
+        +'<span style="font-weight:600;color:var(--brand);text-decoration:underline dotted">'+esc(c.name)+'</span>'
+        +' <span style="font-size:9px;background:#fef9c3;color:#854d0e;border:1px solid #fcd34d;border-radius:4px;padding:1px 5px">در هفته</span>'
+      +'</td>'
+      +'<td style="font-size:11px">'+esc(c.provName)+'</td>'
+      +'<td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+oc+';margin-left:4px;vertical-align:middle"></span><span style="font-size:11px">'+esc(c.ownerName)+'</span></td>'
+      +'<td><span style="font-size:10px;background:'+aBg+';color:'+aCol+';border-radius:4px;padding:2px 6px">'+aIcon+'</span></td>'
+      +'<td></td>'
+      +'<td style="white-space:nowrap">'
+        +'<button class="wp-fcl-act-btn wp-fcl-act-sched" onclick="wpSetScheduleFromKey(\''+ek+'\')">📅 تعیین روز</button> '
+        +'<button class="wp-fcl-act-btn" style="background:#fef3c7;color:#92400e;border-color:#fcd34d" onclick="wpMoveEntry(\''+ek+'\',\''+weekId+'\')">↪ هفته دیگر</button> '
+        +'<button class="wp-fcl-act-btn wp-fcl-act-remove" onclick="wpRemoveEntry(\''+ek+'\')">✕</button>'
+      +'</td>'
+    +'</tr>';
+  };
+
+  var rowCenter = function(c, n) {
+    var oc = typeof umGetColor==='function' ? umGetColor(c.owner) : '#94a3b8';
+    var ri = String(c.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var stCl2 = stCls(c.status);
+    var fd = c.followupDate
+      ? '<span style="font-size:10px;background:'+(c.followupDate<todaySt?'#fee2e2':'#dbeafe')+';color:'+(c.followupDate<todaySt?'#991b1b':'#1e40af')+';border-radius:4px;padding:1px 5px">'+c.followupDate+'</span>'
       : '<span style="color:var(--text-muted);font-size:10px">—</span>';
+    var act = weekId
+      ? '<button class="wp-fcl-act-btn wp-fcl-act-add" onclick="wpFclAddToWeek(\''+weekId+'\',\''+c.rtype+'\',\''+ri+'\')">+ هفته</button>'
+      : '<span style="font-size:10px;color:var(--text-muted)">هفته انتخاب نشده</span>';
+    return '<tr>'
+      +'<td style="color:var(--text-muted);font-size:10px;text-align:center">'+n+'</td>'
+      +'<td style="cursor:pointer" onclick="openCenterModal(\''+c.rtype+'\',\''+ri+'\')">'
+        +'<span style="font-weight:600;color:var(--brand);text-decoration:underline dotted">'+esc(c.name)+'</span>'
+      +'</td>'
+      +'<td style="font-size:11px">'+esc(c.provName)+'</td>'
+      +'<td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+oc+';margin-left:4px;vertical-align:middle"></span><span style="font-size:11px">'+esc(c.ownerName)+'</span></td>'
+      +'<td><span class="'+stCl2+'" style="padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600">'+esc(c.status)+'</span></td>'
+      +'<td>'+fd+'</td>'
+      +'<td style="white-space:nowrap">'+act+'</td>'
+    +'</tr>';
+  };
 
-    var actBtns = '';
-    if (!c.inWeek && weekId) {
-      var ridEsc = String(c.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      actBtns = '<button class="wp-fcl-act-btn wp-fcl-act-add" onclick="wpFclAddToWeek(\'' + weekId + '\',\'' + c.rtype + '\',\'' + ridEsc + '\')">+ هفته</button>';
-    } else if (c.inWeek && !c.scheduledDate && c.weekEntryKey) {
-      var eKeyEsc = c.weekEntryKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      actBtns = '<button class="wp-fcl-act-btn wp-fcl-act-sched" onclick="wpSetScheduleFromKey(\'' + eKeyEsc + '\')">&#128197; تعیین روز</button>'
-        + ' <button class="wp-fcl-act-btn wp-fcl-act-remove" onclick="wpRemoveEntry(\'' + eKeyEsc + '\')">&#10005;</button>';
-    } else if (!weekId) {
-      actBtns = '<span style="font-size:10px;color:var(--text-muted)">هفته انتخاب نشده</span>';
-    }
+  // ── Assemble table body ───────────────────────────────────────────────
+  var tbody = '';
+  var counter = 0;
+  if (filtU.length) {
+    tbody += '<tr style="background:linear-gradient(90deg,#fffbeb,var(--bg-raised));pointer-events:none">'
+      +'<td colspan="7" style="padding:5px 10px;font-size:11px;font-weight:700;color:#92400e;border-top:2px solid #fcd34d;border-right:3px solid #f59e0b">'
+      +'📌 در هفته جاری، بدون تاریخ &nbsp;·&nbsp; '+filtU.length+' مرکز'
+      +'</td></tr>';
+    filtU.forEach(function(c){ counter++; tbody += rowUnscheduled(c, counter); });
+  }
+  if (filtC.length) {
+    tbody += '<tr style="background:var(--bg-raised);pointer-events:none">'
+      +'<td colspan="7" style="padding:5px 10px;font-size:11px;font-weight:700;color:var(--text-secondary);border-top:2px solid var(--border)">'
+      +'📋 مراکز آماده افزودن &nbsp;·&nbsp; '+filtC.length+' مرکز'
+      +'</td></tr>';
+    filtC.forEach(function(c){ counter++; tbody += rowCenter(c, counter); });
+  }
+  if (!counter) {
+    tbody = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">✓ هیچ موردی یافت نشد</td></tr>';
+  }
 
-    return '<tr class="'+(c.inWeek && !c.scheduledDate ? 'fcl-in-week' : '')+'">'
-      + '<td style="color:var(--text-muted);font-size:10px;text-align:center">'+(idx+1)+'</td>'
-      + '<td><span style="font-weight:600">'+esc(c.name)+'</span> '+wkBadge+'</td>'
-      + '<td style="font-size:11px">'+esc(c.provName)+'</td>'
-      + '<td><span class="wp-fcl-owner-dot" style="background:'+ownerColor+'"></span><span style="font-size:11px">'+esc(c.ownerName)+'</span></td>'
-      + '<td><span class="'+stCl+'" style="padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600">'+esc(c.status)+'</span></td>'
-      + '<td>'+fdCell+'</td>'
-      + '<td style="white-space:nowrap">'+actBtns+'</td>'
-      + '</tr>';
-  }).join('');
+  var totalAll = unschedEntries.length + allCenters.length;
+  var totalFilt = filtU.length + filtC.length;
 
   var html = '<div class="wp-fcl-wrap">'
-    + '<div class="wp-fcl-header" onclick="wpFclToggle()">'
-    + '<div class="wp-fcl-title">&#128203; لیست کامل مراکز بدون تاریخ'
-    + ' <span class="wp-fcl-badge">'+filtered.length+'</span>'
-    + (filtered.length !== unscheduled.length ? '<span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-right:4px">از '+unscheduled.length+'</span>' : '')
-    + '</div>'
-    + '<span class="wp-fcl-toggle" id="wpFclArrow">'+(_wpFclOpen ? '\u25b2' : '\u25bc')+'</span>'
-    + '</div>'
-    + '<div class="wp-fcl-body'+(_wpFclOpen ? ' open' : '')+'" id="wpFclBody">'
-    + '<div class="wp-fcl-filters">'
-    + '<input type="text" placeholder="&#128269; جستجو مرکز / استان / کارشناس..." value="'+esc(_wpFclFilters.q)+'" oninput="_wpFclFilters.q=this.value;renderWpFullCenterList()">'
-    + '<select onchange="_wpFclFilters.owner=this.value;renderWpFullCenterList()">'+ownerOpts+'</select>'
-    + '<select onchange="_wpFclFilters.prov=this.value;renderWpFullCenterList()">'+provOpts+'</select>'
-    + '<button onclick="_wpFclFilters={q:\'\',owner:\'\',prov:\'\'};renderWpFullCenterList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;font-size:11px;color:var(--text-muted)">&#10005; پاک</button>'
-    + '</div>'
-    + '<div class="wp-fcl-table-wrap" style="max-height:440px;overflow-y:auto">'
-    + (filtered.length ? '<table class="wp-fcl-table"><thead><tr>'
-        + '<th style="width:36px">#</th><th>نام مرکز</th><th>استان</th><th>کارشناس</th><th>وضعیت</th><th>پیگیری</th><th>عملیات</th>'
-        + '</tr></thead><tbody>'+rows+'</tbody></table>'
-      : '<div class="wp-fcl-no-data">&#10003; هیچ مرکزی با این فیلتر بدون تاریخ نیست</div>')
-    + '</div>'
-    + _wpFclExpertSummary(filtered)
-    + '<div class="wp-fcl-footer">'
-    + '<span>'+filtered.length+' مرکز بدون تاریخ برنامه‌ریزی</span>'
-    + (weekId ? '<span style="color:var(--text-muted)">«+ هفته» برای افزودن به برنامه جاری &middot; «&#128197; تعیین روز» برای موجودین در هفته</span>'
-              : '<span style="color:#f59e0b">&#9888; برای عملیات ابتدا هفته انتخاب کنید</span>')
-    + '</div>'
-    + '</div>'
-    + '</div>';
+    +'<div class="wp-fcl-header" onclick="wpFclToggle()">'
+    +'<div class="wp-fcl-title">📋 صف انتظار مراکز'
+    +(unschedEntries.length ? ' <span style="background:#fef9c3;color:#854d0e;border:1px solid #fcd34d;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+unschedEntries.length+' در هفته</span>' : '')
+    +' <span class="wp-fcl-badge">'+allCenters.length+'</span>'
+    +(totalFilt!==totalAll ? '<span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-right:4px">'+totalFilt+' نمایش داده شده</span>' : '')
+    +'</div>'
+    +'<span class="wp-fcl-toggle" id="wpFclArrow">'+(_wpFclOpen?'▲':'▼')+'</span>'
+    +'</div>'
+    +'<div class="wp-fcl-body'+(_wpFclOpen?' open':'')+'" id="wpFclBody">'
+    +'<div class="wp-fcl-filters">'
+    +'<input type="text" placeholder="🔍 جستجو مرکز / استان / کارشناس..." value="'+esc(_wpFclFilters.q)+'" oninput="_wpFclFilters.q=this.value;renderWpFullCenterList()">'
+    +'<select onchange="_wpFclFilters.owner=this.value;renderWpFullCenterList()">'+ownerOpts+'</select>'
+    +'<select onchange="_wpFclFilters.prov=this.value;renderWpFullCenterList()">'+provOpts+'</select>'
+    +'<button onclick="_wpFclFilters={q:\'\',owner:\'\',prov:\'\'};renderWpFullCenterList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;font-size:11px;color:var(--text-muted)">✕ پاک</button>'
+    +'</div>'
+    +'<div class="wp-fcl-table-wrap" style="max-height:520px;overflow-y:auto">'
+    +'<table class="wp-fcl-table"><thead><tr>'
+    +'<th style="width:36px">#</th>'
+    +'<th>نام مرکز</th><th>استان</th><th>کارشناس</th>'
+    +'<th>وضعیت</th><th>پیگیری</th><th>عملیات</th>'
+    +'</tr></thead><tbody>'+tbody+'</tbody></table>'
+    +'</div>'
+    +_wpFclExpertSummary(filtC.concat(filtU))
+    +'<div class="wp-fcl-footer">'
+    +'<span>'+(unschedEntries.length?'<strong>'+unschedEntries.length+'</strong> در هفته بدون تاریخ &middot; ':'')+allCenters.length+' مرکز در صف</span>'
+    +(weekId?'<span style="color:var(--text-muted)">«+ هفته» افزودن &middot; «📅 تعیین روز» زمان‌بندی</span>'
+            :'<span style="color:#f59e0b">⚠ برای عملیات هفته انتخاب کنید</span>')
+    +'</div>'
+    +'</div>'
+    +'</div>';
 
   el.innerHTML = html;
 }
 
-
-function _wpFclExpertSummary(filtered) {
-  if (!filtered.length) return '';
-  // شمارش per-expert
-  var counts = {};
-  filtered.forEach(function(c) {
-    var key = c.owner || '__none__';
-    counts[key] = (counts[key] || 0) + 1;
+// wpPickForDay: afzoudan mrkz ba tarikh mostaghim be ruz morede nazar
+function wpPickForDay(weekId, dayStr) {
+  var active = typeof umGetActive==='function' ? umGetActive() : [];
+  _buildPCCache();
+  var inWeekMap = {};
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    if(!k.startsWith(weekId+':::')) return;
+    var we = DB.weekEntries[k];
+    inWeekMap[we.recKey||((we.rtype||'')+'_'+(we.rid||''))] = true;
   });
-  var total = filtered.length;
-  var members = typeof umGetActive === 'function' ? umGetActive() : [];
-  
-  var chips = Object.keys(counts).sort(function(a, b) {
-    return counts[b] - counts[a];
-  }).map(function(uid) {
-    var n = counts[uid];
-    var pct = Math.round(n / total * 100);
-    var m = members.find(function(x) { return x.id === uid; });
-    var name = m ? m.name : (USERS[uid] || (uid === '__none__' ? 'بدون مسئول' : uid));
-    var color = m ? (m.color || '#94a3b8') : '#94a3b8';
-    return '<div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:11px;white-space:nowrap">'
-      + '<span style="width:9px;height:9px;border-radius:50%;background:'+color+';flex-shrink:0"></span>'
-      + '<span style="font-weight:600">'+esc(name)+'</span>'
-      + '<span style="background:'+color+'22;color:'+color+';font-weight:700;padding:1px 7px;border-radius:10px;font-size:10px">'+n+'</span>'
-      + '<span style="color:var(--text-muted);font-size:10px">('+pct+'٪)</span>'
-      + '</div>';
-  }).join('');
-
-  return '<div style="padding:8px 12px;background:var(--bg-raised);border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
-    + '<span style="font-size:11px;color:var(--text-muted);font-weight:600;flex-shrink:0">توزیع کارشناسان:</span>'
-    + chips
-    + '</div>';
+  var centers = [];
+  getAllProvinces().forEach(function(p){
+    var tp = getProvType(p.id);
+    getProvCenters(p.id).forEach(function(c){
+      var rk = tp+'_'+c.id;
+      if(inWeekMap[rk]) return;
+      var e = getE(tp,c.id); var owner = e.owner||c.owner||'';
+      if(!_isManager() && owner && owner!==currentUser) return;
+      centers.push({id:c.id,rtype:tp,name:c.name||'',provName:p.name||'',owner:owner,ownerName:owner?(USERS[owner]||owner):'—',recKey:rk});
+    });
+  });
+  var q = '';
+  var renderList = function(){
+    var nq = fNorm(q);
+    var filtered = centers.filter(function(c){return !nq||fNorm(c.name).indexOf(nq)>=0||fNorm(c.provName).indexOf(nq)>=0;});
+    var rows = filtered.slice(0,80).map(function(c){
+      var ri = String(c.id).replace(/\/g,'\\').replace(/'/g,"\'");
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer" onclick="wpFclAddToWeek(''+weekId+'',''+c.rtype+'',''+ri+'');setTimeout(function(){var we=DB.weekEntries[wpEntryKey(''+weekId+'',''+c.rtype+'',''+ri+'')];if(we)we.scheduledDate=''+dayStr+'';saveDB();renderWeekPlan();closeModal('wpPickModal')},50)">'
+        +'<div><div style="font-weight:600;font-size:12px;color:var(--text-primary)">'+esc(c.name)+'</div>'
+        +'<div style="font-size:10px;color:var(--text-muted)">'+esc(c.provName)+' — '+esc(c.ownerName)+'</div></div>'
+        +'<span style="font-size:11px;color:var(--brand)">انتخاب ←</span>'
+        +'</div>';
+    }).join('');
+    var el = document.getElementById('wpPickList');
+    if(el) el.innerHTML = rows||(filtered.length?'':'<div style="padding:15px;text-align:center;color:var(--text-muted);font-size:12px">موردی یافت نشد</div>');
+  };
+  var body = '<div style="margin-bottom:10px"><input id="wpPickSearch" type="text" placeholder="🔍 جستجو مرکز..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);box-sizing:border-box" oninput="q=this.value;renderList()"></div>'
+    +'<div id="wpPickList" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px"></div>';
+  openModal('wpPickModal','📅 افزودن مرکز به '+dayStr,body,'<button class="btn-secondary" onclick="closeModal('wpPickModal')">بستن</button>');
+  setTimeout(function(){var el=document.getElementById('wpPickSearch');if(el)el.focus();renderList();},60);
 }
 
 function wpFclToggle() {
