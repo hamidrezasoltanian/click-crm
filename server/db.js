@@ -110,6 +110,198 @@ async function initSchema() {
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_center_contacts_key ON center_contacts(center_key)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_center_contacts_name ON center_contacts(contact_name)`);
 
+  // Products catalog
+  await query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(300) NOT NULL,
+      code VARCHAR(50),
+      unit VARCHAR(50) DEFAULT 'عدد',
+      active BOOLEAN DEFAULT true,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Versioned price lists (header)
+  await query(`
+    CREATE TABLE IF NOT EXISTS price_lists (
+      id SERIAL PRIMARY KEY,
+      version INTEGER NOT NULL,
+      name VARCHAR(200),
+      buyer_type VARCHAR(30) NOT NULL,
+      effective_from DATE,
+      created_by VARCHAR(100),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      notes TEXT,
+      active BOOLEAN DEFAULT true
+    )
+  `);
+
+  // Price matrix per product x buyer_type x qty_tier x pay_type
+  await query(`
+    CREATE TABLE IF NOT EXISTS price_list_items (
+      id SERIAL PRIMARY KEY,
+      price_list_id INTEGER REFERENCES price_lists(id) ON DELETE CASCADE,
+      product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+      qty_tier INTEGER NOT NULL CHECK(qty_tier BETWEEN 0 AND 3),
+      pay_type VARCHAR(10) NOT NULL CHECK(pay_type IN ('d30','d60','cash')),
+      price BIGINT NOT NULL,
+      base_price BIGINT,
+      UNIQUE(price_list_id, product_id, qty_tier, pay_type)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pli_list ON price_list_items(price_list_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pli_product ON price_list_items(product_id)`);
+
+  // Commission rules: 3 fixed-amount levels per product per price list version
+  await query(`
+    CREATE TABLE IF NOT EXISTS commission_rules (
+      id SERIAL PRIMARY KEY,
+      product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+      price_list_id INTEGER REFERENCES price_lists(id) ON DELETE CASCADE,
+      level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 3),
+      amount BIGINT NOT NULL DEFAULT 0,
+      label VARCHAR(100),
+      UNIQUE(price_list_id, product_id, level)
+    )
+  `);
+
+  // Per-center pricing configuration
+  await query(`
+    CREATE TABLE IF NOT EXISTS center_pricing_config (
+      id SERIAL PRIMARY KEY,
+      center_key VARCHAR(200) NOT NULL UNIQUE,
+      center_name VARCHAR(300),
+      buyer_type VARCHAR(30) DEFAULT 'hospital',
+      commission_level INTEGER CHECK(commission_level BETWEEN 1 AND 3),
+      discount_pct DECIMAL(5,2) DEFAULT 0,
+      discount_ceiling_pct DECIMAL(5,2) DEFAULT 5,
+      notes TEXT,
+      updated_by VARCHAR(100),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Price quotes (header)
+  await query(`
+    CREATE TABLE IF NOT EXISTS price_quotes (
+      id SERIAL PRIMARY KEY,
+      quote_number VARCHAR(50) UNIQUE,
+      center_key VARCHAR(200),
+      center_name VARCHAR(300),
+      buyer_type VARCHAR(30),
+      pay_type VARCHAR(10) DEFAULT 'd30',
+      price_list_id INTEGER REFERENCES price_lists(id),
+      created_by VARCHAR(100),
+      status VARCHAR(20) DEFAULT 'draft' CHECK(status IN ('draft','pending','approved','rejected','sent')),
+      manager_notes TEXT,
+      approved_by VARCHAR(100),
+      approved_at TIMESTAMPTZ,
+      total_base BIGINT DEFAULT 0,
+      total_final BIGINT DEFAULT 0,
+      total_commission BIGINT DEFAULT 0,
+      total_discount BIGINT DEFAULT 0,
+      jalali_date VARCHAR(20),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pq_center ON price_quotes(center_key)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pq_status ON price_quotes(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pq_created ON price_quotes(created_at DESC)`);
+
+  // Quote line items
+  await query(`
+    CREATE TABLE IF NOT EXISTS price_quote_items (
+      id SERIAL PRIMARY KEY,
+      quote_id INTEGER REFERENCES price_quotes(id) ON DELETE CASCADE,
+      product_id INTEGER REFERENCES products(id),
+      product_name VARCHAR(300),
+      qty INTEGER NOT NULL DEFAULT 1,
+      qty_tier INTEGER DEFAULT 0,
+      unit_base_price BIGINT DEFAULT 0,
+      unit_suggested_price BIGINT DEFAULT 0,
+      unit_final_price BIGINT DEFAULT 0,
+      unit_commission BIGINT DEFAULT 0,
+      unit_discount BIGINT DEFAULT 0,
+      line_total BIGINT DEFAULT 0,
+      notes TEXT
+    )
+  `);
+
+  // Seed products and initial price list if products table is empty
+  const prodCount = await query('SELECT COUNT(*) FROM products');
+  if (parseInt(prodCount.rows[0].count) === 0) {
+    const seedProducts = [
+      { name: 'سوزن تمام اتوماتیک برند Geotek',                                   sort_order: 1 },
+      { name: 'سوزن نیمه اتوماتیک برند Geotek به همراه کواکسیال',               sort_order: 2 },
+      { name: 'سوزن گان برند Geotek',                                              sort_order: 3 },
+      { name: 'سوزن شیبا برند Geotek',                                             sort_order: 4 },
+      { name: 'سوزن مغز استخوان برند Geotek',                                     sort_order: 5 },
+      { name: 'سوزن تمام اتوماتیک برند Geotek مدل Pro',                          sort_order: 6 },
+      { name: 'سوزن تمام اتوماتیک برند Curaway',                                  sort_order: 7 },
+      { name: 'سوزن نیمه اتوماتیک برند Curaway',                                  sort_order: 8 },
+      { name: 'سوزن کواکسیال برند Curaway',                                       sort_order: 9 },
+      { name: 'کاتتر شریانی آرتر لاین Intra سایز 4fr×18g×11cm',               sort_order: 10 },
+      { name: 'کاتتر شریانی آرتر لاین Intra سایز 3fr×20g×8cm',                sort_order: 11 },
+      { name: 'کاتتر شریانی آرتر لاین Intra سایز 2fr×22g×6cm',                sort_order: 12 },
+      { name: 'رابط یورین بگ آتنا',                                               sort_order: 13 },
+    ];
+
+    // p[tierIdx][payIdx] — tier: 0=≤20,1=21-50,2=51-100,3=>100 — pay: 0=d30,1=d60,2=cash
+    const seedPrices = [
+      { base: 56900000, p:[[55200000,56900000,53500000],[53500000,56900000,51800000],[51800000,53500000,50100000],[50100000,51800000,48400000]] },
+      { base: 38300000, p:[[37200000,38300000,36100000],[36100000,38300000,34900000],[34900000,36100000,33800000],[33800000,34900000,32600000]] },
+      { base: 23600000, p:[[22900000,23600000,22200000],[22200000,23600000,21500000],[21500000,22200000,20800000],[20800000,21500000,20100000]] },
+      { base: 17800000, p:[[17300000,17800000,16800000],[16800000,17800000,16200000],[16200000,16800000,15700000],[15700000,16200000,15200000]] },
+      { base: 35100000, p:[[34100000,35100000,33000000],[33000000,35100000,32000000],[32000000,33000000,30900000],[30900000,32000000,29900000]] },
+      { base: 78000000, p:[[75700000,78000000,73400000],[73400000,78000000,71000000],[71000000,73400000,68700000],[68700000,71000000,66300000]] },
+      { base: 51000000, p:[[49500000,51000000,48000000],[48000000,51000000,46500000],[46500000,48000000,44900000],[44900000,46500000,43400000]] },
+      { base: 31100000, p:[[30200000,31100000,29300000],[29300000,31100000,28400000],[28400000,29300000,27400000],[27400000,28400000,26500000]] },
+      { base:  8510000, p:[[ 8300000, 8510000, 8000000],[ 8000000, 8510000, 7800000],[ 7800000, 8000000, 7500000],[ 7500000, 7800000, 7300000]] },
+      { base: 50500000, p:[[49000000,50500000,47500000],[47500000,50500000,46000000],[46000000,47500000,44500000],[44500000,46000000,43000000]] },
+      { base: 50500000, p:[[49000000,50500000,47500000],[47500000,50500000,46000000],[46000000,47500000,44500000],[44500000,46000000,43000000]] },
+      { base: 56400000, p:[[54800000,56400000,53100000],[53100000,56400000,51400000],[51400000,53100000,49700000],[49700000,51400000,48000000]] },
+      { base:  4450000, p:[[ 4400000, 4450000, 4200000],[ 4200000, 4450000, 4100000],[ 4100000, 4200000, 4000000],[ 4000000, 4100000, 3800000]] },
+    ];
+
+    const productIds = [];
+    for (let i = 0; i < seedProducts.length; i++) {
+      const p = seedProducts[i];
+      const r = await query(
+        `INSERT INTO products (name, unit, active, sort_order) VALUES ($1, 'عدد', true, $2) RETURNING id`,
+        [p.name, p.sort_order]
+      );
+      productIds.push(r.rows[0].id);
+    }
+    console.log('[DB] Products seeded:', productIds.length);
+
+    // Create initial price list for colleague buyer_type
+    const plRes = await query(
+      `INSERT INTO price_lists (version, name, buyer_type, effective_from, created_by, active)
+       VALUES (1, 'لیست قیمت اولیه همکاران', 'colleague', NOW()::DATE, 'system', true)
+       RETURNING id`
+    );
+    const priceListId = plRes.rows[0].id;
+
+    const payTypes = ['d30', 'd60', 'cash'];
+    for (let i = 0; i < seedPrices.length; i++) {
+      const sp = seedPrices[i];
+      const productId = productIds[i];
+      for (let tier = 0; tier < 4; tier++) {
+        for (let payIdx = 0; payIdx < 3; payIdx++) {
+          await query(
+            `INSERT INTO price_list_items (price_list_id, product_id, qty_tier, pay_type, price, base_price)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [priceListId, productId, tier, payTypes[payIdx], sp.p[tier][payIdx], sp.base]
+          );
+        }
+      }
+    }
+    console.log('[DB] Price list seeded for colleague buyer_type');
+  }
+
   // Seed default users if not exist
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
   const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'Atena@1234';

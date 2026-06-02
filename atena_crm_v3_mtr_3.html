@@ -613,6 +613,73 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
 /* AI */
 #mtrPanel .ai-btn{width:100%;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;border:none;border-radius:12px;padding:14px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:10px;letter-spacing:.3px;transition:opacity .2s;box-shadow:0 4px 14px rgba(14,165,233,.3)}
 #mtrPanel .ai-btn:hover{opacity:.9}
+
+/* ═══════════════ PRICING MODULE ════════════════ */
+#pricingPanel{background:var(--bg-base);min-height:100vh}
+.prc-hdr{background:linear-gradient(135deg,#064e3b,#065f46,#047857);padding:16px 20px;display:flex;align-items:center;gap:12px}
+.prc-hdr-t{font-size:18px;font-weight:800;color:#fff}
+.prc-hdr-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:2px}
+.prc-tabs{background:var(--bg-card);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;position:sticky;top:49px;z-index:199}
+.prc-tbtn{flex-shrink:0;padding:11px 16px;border:none;background:transparent;color:var(--text-muted);font-family:inherit;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:color .15s}
+.prc-tbtn:hover{color:var(--text-secondary)}
+.prc-tbtn.on{color:#16a34a;border-bottom-color:#16a34a;font-weight:700}
+.prc-wrap{padding:16px;max-width:1000px;margin:0 auto;padding-bottom:40px}
+
+/* quote builder */
+.qb-card{background:var(--bg-card);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.qb-title{font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.qb-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.qb-field{display:flex;flex-direction:column;gap:4px}
+.qb-label{font-size:11px;color:var(--text-muted);font-weight:600}
+.qb-inp{padding:8px 10px;border:1.5px solid var(--border-input);border-radius:8px;background:var(--bg-input);color:var(--text-primary);font-family:inherit;font-size:12px;outline:none;transition:border .15s}
+.qb-inp:focus{border-color:#16a34a}
+.qb-inp select,.qb-inp option{font-family:inherit}
+
+/* products table in quote builder */
+.prc-table{width:100%;border-collapse:collapse;font-size:12px}
+.prc-table th{background:var(--bg-raised);padding:9px 10px;text-align:right;color:var(--text-secondary);font-weight:700;font-size:11px;border-bottom:2px solid var(--border)}
+.prc-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.prc-table tr:hover td{background:var(--bg-raised)}
+.prc-table .num{direction:ltr;text-align:left;font-variant-numeric:tabular-nums;font-weight:600}
+.qty-cell{width:80px;padding:5px 7px;border:1.5px solid var(--border-input);border-radius:6px;text-align:center;font-family:inherit;font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none}
+.qty-cell:focus{border-color:#16a34a}
+
+/* commission / discount badges */
+.comm-badge{display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:10px;padding:2px 7px;font-weight:700}
+.disc-badge2{display:inline-block;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:8px;font-size:10px;padding:2px 7px;font-weight:700}
+.warn-badge{display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;font-size:10px;padding:2px 7px;font-weight:700}
+.tier-info{display:inline-block;background:var(--bg-raised);color:var(--text-muted);border-radius:6px;font-size:10px;padding:2px 7px}
+
+/* summary bar */
+.prc-summary{background:linear-gradient(135deg,#064e3b,#065f46);border-radius:12px;padding:16px 20px;display:flex;gap:0;flex-wrap:wrap;margin-bottom:14px}
+.prc-sum-item{flex:1;min-width:130px;text-align:center;color:#fff;padding:8px 12px;border-left:1px solid rgba(255,255,255,.15)}
+.prc-sum-item:last-child{border-left:none}
+.prc-sum-label{font-size:11px;opacity:.7;margin-bottom:5px}
+.prc-sum-val{font-size:18px;font-weight:900;line-height:1}
+.prc-sum-sub{font-size:10px;opacity:.55;margin-top:3px}
+
+/* quote list */
+.quote-row{background:var(--bg-card);border-radius:10px;border:1px solid var(--border);padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;transition:background .15s}
+.quote-row:hover{background:var(--bg-raised)}
+.quote-status{font-size:10px;padding:3px 9px;border-radius:10px;font-weight:700}
+.qs-draft{background:#f1f5f9;color:#475569}
+.qs-pending{background:#fef3c7;color:#92400e}
+.qs-approved{background:#dcfce7;color:#166534}
+.qs-rejected{background:#fee2e2;color:#991b1b}
+.qs-sent{background:#dbeafe;color:#1d4ed8}
+
+/* approval panel */
+.appr-card{background:var(--bg-card);border-radius:12px;border:2px solid #fcd34d;padding:16px;margin-bottom:12px}
+.appr-card.approved{border-color:#86efac}
+.appr-card.rejected{border-color:#fca5a5}
+
+/* price list view */
+.pl-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8}
+.pl-badge.colleague{background:#f3e8ff;color:#7c3aed}
+.pl-badge.hospital{background:#dcfce7;color:#166534}
+.pl-badge.doctor{background:#fff7ed;color:#c2410c}
+.pl-badge.patient{background:#fce7f3;color:#be185d}
+
 #mtrPanel .ai-btn:disabled{background:var(--border);color:var(--text-muted);cursor:not-allowed;box-shadow:none}
 #mtrPanel .ai-res{background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:12.5px;line-height:2;color:var(--text-secondary);white-space:pre-wrap}
 #mtrPanel .report-box{background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:12px;line-height:2;color:var(--text-secondary);white-space:pre-wrap;margin-bottom:10px}
@@ -789,6 +856,7 @@ tr.row-contracted td{background:#f0fdf4!important}
   <button class="tab-btn" id="tab_kpi" onclick="switchTab('kpi')" style="color:#f59e0b">📊 KPI</button>
   <button class="tab-btn" id="tab_manager" onclick="switchTab('manager')" style="color:#8b5cf6">📊 بررسی مدیر</button>
   <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" style="color:#0ea5e9;font-weight:700">💰 مطالبات</button>
+  <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" style="color:#16a34a;font-weight:700">🏷 قیمت‌گذاری</button>
 </div>
 
 <!-- DASHBOARD -->
@@ -2019,7 +2087,7 @@ function onUserChange(u){
 function switchTab(tab){
   if(tab!=='provinces')_currentProvId=null;
   currentTab=tab;
-  ['provinces','weekplan','calendar','checklist','activity','manager','kpi','mtr'].forEach(function(t){
+  ['provinces','weekplan','calendar','checklist','activity','manager','kpi','mtr','pricing'].forEach(function(t){
     var b=document.getElementById('tab_'+t);if(b)b.classList.toggle('active',t===tab);
   });
   document.getElementById('dash').style.display=(tab==='provinces')?'':'none';
@@ -2033,7 +2101,9 @@ function switchTab(tab){
   var mp=document.getElementById('managerPanel');if(mp)mp.style.display=(tab==='manager')?'':'none';
   var kp=document.getElementById('kpiPanel');if(kp)kp.style.display=(tab==='kpi')?'':'none';
   var mtrp=document.getElementById('mtrPanel');if(mtrp)mtrp.style.display=(tab==='mtr')?'':'none';
+  var pricingP=document.getElementById('pricingPanel');if(pricingP)pricingP.style.display=(tab==='pricing')?'':'none';
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
+  if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
   if(tab==='provinces'){
     renderDashboard();renderBanner();
     if(!_currentProvId){
@@ -3086,6 +3156,506 @@ function hideContactPopup() {
   var popup = document.getElementById('centerContactPopup');
   if (popup) popup.classList.remove('show');
 }
+
+// ════════════════════════ PRICING MODULE ════════════════════════════
+var _prcInited = false;
+var _prcProducts = [];
+var _prcCalcCache = {};
+var _prcSelectedCenter = null; // {key, name}
+var _prcQtyMap = {}; // productId -> qty
+var _prcCalcMap = {}; // productId -> calcResult
+
+var BUYER_FA = {hospital:'مرکز درمانی', colleague:'همکار', doctor:'پزشک', patient:'بیمار'};
+var PAY_FA   = {d30:'تسویه ۳۰ روزه', d60:'تسویه ۶۰ روزه', cash:'نقدی'};
+var TIER_FA  = ['تا ۲۰', '۲۱–۵۰', '۵۱–۱۰۰', 'بیش از ۱۰۰'];
+
+function pricingLazyInit() {
+  if (_prcInited) return;
+  _prcInited = true;
+  document.getElementById('qb-date').value = todayStr();
+  prcLoadProducts();
+  if (_isManager()) prcLoadPendingCount();
+}
+
+function prcSwitchTab(tab) {
+  ['builder','quotes','approvals','pricelist','centers'].forEach(function(t) {
+    var el = document.getElementById('prc-' + t);
+    if (el) el.style.display = (t === tab) ? '' : 'none';
+    var btn = document.getElementById('prc-t-' + t);
+    if (btn) btn.classList.toggle('on', t === tab);
+  });
+  if (tab === 'quotes') prcLoadQuotes();
+  if (tab === 'approvals') prcLoadApprovals();
+  if (tab === 'pricelist') prcLoadPriceList();
+}
+
+// ── Products ─────────────────────────────────────────────────────────────────
+function prcLoadProducts() {
+  fetch('/api/pricing/products').then(function(r){return r.json();}).then(function(products) {
+    _prcProducts = products;
+    prcRenderProductsTable();
+  }).catch(function(e){ console.error('prcLoadProducts', e); });
+}
+
+function prcRenderProductsTable() {
+  var tbody = document.getElementById('qb-products-tbody');
+  if (!tbody) return;
+  if (!_prcProducts.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">هنوز محصولی ثبت نشده</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _prcProducts.map(function(p) {
+    var q = _prcQtyMap[p.id] || 0;
+    var calc = _prcCalcMap[p.id];
+    var tierLabel = q > 0 ? '<span class="tier-info">' + TIER_FA[q<=20?0:q<=50?1:q<=100?2:3] + '</span>' : '<span style="color:var(--text-muted)">—</span>';
+    var priceCell = '—';
+    var totalCell = '—';
+    var statusCell = '';
+    if (calc && !calc.error) {
+      priceCell = '<span style="font-weight:800;color:var(--text-primary)">' + prcFmt(calc.suggested_price) + '</span>';
+      if (calc.commission > 0)
+        priceCell += '<br><span class="comm-badge">پورسانت: ' + prcFmt(calc.commission) + '</span>';
+      if (calc.discount_pct > 0)
+        priceCell += '<br><span class="disc-badge2">تخفیف: ' + calc.discount_pct + '%</span>';
+      totalCell = q > 0 ? '<span style="font-weight:800;color:#16a34a">' + prcFmt(calc.unit_total) + '</span>' : '—';
+      statusCell = calc.needs_approval
+        ? '<span class="warn-badge">نیاز تأیید</span>'
+        : '<span class="disc-badge2">✓ مجاز</span>';
+    } else if (q > 0 && calc && calc.error === 'no_price') {
+      priceCell = '<span style="color:var(--text-muted);font-size:11px">قیمت ثبت نشده</span>';
+      statusCell = '<span class="tier-info">—</span>';
+    }
+    return '<tr data-pid="' + p.id + '">' +
+      '<td><input type="checkbox" style="accent-color:#16a34a;width:14px;height:14px" ' +
+        'onchange="prcToggleProduct(' + p.id + ',this.checked)"></td>' +
+      '<td style="font-weight:600;font-size:12.5px">' + esc(p.name) + '</td>' +
+      '<td style="text-align:center"><input class="qty-cell" type="number" min="0" value="' + (q||'') + '" ' +
+        'placeholder="0" oninput="prcSetQty(' + p.id + ',this.value)" data-pid="' + p.id + '"></td>' +
+      '<td>' + tierLabel + '</td>' +
+      '<td class="num">' + priceCell + '</td>' +
+      '<td class="num">' + totalCell + '</td>' +
+      '<td style="text-align:center">' + statusCell + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function prcToggleProduct(pid, checked) {
+  if (!checked) {
+    _prcQtyMap[pid] = 0;
+    delete _prcCalcMap[pid];
+    var inp = document.querySelector('.qty-cell[data-pid="' + pid + '"]');
+    if (inp) inp.value = '';
+    prcUpdateSummary();
+    prcRenderRow(pid);
+  }
+}
+
+function prcSetQty(pid, val) {
+  var qty = Math.max(0, parseInt(val) || 0);
+  _prcQtyMap[pid] = qty;
+  if (qty > 0) {
+    // auto-check the checkbox
+    var row = document.querySelector('tr[data-pid="' + pid + '"]');
+    if (row) { var cb = row.querySelector('input[type=checkbox]'); if(cb) cb.checked = true; }
+    prcCalcProduct(pid, qty);
+  } else {
+    delete _prcCalcMap[pid];
+    prcRenderRow(pid);
+    prcUpdateSummary();
+  }
+}
+
+function prcCalcProduct(pid, qty) {
+  var buyerType = document.getElementById('qb-buyer-type').value;
+  var payType   = document.getElementById('qb-pay-type').value;
+  var centerKey = _prcSelectedCenter ? _prcSelectedCenter.key : '';
+  var url = '/api/pricing/calc?product_id=' + pid + '&qty=' + qty +
+    '&buyer_type=' + buyerType + '&pay_type=' + payType +
+    (centerKey ? '&center_key=' + encodeURIComponent(centerKey) : '');
+  fetch(url).then(function(r){return r.json();}).then(function(data) {
+    _prcCalcMap[pid] = data;
+    prcRenderRow(pid);
+    prcUpdateSummary();
+  }).catch(function(){});
+}
+
+function prcRenderRow(pid) {
+  // re-render single row without full table rebuild
+  var tbody = document.getElementById('qb-products-tbody');
+  if (!tbody) return;
+  var row = tbody.querySelector('tr[data-pid="' + pid + '"]');
+  if (!row) { prcRenderProductsTable(); return; }
+  var q = _prcQtyMap[pid] || 0;
+  var calc = _prcCalcMap[pid];
+  var tierLabel = q > 0 ? '<span class="tier-info">' + TIER_FA[q<=20?0:q<=50?1:q<=100?2:3] + '</span>' : '<span style="color:var(--text-muted)">—</span>';
+  var priceCell = '—', totalCell = '—', statusCell = '';
+  if (calc && !calc.error) {
+    priceCell = '<span style="font-weight:800;color:var(--text-primary)">' + prcFmt(calc.suggested_price) + '</span>';
+    if (calc.commission > 0) priceCell += '<br><span class="comm-badge">پورسانت: ' + prcFmt(calc.commission) + '</span>';
+    if (calc.discount_pct > 0) priceCell += '<br><span class="disc-badge2">تخفیف: ' + calc.discount_pct + '%</span>';
+    totalCell = q > 0 ? '<span style="font-weight:800;color:#16a34a">' + prcFmt(calc.unit_total) + '</span>' : '—';
+    statusCell = calc.needs_approval ? '<span class="warn-badge">نیاز تأیید</span>' : '<span class="disc-badge2">✓ مجاز</span>';
+  } else if (q > 0 && calc && calc.error === 'no_price') {
+    priceCell = '<span style="color:var(--text-muted);font-size:11px">قیمت ثبت نشده</span>';
+    statusCell = '<span class="tier-info">—</span>';
+  }
+  row.cells[3].innerHTML = tierLabel;
+  row.cells[4].innerHTML = priceCell;
+  row.cells[5].innerHTML = totalCell;
+  row.cells[6].innerHTML = statusCell;
+}
+
+function prcRecalcAll() {
+  Object.keys(_prcQtyMap).forEach(function(pid) {
+    var qty = _prcQtyMap[pid];
+    if (qty > 0) prcCalcProduct(parseInt(pid), qty);
+  });
+}
+
+function prcUpdateSummary() {
+  var items = 0, total = 0, comm = 0, needsApproval = false;
+  Object.keys(_prcQtyMap).forEach(function(pid) {
+    var qty = _prcQtyMap[pid];
+    var calc = _prcCalcMap[pid];
+    if (qty > 0 && calc && !calc.error) {
+      items++;
+      total += calc.unit_total || 0;
+      comm  += (calc.commission || 0) * qty;
+      if (calc.needs_approval) needsApproval = true;
+    }
+  });
+  var sumEl = document.getElementById('qb-summary');
+  if (sumEl) sumEl.style.display = items > 0 ? 'flex' : 'none';
+  var si = document.getElementById('qs-items');
+  var st = document.getElementById('qs-total');
+  var sc = document.getElementById('qs-comm');
+  var sa = document.getElementById('qs-approval');
+  if (si) si.textContent = items;
+  if (st) st.textContent = items > 0 ? prcFmt(total) : '—';
+  if (sc) sc.textContent = comm > 0 ? prcFmt(comm) : '—';
+  if (sa) sa.innerHTML = needsApproval
+    ? '<span style="color:#fcd34d;font-size:11px">⚠️ نیاز به تأیید مدیر</span>'
+    : items > 0 ? '<span style="color:#86efac;font-size:11px">✓ بدون نیاز تأیید</span>' : '—';
+}
+
+// ── Center type change → recalc ───────────────────────────────────────────────
+function prcOnBuyerTypeChange() {
+  prcRecalcAll();
+}
+
+// ── Center search autocomplete ─────────────────────────────────────────────────
+function prcCenterSearch(q) {
+  var sug = document.getElementById('qb-center-suggestions');
+  if (!q || q.length < 2) { if(sug) sug.style.display='none'; return; }
+  // search local CENTERS + _PC_CACHE
+  var results = [];
+  if (typeof CENTERS !== 'undefined') {
+    CENTERS.forEach(function(c) {
+      if (fNorm(c.name).indexOf(fNorm(q)) >= 0) results.push({key:'center_'+c.id, name:c.name});
+    });
+  }
+  if (typeof _PC_CACHE !== 'undefined') {
+    Object.values(_PC_CACHE).forEach(function(arr) {
+      arr.forEach(function(c) {
+        if (fNorm(c.name).indexOf(fNorm(q)) >= 0) results.push({key:'pc_'+c.id, name:c.name});
+      });
+    });
+  }
+  results = results.slice(0, 8);
+  if (!sug) return;
+  if (!results.length) { sug.style.display='none'; return; }
+  sug.innerHTML = results.map(function(r) {
+    return '<div onclick="prcSelectCenter('' + r.key + '','' + esc(r.name).replace(/'/g,"&#39;") + '')" ' +
+      'style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">' +
+      esc(r.name) + '</div>';
+  }).join('');
+  sug.style.display = 'block';
+}
+
+function prcSelectCenter(key, name) {
+  _prcSelectedCenter = {key: key, name: name};
+  document.getElementById('qb-center-name').value = name;
+  var sug = document.getElementById('qb-center-suggestions');
+  if (sug) sug.style.display = 'none';
+  // load center pricing config and update buyer type
+  fetch('/api/pricing/center/' + encodeURIComponent(key))
+    .then(function(r){return r.json();}).then(function(cfg) {
+      if (cfg) {
+        var bt = document.getElementById('qb-buyer-type');
+        if (bt && cfg.buyer_type) bt.value = cfg.buyer_type;
+        var info = document.getElementById('qb-center-info');
+        if (info) {
+          var parts = [];
+          if (cfg.buyer_type) parts.push('نوع: ' + (BUYER_FA[cfg.buyer_type]||cfg.buyer_type));
+          if (cfg.commission_level) parts.push('پورسانت: سطح ' + cfg.commission_level);
+          if (parseFloat(cfg.discount_pct) > 0) parts.push('تخفیف روتین: ' + cfg.discount_pct + '%');
+          if (parseFloat(cfg.discount_ceiling_pct) > 0) parts.push('سقف تخفیف: ' + cfg.discount_ceiling_pct + '%');
+          if (parts.length) { info.innerHTML = '🏥 ' + parts.join(' &nbsp;|&nbsp; '); info.style.display=''; }
+        }
+      }
+      prcRecalcAll();
+    }).catch(function(){ prcRecalcAll(); });
+}
+
+// ── Submit quote ───────────────────────────────────────────────────────────────
+function prcSubmitQuote() {
+  var centerName = document.getElementById('qb-center-name').value.trim();
+  if (!centerName) return showToast('لطفاً نام مرکز را وارد کنید', 2000);
+  var items = [];
+  _prcProducts.forEach(function(p) {
+    var qty = _prcQtyMap[p.id] || 0;
+    var calc = _prcCalcMap[p.id];
+    if (qty > 0 && calc && !calc.error) {
+      items.push({
+        product_id: p.id,
+        product_name: p.name,
+        qty: qty,
+        qty_tier: calc.tier || 0,
+        unit_base_price: calc.base_price || 0,
+        unit_suggested_price: calc.suggested_price || 0,
+        unit_final_price: calc.suggested_price || 0,
+        unit_commission: calc.commission || 0,
+        unit_discount: calc.discount_amount || 0,
+        needs_approval: calc.needs_approval || false
+      });
+    }
+  });
+  if (!items.length) return showToast('لطفاً حداقل یک محصول با تعداد انتخاب کنید', 2000);
+  var payload = {
+    center_key:  _prcSelectedCenter ? _prcSelectedCenter.key : '',
+    center_name: centerName,
+    buyer_type:  document.getElementById('qb-buyer-type').value,
+    pay_type:    document.getElementById('qb-pay-type').value,
+    jalali_date: document.getElementById('qb-date').value,
+    items: items
+  };
+  fetch('/api/pricing/quotes', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function(r){return r.json();}).then(function(res) {
+    if (res.ok) {
+      showToast('✅ پیشنهاد ' + res.quote_number + ' ثبت شد' +
+        (res.status === 'pending' ? ' — در انتظار تأیید مدیر' : ''), 3000);
+      prcClearQuote();
+      if (_isManager()) prcLoadPendingCount();
+    } else {
+      showToast('❌ ' + (res.error||'خطا'), 2500);
+    }
+  }).catch(function(e){ showToast('❌ خطای شبکه', 2000); });
+}
+
+function prcClearQuote() {
+  _prcSelectedCenter = null;
+  _prcQtyMap = {};
+  _prcCalcMap = {};
+  document.getElementById('qb-center-name').value = '';
+  var info = document.getElementById('qb-center-info');
+  if (info) info.style.display = 'none';
+  prcRenderProductsTable();
+  prcUpdateSummary();
+}
+
+// ── Quotes list ────────────────────────────────────────────────────────────────
+function prcLoadQuotes() {
+  var status = document.getElementById('prc-q-filter') ? document.getElementById('prc-q-filter').value : '';
+  var url = '/api/pricing/quotes' + (status ? '?status=' + status : '');
+  var listEl = document.getElementById('prc-quotes-list');
+  if (listEl) listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:30px">در حال بارگذاری...</div>';
+  fetch(url).then(function(r){return r.json();}).then(function(quotes) {
+    if (!listEl) return;
+    if (!quotes.length) {
+      listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px">هیچ پیشنهادی یافت نشد</div>';
+      return;
+    }
+    var STATUS_FA = {draft:'پیش‌نویس',pending:'در انتظار',approved:'تأیید شده',rejected:'رد شده',sent:'ارسال شده'};
+    listEl.innerHTML = quotes.map(function(q) {
+      var sCls = 'qs-' + q.status;
+      var dt = q.jalali_date || (q.created_at ? new Date(q.created_at).toLocaleDateString('fa-IR') : '');
+      return '<div class="quote-row">' +
+        '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:800;color:var(--text-primary);margin-bottom:2px">' + esc(q.center_name||'—') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted)">' + q.quote_number + ' &nbsp;|&nbsp; ' +
+            (BUYER_FA[q.buyer_type]||q.buyer_type) + ' &nbsp;|&nbsp; ' + (PAY_FA[q.pay_type]||q.pay_type) +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align:left;direction:ltr;font-weight:700;font-size:13px;color:#16a34a">' + prcFmt(q.total_final) + '</div>' +
+        '<span class="quote-status ' + sCls + '">' + (STATUS_FA[q.status]||q.status) + '</span>' +
+        '<span style="font-size:10px;color:var(--text-muted)">' + dt + '</span>' +
+        '<button onclick="prcPrintQuote(' + q.id + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--text-secondary);font-family:inherit">🖨 چاپ</button>' +
+        '</div>';
+    }).join('');
+  }).catch(function(){ if(listEl) listEl.innerHTML = '<div style="color:#dc2626;padding:20px">خطا در بارگذاری</div>'; });
+}
+
+// ── Approvals (manager) ────────────────────────────────────────────────────────
+function prcLoadApprovals() {
+  if (!_isManager()) {
+    var el = document.getElementById('prc-approvals-list');
+    if (el) el.innerHTML = '<div style="color:var(--text-muted);padding:20px">فقط مدیر می‌تواند پیشنهادها را تأیید کند</div>';
+    return;
+  }
+  fetch('/api/pricing/quotes?status=pending').then(function(r){return r.json();}).then(function(quotes) {
+    var el = document.getElementById('prc-approvals-list');
+    if (!el) return;
+    if (!quotes.length) { el.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px">هیچ پیشنهادی در انتظار تأیید نیست ✅</div>'; return; }
+    el.innerHTML = quotes.map(function(q) {
+      return '<div class="appr-card" id="appr-' + q.id + '">' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+          '<div style="flex:1"><div style="font-size:14px;font-weight:800">' + esc(q.center_name||'—') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted)">' + q.quote_number + ' — ' + (BUYER_FA[q.buyer_type]||q.buyer_type) + ' — ' + (PAY_FA[q.pay_type]||q.pay_type) + ' — توسط: ' + (q.created_by||'') + '</div></div>' +
+          '<div style="font-size:16px;font-weight:900;color:#16a34a">' + prcFmt(q.total_final) + ' ریال</div>' +
+        '</div>' +
+        '<div style="margin-bottom:10px"><input class="qb-inp" id="anote-' + q.id + '" placeholder="یادداشت مدیر (اختیاری)..." style="width:100%"></div>' +
+        '<div style="display:flex;gap:8px">' +
+          '<button onclick="prcApprove(' + q.id + ')" style="flex:1;padding:9px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">✅ تأیید</button>' +
+          '<button onclick="prcReject(' + q.id + ')" style="padding:9px 16px;border-radius:8px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">❌ رد</button>' +
+          '<button onclick="prcPrintQuote(' + q.id + ')" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">🖨</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  });
+}
+
+function prcApprove(id) {
+  var note = document.getElementById('anote-' + id);
+  fetch('/api/pricing/quotes/' + id + '/approve', {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({manager_notes: note ? note.value : ''})
+  }).then(function(r){return r.json();}).then(function(res) {
+    if (res.ok) {
+      showToast('✅ پیشنهاد تأیید شد', 2000);
+      prcLoadApprovals();
+      prcLoadPendingCount();
+    }
+  });
+}
+
+function prcReject(id) {
+  var note = document.getElementById('anote-' + id);
+  if (!note || !note.value.trim()) return showToast('لطفاً دلیل رد را وارد کنید', 2000);
+  fetch('/api/pricing/quotes/' + id + '/reject', {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({manager_notes: note.value})
+  }).then(function(r){return r.json();}).then(function(res) {
+    if (res.ok) { showToast('پیشنهاد رد شد', 2000); prcLoadApprovals(); prcLoadPendingCount(); }
+  });
+}
+
+function prcLoadPendingCount() {
+  fetch('/api/pricing/quotes?status=pending').then(function(r){return r.json();}).then(function(q) {
+    var badge = document.getElementById('prc-pending-badge');
+    var count = document.getElementById('prc-pending-count');
+    if (badge && count) {
+      count.textContent = q.length;
+      badge.style.display = q.length > 0 ? '' : 'none';
+    }
+  }).catch(function(){});
+}
+
+// ── Price List view ────────────────────────────────────────────────────────────
+function prcLoadPriceList() {
+  var buyerType = document.getElementById('prc-pl-buyer') ? document.getElementById('prc-pl-buyer').value : 'hospital';
+  var payType   = document.getElementById('prc-pl-pay')   ? document.getElementById('prc-pl-pay').value   : 'd30';
+  var el = document.getElementById('prc-pricelist-content');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:30px">در حال بارگذاری...</div>';
+  fetch('/api/pricing/prices?buyer_type=' + buyerType).then(function(r){return r.json();}).then(function(lists) {
+    if (!lists.length) { el.innerHTML = '<div style="color:var(--text-muted);padding:20px">لیست قیمتی برای این دسته ثبت نشده</div>'; return; }
+    var list = lists[0];
+    var byProduct = {};
+    list.items.forEach(function(it) {
+      if (!byProduct[it.product_id]) byProduct[it.product_id] = {name: it.product_name, tiers: {}};
+      if (!byProduct[it.product_id].tiers[it.qty_tier]) byProduct[it.product_id].tiers[it.qty_tier] = {};
+      byProduct[it.product_id].tiers[it.qty_tier][it.pay_type] = it.price;
+    });
+    var rows = Object.values(byProduct).map(function(p, i) {
+      var t = p.tiers;
+      function pr(tier) { var px = (t[tier]||{})[payType]; return px ? prcFmt(px) : '—'; }
+      return '<tr><td style="font-size:11px;color:var(--text-muted)">' + (i+1) + '</td>' +
+        '<td style="font-weight:600;font-size:12.5px">' + esc(p.name) + '</td>' +
+        '<td class="num">' + pr(0) + '</td>' +
+        '<td class="num">' + pr(1) + '</td>' +
+        '<td class="num">' + pr(2) + '</td>' +
+        '<td class="num">' + pr(3) + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">نسخه ' + list.version + ' — ' + (list.name||'') + ' — تاریخ: ' + (list.created_at?new Date(list.created_at).toLocaleDateString('fa-IR'):'') + '</div>' +
+      '<div style="overflow-x:auto"><table class="prc-table">' +
+      '<thead><tr><th>#</th><th>محصول</th>' +
+      '<th>تا ۲۰ (ریال)</th><th>۲۱–۵۰ (ریال)</th><th>۵۱–۱۰۰ (ریال)</th><th>+۱۰۰ (ریال)</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }).catch(function(){ el.innerHTML = '<div style="color:#dc2626;padding:20px">خطا در بارگذاری</div>'; });
+}
+
+// ── Center config ──────────────────────────────────────────────────────────────
+function prcCenterSearch2(q) {
+  // reuse same search logic
+  if (!q || q.length < 2) return;
+  var results = [];
+  if (typeof CENTERS !== 'undefined') {
+    CENTERS.forEach(function(c) { if (fNorm(c.name).indexOf(fNorm(q)) >= 0) results.push({key:'center_'+c.id, name:c.name}); });
+  }
+  if (typeof _PC_CACHE !== 'undefined') {
+    Object.values(_PC_CACHE).forEach(function(arr) {
+      arr.forEach(function(c) { if (fNorm(c.name).indexOf(fNorm(q)) >= 0) results.push({key:'pc_'+c.id, name:c.name}); });
+    });
+  }
+  if (results.length > 0) {
+    var r = results[0];
+    document.getElementById('cfg-center-key').value = r.key;
+  }
+}
+
+function prcLoadCenterConfig() {
+  var key = document.getElementById('cfg-center-key').value.trim();
+  if (!key) return showToast('لطفاً نام مرکز را جستجو کنید', 2000);
+  fetch('/api/pricing/center/' + encodeURIComponent(key))
+    .then(function(r){return r.json();}).then(function(cfg) {
+      var s = document.getElementById('cfg-status');
+      if (!cfg) { if(s) s.textContent = 'تنظیماتی ثبت نشده — مقادیر پیش‌فرض نمایش داده شده'; return; }
+      document.getElementById('cfg-buyer-type').value = cfg.buyer_type || 'hospital';
+      document.getElementById('cfg-comm-level').value = cfg.commission_level || '';
+      document.getElementById('cfg-disc-pct').value   = cfg.discount_pct || 0;
+      document.getElementById('cfg-ceil-pct').value   = cfg.discount_ceiling_pct || 5;
+      document.getElementById('cfg-notes').value      = cfg.notes || '';
+      if (s) s.innerHTML = '<span style="color:#16a34a">✓ تنظیمات بارگذاری شد</span>';
+    });
+}
+
+function prcSaveCenterConfig() {
+  var key  = document.getElementById('cfg-center-key').value.trim();
+  var name = document.getElementById('cfg-center-name').value.trim();
+  if (!key || !name) return showToast('لطفاً ابتدا مرکز را جستجو و انتخاب کنید', 2000);
+  var payload = {
+    center_name: name,
+    buyer_type:  document.getElementById('cfg-buyer-type').value,
+    commission_level: document.getElementById('cfg-comm-level').value || null,
+    discount_pct: parseFloat(document.getElementById('cfg-disc-pct').value) || 0,
+    discount_ceiling_pct: parseFloat(document.getElementById('cfg-ceil-pct').value) || 5,
+    notes: document.getElementById('cfg-notes').value
+  };
+  fetch('/api/pricing/center/' + encodeURIComponent(key), {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function(r){return r.json();}).then(function(res) {
+    var s = document.getElementById('cfg-status');
+    if (res.ok) { showToast('✅ تنظیمات ذخیره شد', 2000); if(s) s.innerHTML = '<span style="color:#16a34a">✓ ذخیره شد</span>'; }
+    else { if(s) s.innerHTML = '<span style="color:#dc2626">❌ ' + (res.error||'خطا') + '</span>'; }
+  });
+}
+
+// ── Print ──────────────────────────────────────────────────────────────────────
+function prcPrintQuote(id) {
+  window.open('/api/pricing/quotes/' + id + '/print', '_blank');
+}
+
+// ── Format helper ──────────────────────────────────────────────────────────────
+function prcFmt(n) {
+  if (!n && n !== 0) return '—';
+  return Number(n).toLocaleString();
+}
+// ════════════════ END PRICING MODULE ════════════════════════════
+
 document.addEventListener('click', function(ev) {
   var popup = document.getElementById('centerContactPopup');
   if (popup && popup.classList.contains('show') && !popup.contains(ev.target)) hideContactPopup();
@@ -9760,6 +10330,206 @@ function _centerNameSimilar(a,b){
     <div id="loginErr" style="color:#dc2626;font-size:12px;margin-top:10px;display:none"></div>
   </div>
 </div>
+
+<!-- ══════════ PRICING PANEL ══════════ -->
+<div id="pricingPanel" style="display:none">
+
+<div class="prc-hdr">
+  <div>
+    <div class="prc-hdr-t">🏷 قیمت‌گذاری هوشمند</div>
+    <div class="prc-hdr-sub">پیشنهاد قیمت بر اساس نوع مرکز، پورسانت و تخفیف روتین</div>
+  </div>
+  <div style="margin-right:auto;display:flex;gap:8px">
+    <span id="prc-pending-badge" style="display:none;background:#fcd34d;color:#78350f;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer" onclick="prcSwitchTab('approvals')">⏳ <span id="prc-pending-count">0</span> در انتظار تأیید</span>
+  </div>
+</div>
+
+<div class="prc-tabs">
+  <button class="prc-tbtn on" id="prc-t-builder" onclick="prcSwitchTab('builder')">📝 پیشنهاد جدید</button>
+  <button class="prc-tbtn" id="prc-t-quotes" onclick="prcSwitchTab('quotes')">📋 پیشنهادها</button>
+  <button class="prc-tbtn" id="prc-t-approvals" id="prc-t-approvals" onclick="prcSwitchTab('approvals')">✅ تأیید مدیر</button>
+  <button class="prc-tbtn" id="prc-t-pricelist" onclick="prcSwitchTab('pricelist')">💹 لیست قیمت</button>
+  <button class="prc-tbtn" id="prc-t-centers" onclick="prcSwitchTab('centers')">🏥 تنظیم مراکز</button>
+</div>
+
+<div class="prc-wrap">
+  <!-- QUOTE BUILDER -->
+  <div id="prc-builder">
+    <div class="qb-card">
+      <div class="qb-title">🏥 اطلاعات خریدار</div>
+      <div class="qb-grid">
+        <div class="qb-field">
+          <span class="qb-label">نام مرکز / خریدار</span>
+          <input class="qb-inp" id="qb-center-name" placeholder="نام مرکز را وارد کنید..." oninput="prcCenterSearch(this.value)">
+          <div id="qb-center-suggestions" style="position:absolute;z-index:200;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;width:280px;max-height:200px;overflow-y:auto;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">نوع خریدار</span>
+          <select class="qb-inp" id="qb-buyer-type" onchange="prcOnBuyerTypeChange()">
+            <option value="hospital">🏥 مرکز درمانی</option>
+            <option value="colleague">🤝 همکار</option>
+            <option value="doctor">👨‍⚕️ پزشک</option>
+            <option value="patient">🧑‍🦽 بیمار</option>
+          </select>
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">نوع تسویه</span>
+          <select class="qb-inp" id="qb-pay-type" onchange="prcRecalcAll()">
+            <option value="d30">تسویه ۳۰ روزه</option>
+            <option value="d60">تسویه ۶۰ روزه</option>
+            <option value="cash">نقدی</option>
+          </select>
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">تاریخ (شمسی)</span>
+          <input class="qb-inp" id="qb-date" placeholder="۱۴۰۴/۰۱/۰۱">
+        </div>
+      </div>
+      <div id="qb-center-info" style="display:none;background:var(--bg-raised);border-radius:8px;padding:10px 14px;font-size:11.5px;color:var(--text-secondary)"></div>
+    </div>
+
+    <div class="qb-card">
+      <div class="qb-title">📦 انتخاب محصولات</div>
+      <div style="overflow-x:auto">
+        <table class="prc-table" id="qb-products-table">
+          <thead><tr>
+            <th style="width:32px"></th>
+            <th>محصول</th>
+            <th style="width:80px;text-align:center">تعداد</th>
+            <th style="width:100px">بازه قیمتی</th>
+            <th style="width:150px">قیمت پیشنهادی (ریال)</th>
+            <th style="width:160px">جمع (ریال)</th>
+            <th style="width:90px;text-align:center">وضعیت</th>
+          </tr></thead>
+          <tbody id="qb-products-tbody">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">در حال بارگذاری محصولات...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="prc-summary" id="qb-summary" style="display:none">
+      <div class="prc-sum-item">
+        <div class="prc-sum-label">اقلام سفارش</div>
+        <div class="prc-sum-val" id="qs-items">۰</div>
+        <div class="prc-sum-sub">نوع کالا</div>
+      </div>
+      <div class="prc-sum-item">
+        <div class="prc-sum-label">جمع کل</div>
+        <div class="prc-sum-val" id="qs-total" style="font-size:14px">—</div>
+        <div class="prc-sum-sub">ریال</div>
+      </div>
+      <div class="prc-sum-item">
+        <div class="prc-sum-label">پورسانت کل</div>
+        <div class="prc-sum-val" id="qs-comm" style="font-size:14px;color:#fcd34d">—</div>
+        <div class="prc-sum-sub">ریال (بر عهده شرکت)</div>
+      </div>
+      <div class="prc-sum-item">
+        <div class="prc-sum-label">نیاز تأیید</div>
+        <div class="prc-sum-val" id="qs-approval" style="font-size:13px">—</div>
+        <div class="prc-sum-sub"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn-secondary" onclick="prcClearQuote()" style="padding:10px 20px;border-radius:8px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">🗑 پاک کردن</button>
+      <button onclick="prcSubmitQuote()" style="padding:10px 24px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">📤 ثبت پیشنهاد</button>
+    </div>
+  </div>
+
+  <!-- QUOTES LIST -->
+  <div id="prc-quotes" style="display:none">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <select id="prc-q-filter" class="qb-inp" style="width:160px" onchange="prcLoadQuotes()">
+        <option value="">همه وضعیت‌ها</option>
+        <option value="draft">پیش‌نویس</option>
+        <option value="pending">در انتظار تأیید</option>
+        <option value="approved">تأیید شده</option>
+        <option value="rejected">رد شده</option>
+        <option value="sent">ارسال شده</option>
+      </select>
+      <button onclick="prcLoadQuotes()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">🔄 بروزرسانی</button>
+    </div>
+    <div id="prc-quotes-list"><div style="text-align:center;color:var(--text-muted);padding:40px">در حال بارگذاری...</div></div>
+  </div>
+
+  <!-- APPROVALS -->
+  <div id="prc-approvals" style="display:none">
+    <div id="prc-approvals-list"><div style="text-align:center;color:var(--text-muted);padding:40px">در حال بارگذاری...</div></div>
+  </div>
+
+  <!-- PRICE LIST VIEW -->
+  <div id="prc-pricelist" style="display:none">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <select id="prc-pl-buyer" class="qb-inp" style="width:160px" onchange="prcLoadPriceList()">
+        <option value="hospital">🏥 مرکز درمانی</option>
+        <option value="colleague">🤝 همکار</option>
+        <option value="doctor">👨‍⚕️ پزشک</option>
+        <option value="patient">🧑‍🦽 بیمار</option>
+      </select>
+      <select id="prc-pl-pay" class="qb-inp" style="width:150px" onchange="prcLoadPriceList()">
+        <option value="d30">تسویه ۳۰ روزه</option>
+        <option value="d60">تسویه ۶۰ روزه</option>
+        <option value="cash">نقدی</option>
+      </select>
+      <button onclick="prcLoadPriceList()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">🔄 بروزرسانی</button>
+    </div>
+    <div id="prc-pricelist-content"></div>
+  </div>
+
+  <!-- CENTER PRICING CONFIG -->
+  <div id="prc-centers" style="display:none">
+    <div class="qb-card">
+      <div class="qb-title">🏥 تنظیم قیمت‌گذاری مرکز</div>
+      <div class="qb-grid">
+        <div class="qb-field">
+          <span class="qb-label">نام مرکز</span>
+          <input class="qb-inp" id="cfg-center-name" placeholder="نام مرکز..." oninput="prcCenterSearch2(this.value)">
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">کلید مرکز (center_key)</span>
+          <input class="qb-inp" id="cfg-center-key" placeholder="مثلاً center_1234" readonly style="background:var(--bg-raised)">
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">نوع خریدار پیش‌فرض</span>
+          <select class="qb-inp" id="cfg-buyer-type">
+            <option value="hospital">🏥 مرکز درمانی</option>
+            <option value="colleague">🤝 همکار</option>
+            <option value="doctor">👨‍⚕️ پزشک</option>
+            <option value="patient">🧑‍🦽 بیمار</option>
+          </select>
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">سطح پورسانت (خالی = بدون پورسانت)</span>
+          <select class="qb-inp" id="cfg-comm-level">
+            <option value="">بدون پورسانت</option>
+            <option value="1">سطح ۱</option>
+            <option value="2">سطح ۲</option>
+            <option value="3">سطح ۳</option>
+          </select>
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">تخفیف روتین (%)</span>
+          <input class="qb-inp" id="cfg-disc-pct" type="number" min="0" max="50" step="0.5" placeholder="0">
+        </div>
+        <div class="qb-field">
+          <span class="qb-label">سقف تخفیف کارشناس (%)</span>
+          <input class="qb-inp" id="cfg-ceil-pct" type="number" min="0" max="30" step="0.5" placeholder="5">
+        </div>
+      </div>
+      <div class="qb-field" style="margin-top:8px">
+        <span class="qb-label">یادداشت</span>
+        <input class="qb-inp" id="cfg-notes" placeholder="توضیحات اضافی...">
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button onclick="prcSaveCenterConfig()" style="padding:9px 20px;border-radius:8px;border:none;background:#16a34a;color:#fff;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">💾 ذخیره تنظیمات</button>
+        <button onclick="prcLoadCenterConfig()" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-family:inherit;font-size:12px;cursor:pointer">🔍 بارگذاری</button>
+      </div>
+      <div id="cfg-status" style="margin-top:8px;font-size:12px"></div>
+    </div>
+  </div>
+</div><!-- /prc-wrap -->
+</div><!-- /pricingPanel -->
 
 <div id="centerContactPopup" class="contact-popup">
   <div id="ccp-name" class="contact-popup-name"></div>
