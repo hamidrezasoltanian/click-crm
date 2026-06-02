@@ -4650,7 +4650,7 @@ function wpBulkMove(){
         +'<span style="font-size:11px;background:#0ea5e920;color:#0ea5e9;border:1px solid #0ea5e944;padding:2px 8px;border-radius:10px">انتقال</span>'
         +'</button>';
     }).join('')+'</div>';
-  openModal('wpBulkMoveModal','انتقال گروهی به هفته دیگر',body,'<button class="btn-secondary" onclick="closeModal('wpBulkMoveModal')">انصراف</button>');
+  openModal('wpBulkMoveModal','انتقال گروهی به هفته دیگر',body,'<button class="btn-secondary" onclick="closeModal(\'wpBulkMoveModal\')">انصراف</button>');
 }
 
 function wpDoBulkMove(targetWeekId){
@@ -7449,8 +7449,11 @@ function renderKPIPanel(){
             + '<div class="rec-action">&#128161; اقدام پیشنهادی: ' + esc(r.action) + '</div>'
             + '<div class="rec-meta">'
             + '👤 ' + esc(ownerName) + '  |  ' + potStars
-            + '  |  <button onclick="(function(){var wks=DB.weekEntries?Object.keys(DB.weekEntries):[];if(!wks.length){showToast('ابتدا یک هفته بسازید',2000);return;}var wId=wks[wks.length-1];addToWeekAuto(wId,''+r.rtype+'',''+r.id+'',''+r.name.replace(/'/g,"&#39;").replace(/\/g,"\\").replace(/
-/g,"")+'','visit');})()" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;font-size:10px;padding:2px 8px;cursor:pointer;font-family:inherit">📅 برنامه‌ریزی</button>'
+            + '  \xa0|\xa0 <button onclick="(function(){var wks=DB.weekEntries?Object.keys(DB.weekEntries):[];if(!wks.length){showToast(\'ابتدا یک هفته بسازید\',2000);return;}var wId=wks[wks.length-1];addToWeekAuto(wId,\''
+            + r.rtype + '\',\''
+            + r.id + '\',\''
+            + r.name.replace(/'/g, "&#39;")
+            + '\',\'visit\');})()" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;font-size:10px;padding:2px 8px;cursor:pointer;font-family:inherit">📅 برنامه‌ریزی</button>'
             + '</div></div></div>';
         });
       }
