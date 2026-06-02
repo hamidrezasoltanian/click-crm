@@ -4563,14 +4563,18 @@ function wpPickSelect(row){
   var c = list._filtered[idx];
   if(!c) return;
   var weekId = _wpPickDay.weekId, dayStr = _wpPickDay.dayStr;
-  wpFclAddToWeek(weekId, c.rtype, c.id);
-  setTimeout(function(){
-    var key = wpEntryKey(weekId, c.rtype, c.id);
-    if(DB.weekEntries[key]) DB.weekEntries[key].scheduledDate = dayStr;
-    saveDB();
-    renderWeekPlan();
-    closeModal('wpPickModal');
-  }, 50);
+  var eKey = wpEntryKey(weekId, c.rtype, c.id);
+  if(DB.weekEntries[eKey]){showToast('این مرکز قبلاً در این هفته است');closeModal('wpPickModal');return;}
+  DB.weekEntries[eKey]={
+    scheduledDate:dayStr, done:false, doneDate:null,
+    rtype:c.rtype, rid:c.id, recKey:c.rtype+'_'+c.id,
+    centerName:c.name||getRecLabel(c.rtype+'_'+c.id),
+    actionType:'call', addedBy:currentUser
+  };
+  saveDB();
+  closeModal('wpPickModal');
+  renderWeekPlan();
+  showToast('مرکز به هفته اضافه شد ✅',2000);
 }
 
 function _wpFclExpertSummary(filtered) {
@@ -4878,8 +4882,15 @@ function saveScheduleFromModal(eKey) {
     }
     if(weekDates.indexOf(dateVal)<0){
       var wStart=weekDates[0];var wEnd=weekDates[6];
-      var proceed=window.confirm('⚠ تاریخ «'+dateVal+'» خارج از محدوده این هفته است.\n(هفته از '+wStart+' تا '+wEnd+')\n\nاگر ادامه دهید، این مرکز در بخش «بدون تاریخ» نمایش داده می‌شود.\n\nادامه می‌دهید؟');
+      var proceed=window.confirm('⚠ تاریخ «'+dateVal+'» خارج از محدوده این هفته است.\n(هفته از '+wStart+' تا '+wEnd+')\n\nتاریخ پیگیری ذخیره می‌شود ولی مرکز در لیست بدون تاریخ می‌ماند.\n\nادامه می‌دهید؟');
       if(!proceed)return;
+      // خارج از هفته: فقط followupDate را ذخیره کن ، scheduledDate دست نخور
+      DB.weekEntries[eKey].actionType = actVal;
+      var _we=DB.weekEntries[eKey];var _rt=_we.rtype;var _ri=_we.rid;
+      if(_rt&&_ri){setE(_rt,_ri,'followupDate',dateVal);}
+      saveDB();closeModal('schModal');renderWeekPlan();
+      showToast('📅 تاریخ پیگیری ذخیره شد', 2500);
+      return;
     }
   }
 
