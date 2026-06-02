@@ -8775,11 +8775,15 @@ function processAB(ab){
   if(!SNAP)SNAP=loadSnap();
   saveData(DATA); // persist across page reload
   updateReminder();render();
-  // auto-suggest follower mapping if unknowns exist
+  // auto-map followers then open modal only for remaining unknowns
   setTimeout(function(){
+    var autoSaved=mtrAutoMapFollowers();
     var unmapped=mtrGetUnmappedFollowers();
-    if(unmapped.length){
-      showToast('🔗 '+unmapped.length+' کارشناس ناشناس یافت شد — دکمه «تطبیق کارشناسان» را بزنید',5000);
+    if(autoSaved&&!unmapped.length){
+      showToast('✅ '+autoSaved+' کارشناس به‌صورت خودکار شناسایی شد',3000);
+    } else if(unmapped.length){
+      if(autoSaved)showToast('✅ '+autoSaved+' کارشناس خودکار شناخته شد — '+unmapped.length+' مورد نیاز به تطبیق دارد',3000);
+      setTimeout(function(){showMtrFollowerMapping();},autoSaved?1200:0);
     }
   },500);
   // اتصال به مراکز
@@ -8921,20 +8925,58 @@ function mtrFindMember(followerName){
   if(!followerName)return null;
   var members=umGetMembers();
   var norm=fNorm(followerName);
-  // 0) check saved mapping first (from مدیریت تطبیق)
+  // 0) saved mapping
   var mappedId=(DB.mtrFollowerMap||{})[norm]||(DB.mtrFollowerMap||{})[followerName];
   if(mappedId){var mf=members.find(function(m){return m.id===mappedId;});if(mf)return mf;}
-  // 1) exact name or id match
+  // 1) exact name or id
   var fm=members.find(function(m){return m.id===followerName||m.name===followerName;});
   if(fm)return fm;
-  // 2) normalized name match
+  // 2) normalized exact
   fm=members.find(function(m){return fNorm(m.name)===norm;});
   if(fm)return fm;
   // 3) USERS reverse lookup
   var foundId=null;
   Object.keys(USERS||{}).forEach(function(uid){if(fNorm(USERS[uid])===norm)foundId=uid;});
   if(foundId){fm=members.find(function(m){return m.id===foundId;});if(fm)return fm;}
+  // 4) partial word match — all words of Excel name appear in member name or vice versa
+  var normWords=norm.split(/\s+/).filter(Boolean);
+  var candidates=members.filter(function(m){
+    var mn=fNorm(m.name);
+    var mnWords=mn.split(/\s+/).filter(Boolean);
+    var allIn=normWords.every(function(w){return mnWords.some(function(mw){return mw===w||mw.indexOf(w)===0||w.indexOf(mw)===0;});});
+    if(allIn)return true;
+    return mnWords.every(function(mw){return normWords.some(function(w){return w===mw||w.indexOf(mw)===0||mw.indexOf(w)===0;});});
+  });
+  if(candidates.length===1)return candidates[0];
+  // 5) last-name only match (unique last word)
+  var exLast=normWords[normWords.length-1];
+  if(exLast&&exLast.length>2){
+    var lastMatches=members.filter(function(m){
+      var mw=fNorm(m.name).split(/\s+/);
+      return mw.indexOf(exLast)>=0;
+    });
+    if(lastMatches.length===1)return lastMatches[0];
+  }
   return null;
+}
+function mtrAutoMapFollowers(){
+  if(!DATA||!DATA.length)return 0;
+  if(!DB.mtrFollowerMap)DB.mtrFollowerMap={};
+  var unique={};
+  DATA.forEach(function(r){if(r.follower&&r.follower!=='—')unique[r.follower]=true;});
+  var saved=0;
+  Object.keys(unique).forEach(function(f){
+    var norm=fNorm(f);
+    if(DB.mtrFollowerMap[norm]||DB.mtrFollowerMap[f])return;
+    var m=mtrFindMember(f);
+    if(m){
+      DB.mtrFollowerMap[norm]=m.id;
+      DB.mtrFollowerMap[f]=m.id;
+      saved++;
+    }
+  });
+  if(saved)saveDB();
+  return saved;
 }
 function mtrGetUnmappedFollowers(){
   if(!DATA||!DATA.length)return[];
@@ -8950,24 +8992,33 @@ function showMtrFollowerMapping(){
   var followers=Object.keys(unique);
   if(!followers.length){showToast('کارشناسی در فایل یافت نشد');return;}
 
+  var autoCount=0,unknownCount=0;
   var rows=followers.map(function(f){
     var cur=mtrFindMember(f);
+    var isSaved=!!(((DB.mtrFollowerMap||{})[fNorm(f)])||((DB.mtrFollowerMap||{})[f]));
     var opts=members.map(function(m){
       return '<option value="'+m.id+'"'+(cur&&cur.id===m.id?' selected':'')+'>'+esc(m.name)+'</option>';
     }).join('');
     opts='<option value="">— انتخاب نشده —</option>'+opts;
-    var found=!!cur;
-    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)">'
+    var badge;
+    if(cur&&isSaved){autoCount++;badge='<span style="font-size:10px;background:#dcfce7;color:#15803d;border:1px solid #86efac;border-radius:10px;padding:2px 8px;white-space:nowrap">✓ خودکار</span>';}
+    else if(cur){autoCount++;badge='<span style="font-size:10px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:10px;padding:2px 8px;white-space:nowrap">✓ شناخته شد</span>';}
+    else{unknownCount++;badge='<span style="font-size:10px;background:#fef9c3;color:#92400e;border:1px solid #fcd34d;border-radius:10px;padding:2px 8px;white-space:nowrap">⚠ ناشناس</span>';}
+    var rowBg=cur?'':'background:#fffbeb;';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);'+rowBg+'">'
       +'<span style="flex:1;font-size:12px;font-weight:600;color:var(--text-primary)">'+esc(f)+'</span>'
-      +(found?'<span style="font-size:10px;color:#16a34a;margin-right:8px">✓ شناخته شد</span>':'<span style="font-size:10px;color:#f59e0b;margin-right:8px">⚠ ناشناس</span>')
+      +badge
       +'<select id="fmap_'+btoa(unescape(encodeURIComponent(f))).replace(/[^a-z0-9]/gi,'').substring(0,20)+'" data-fn="'+esc(f)+'" style="background:var(--bg-input);border:1px solid var(--border-input);border-radius:6px;padding:5px 8px;font-size:11px;font-family:inherit;color:var(--text-primary);min-width:150px">'
         +opts
       +'</select>'
     +'</div>';
   }).join('');
 
-  var body='<div style="font-size:11px;color:var(--text-muted);background:var(--bg-raised);border-radius:7px;padding:9px 12px;margin-bottom:12px">'
-    +'💡 نام کارشناسان در فایل اکسل را به کاربران سیستم نسبت دهید. این نگاشت یک‌بار ذخیره می‌شود.'
+  var summaryBg=unknownCount?'background:#fef9c3;border-color:#fcd34d':'background:#f0fdf4;border-color:#86efac';
+  var body='<div style="font-size:11px;'+summaryBg+';border:1px solid;border-radius:7px;padding:9px 12px;margin-bottom:12px;display:flex;gap:12px;flex-wrap:wrap">'
+    +(autoCount?'<span style="color:#15803d">✅ '+autoCount+' شناخته شده</span>':'')
+    +(unknownCount?'<span style="color:#92400e">⚠ '+unknownCount+' نیاز به تطبیق دستی</span>':'')
+    +'<span style="color:var(--text-muted);margin-right:auto;font-size:10px">این نگاشت یک‌بار ذخیره می‌شود</span>'
     +'</div>'
     +'<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">'+rows+'</div>';
 
