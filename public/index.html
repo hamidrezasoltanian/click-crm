@@ -4390,9 +4390,11 @@ function renderWpFullCenterList() {
 }
 
 // wpPickForDay: afzoudan mrkz ba tarikh mostaghim be ruz morede nazar
+var _wpPickDay = {weekId:'', dayStr:''};
+
 function wpPickForDay(weekId, dayStr) {
-  var active = typeof umGetActive==='function' ? umGetActive() : [];
   _buildPCCache();
+  _wpPickDay = {weekId:weekId, dayStr:dayStr};
   var inWeekMap = {};
   Object.keys(DB.weekEntries||{}).forEach(function(k){
     if(!k.startsWith(weekId+':::')) return;
@@ -4407,28 +4409,58 @@ function wpPickForDay(weekId, dayStr) {
       if(inWeekMap[rk]) return;
       var e = getE(tp,c.id); var owner = e.owner||c.owner||'';
       if(!_isManager() && owner && owner!==currentUser) return;
-      centers.push({id:c.id,rtype:tp,name:c.name||'',provName:p.name||'',owner:owner,ownerName:owner?(USERS[owner]||owner):'—',recKey:rk});
+      centers.push({id:c.id,rtype:tp,name:c.name||'',provName:p.name||'',owner:owner,ownerName:owner?(USERS[owner]||owner):'—'});
     });
   });
-  var q = '';
+  var _centers = centers;
   var renderList = function(){
-    var nq = fNorm(q);
-    var filtered = centers.filter(function(c){return !nq||fNorm(c.name).indexOf(nq)>=0||fNorm(c.provName).indexOf(nq)>=0;});
-    var rows = filtered.slice(0,80).map(function(c){
-      var ri = String(c.id).replace(/'/g, "\\'");
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer" onclick="wpFclAddToWeek(''+weekId+'',''+c.rtype+'',''+ri+'');setTimeout(function(){var we=DB.weekEntries[wpEntryKey(''+weekId+'',''+c.rtype+'',''+ri+'')];if(we)we.scheduledDate=''+dayStr+'';saveDB();renderWeekPlan();closeModal('wpPickModal')},50)">'
-        +'<div><div style="font-weight:600;font-size:12px;color:var(--text-primary)">'+esc(c.name)+'</div>'
-        +'<div style="font-size:10px;color:var(--text-muted)">'+esc(c.provName)+' — '+esc(c.ownerName)+'</div></div>'
-        +'<span style="font-size:11px;color:var(--brand)">انتخاب ←</span>'
+    var nq = fNorm((document.getElementById('wpPickSearch')||{}).value||'');
+    var filtered = _centers.filter(function(c){return !nq||fNorm(c.name).indexOf(nq)>=0||fNorm(c.provName).indexOf(nq)>=0;});
+    var rows = filtered.slice(0,80).map(function(c,i){
+      return '<div class="wp-pick-row" data-idx="'+i+'" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="wpPickSelect(this)">'
+        +'<div>'
+          +'<div style="font-weight:600;font-size:12px;color:var(--text-primary)">'+esc(c.name)+'</div>'
+          +'<div style="font-size:10px;color:var(--text-muted)">'+esc(c.provName)+' — '+esc(c.ownerName)+'</div>'
+        +'</div>'
+        +'<span style="font-size:11px;color:var(--brand);flex-shrink:0">افزودن ←</span>'
         +'</div>';
     }).join('');
     var el = document.getElementById('wpPickList');
-    if(el) el.innerHTML = rows||(filtered.length?'':'<div style="padding:15px;text-align:center;color:var(--text-muted);font-size:12px">موردی یافت نشد</div>');
+    if(el){
+      el.innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">موردی یافت نشد</div>';
+      // store filtered list for onclick lookup
+      el._filtered = filtered;
+    }
   };
-  var body = '<div style="margin-bottom:10px"><input id="wpPickSearch" type="text" placeholder="🔍 جستجو مرکز..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);box-sizing:border-box" oninput="q=this.value;renderList()"></div>'
-    +'<div id="wpPickList" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px"></div>';
-  openModal('wpPickModal','📅 افزودن مرکز به '+dayStr,body,'<button class="btn-secondary" onclick="closeModal('wpPickModal')">بستن</button>');
-  setTimeout(function(){var el=document.getElementById('wpPickSearch');if(el)el.focus();renderList();},60);
+  var body = '<div style="margin-bottom:10px">'
+    +'<input id="wpPickSearch" type="text" placeholder="🔍 جستجو مرکز / استان..." '
+    +'style="width:100%;padding:8px 10px;border:1.5px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);box-sizing:border-box" '
+    +'oninput="renderList()">'
+    +'</div>'
+    +'<div id="wpPickList" style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:6px"></div>';
+  openModal('wpPickModal','📅 افزودن مرکز به '+dayStr, body,
+    '<button class="btn-secondary" onclick="closeModal(\'wpPickModal\')">بستن</button>');
+  setTimeout(function(){
+    var el=document.getElementById('wpPickSearch');
+    if(el)el.focus();
+    renderList();
+  },60);
+}
+function wpPickSelect(row){
+  var list = document.getElementById('wpPickList');
+  if(!list||!list._filtered) return;
+  var idx = parseInt(row.getAttribute('data-idx'), 10);
+  var c = list._filtered[idx];
+  if(!c) return;
+  var weekId = _wpPickDay.weekId, dayStr = _wpPickDay.dayStr;
+  wpFclAddToWeek(weekId, c.rtype, c.id);
+  setTimeout(function(){
+    var key = wpEntryKey(weekId, c.rtype, c.id);
+    if(DB.weekEntries[key]) DB.weekEntries[key].scheduledDate = dayStr;
+    saveDB();
+    renderWeekPlan();
+    closeModal('wpPickModal');
+  }, 50);
 }
 
 function wpFclToggle() {
