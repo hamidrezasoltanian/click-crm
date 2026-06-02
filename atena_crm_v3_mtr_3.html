@@ -862,7 +862,7 @@ tr.row-contracted td{background:#f0fdf4!important}
 <!-- TODAY BANNER (with filters) -->
 <div id="banner" style="display:none" class="today-banner">
   <div class="tb-head">
-    <span class="tb-title">📅 پیگیری‌های امروز و معوق</span>
+    <span class="tb-title" id="tb_title">📅 پیگیری‌های امروز و معوق</span>
     <div class="tb-filters">
       <select id="bannerUser" class="tb-filter" onchange="setBannerUser(this.value)">
         <option value="">همه کارشناسان</option>
@@ -870,6 +870,7 @@ tr.row-contracted td{background:#f0fdf4!important}
       <select id="bannerTag" class="tb-filter" onchange="setBannerTag(this.value)">
         <option value="">همه برچسب‌ها</option>
       </select>
+      <button id="tb_toggle" onclick="var t=document.getElementById('tb_items');var collapsed=t.style.display==='none';t.style.display=collapsed?'':'none';this.textContent=collapsed?'▲':'▼'" style="background:none;border:1px solid #fcd34d;border-radius:4px;cursor:pointer;font-size:10px;padding:2px 7px;color:#92400e;font-family:inherit">▲</button>
     </div>
   </div>
   <div class="today-items" id="tb_items"></div>
@@ -912,7 +913,6 @@ tr.row-contracted td{background:#f0fdf4!important}
   <button id="savePresetBtn" style="display:none;font-size:10px;padding:4px 8px;border:1px solid #0ea5e9;border-radius:5px;background:#f0f9ff;color:#0369a1;cursor:pointer;font-family:inherit" onclick="saveFilterPreset()">💾 ذخیره فیلتر</button>
   <button class="btn-act btn-print no-print" id="printBtn" style="display:none" onclick="doPrint()">🖨 چاپ</button>
   <button class="btn-act btn-addcenter" id="addCenterBtn" style="display:none" onclick="addCenter()">➕ مرکز جدید</button>
-  <button id="distWizardBtn" class="btn-act" onclick="openDistributionWizard()" style="background:#8b5cf6;color:#fff;display:none">🔀 تقسیم مراکز</button>
 </div>
 
 <!-- BULK TOOLBAR -->
@@ -1696,9 +1696,6 @@ function buildUSERS(){
       if(DB.settings)DB.settings.members=_DEFAULT_MEMBERS;
       _buildUSERSUI();
       if(typeof buildOwnerFilter==='function')buildOwnerFilter();
-      // Show distribution button for managers
-      var distBtn=document.getElementById('distWizardBtn');
-      if(distBtn)distBtn.style.display=_isManager()?'':'none';
     })
     .catch(function(){
       // Fallback to DB.settings.members if server unavailable
@@ -2318,40 +2315,80 @@ function renderBanner(){
   var banner=document.getElementById('banner');if(!banner)return;
   if(_currentProvId){banner.style.display='none';return;}
   var allItems=getFollowups();
+  // کارشناسان فقط پیگیری‌های خودشان را ببینند
+  var effUser=_isExpert()?currentUser:_bannerFilterUser;
   var filtered=allItems.filter(function(it){
-    if(_bannerFilterUser&&it.owner!==_bannerFilterUser)return false;
+    if(effUser&&it.owner!==effUser)return false;
     if(_bannerFilterTag&&it.tags.indexOf(_bannerFilterTag)===-1)return false;
     return true;
   });
+  // پنهان کردن فیلتر کارشناس برای کارشناس
+  var buEl=document.getElementById('bannerUser');if(buEl)buEl.style.display=_isExpert()?'none':'';
   if(!filtered.length){banner.style.display='none';return;}
   banner.style.display='';
+  // گروه‌بندی
+  var overdueArr=filtered.filter(function(it){return it.overdue&&!it.isOrphan;});
+  var todayArr=filtered.filter(function(it){return !it.overdue&&!it.isOrphan;});
+  var orphanArr=filtered.filter(function(it){return it.isOrphan;});
+  // آمار عنوان
+  var titleEl=document.getElementById('tb_title');
+  if(titleEl){
+    var badges='';
+    if(overdueArr.length)badges+=' <span style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">'+overdueArr.length+' معوق</span>';
+    if(todayArr.length)badges+=' <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">'+todayArr.length+' امروز</span>';
+    titleEl.innerHTML='📅 پیگیری‌های امروز و معوق'+badges;
+  }
   var tb=document.getElementById('tb_items');if(!tb)return;
-  tb.innerHTML=filtered.map(function(it){
-    if(it.isOrphan){
-      // مرکز منسوخ — نمایش با دکمه حذف، بدون قابلیت کلیک به مودال
-      return'<div class="today-item overdue" style="display:inline-flex;align-items:center;gap:4px;opacity:.75" title="مرکز حذف‌شده">'
-        +'<span class="ti-name" style="text-decoration:line-through;color:#92400e">'+esc(it.id)+'</span>'
-        +'<span class="ti-date">'+it.date+'</span>'
-        +'<button onclick="clearOrphanFollowup(\''+it.recKey+'\');event.stopPropagation();" style="background:#dc2626;color:var(--text-primary);border:none;border-radius:3px;cursor:pointer;padding:1px 5px;font-size:9px">✕</button>'
-        +'</div>';
-    }
-    return'<button class="today-item'+(it.overdue?' overdue':'')+'" onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" title="'+esc(it.provName)+'">'
-      +'<span class="ti-name">'+esc(it.name)+'</span>'
+  function _mkItem(it){
+    var ownerBit=(!_isExpert()&&it.owner)?(' <span style="font-size:9px;color:#92400e">'+esc(USERS[it.owner]||it.owner)+'</span>'):''
+;    return'<div class="today-item'+(it.overdue?' overdue':'')+'" style="display:inline-flex">'
+      +'<span style="cursor:pointer;display:flex;gap:4px;align-items:center" onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" title="'+esc(it.provName)+'">'
+      +'<span class="ti-name">'+esc(it.name)+'</span>'+ownerBit
       +'<span class="ti-date">'+it.date+'</span>'
       +'<span class="ti-prov">'+esc(it.provName)+'</span>'
-      +'</button>';
-  }).join('');
+      +'</span>'
+      +'<span onclick="bannerSnooze(\''+it.rtype+'\',\''+it.id+'\',event)" title="تعویق ۳ روز" style="cursor:pointer;font-size:11px;padding:0 3px;color:#92400e;opacity:.55" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.55">⏰</span>'
+      +'</div>';
+  }
+  var html='';
+  if(overdueArr.length){
+    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
+      +'<span style="font-size:10px;font-weight:700;color:#dc2626;white-space:nowrap;flex-shrink:0">🔴 معوق:</span>'
+      +overdueArr.map(_mkItem).join('')+'</div>';
+  }
+  if(todayArr.length){
+    if(overdueArr.length)html+='<div style="border-top:1px solid #fcd34d;margin:5px 0"></div>';
+    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
+      +'<span style="font-size:10px;font-weight:700;color:#b45309;white-space:nowrap;flex-shrink:0">📅 امروز:</span>'
+      +todayArr.map(_mkItem).join('')+'</div>';
+  }
+  if(orphanArr.length){
+    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px">'
+      +orphanArr.map(function(o){
+        return'<div class="today-item overdue" style="opacity:.75;display:inline-flex">'
+          +'<span class="ti-name" style="text-decoration:line-through;color:#92400e">'+esc(o.id)+'</span>'
+          +' <span class="ti-date">'+o.date+'</span>'
+          +' <span onclick="clearOrphanFollowup(\''+o.recKey+'\');event.stopPropagation();" style="cursor:pointer;color:#dc2626;font-size:11px">✕</span>'
+          +'</div>';
+      }).join('')+'</div>';
+  }
+  tb.innerHTML=html;
 }
-
-// حذف followupDate یک ورودی منسوخ
-function clearOrphanFollowup(recKey){
-  if(DB.edits[recKey])delete DB.edits[recKey].followupDate;
-  saveDB();renderBanner();renderDashboard();
-  showToast('پیگیری منسوخ حذف شد');
-}
-
 function setBannerUser(v){_bannerFilterUser=v;renderBanner();}
 function setBannerTag(v){_bannerFilterTag=v?parseInt(v):0;renderBanner();}
+function bannerSnooze(rtype,id,ev){
+  if(ev)ev.stopPropagation();
+  var e=getE(rtype,id);
+  var fd=e.followupDate||todayStr();
+  var parts=fd.split('/').map(Number);
+  var gDate=j2g(parts[0],parts[1],parts[2]);
+  var d=new Date(gDate[0],gDate[1]-1,gDate[2]+3);
+  var nj=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
+  var newDate=nj[0]+'/'+String(nj[1]).padStart(2,'0')+'/'+String(nj[2]).padStart(2,'0');
+  setE(rtype,id,'followupDate',newDate);
+  renderBanner();renderDashboard();
+  showToast('⏰ تعویق تا '+newDate,2000);
+}
 
 // ════════════════════════ TABLE RENDER ════════════════
 function getFiltered(){
@@ -6210,6 +6247,7 @@ function openSettings(){
     +'<button onclick="closeModal(\'settingsModal\');document.getElementById(\'importCentersInp\').click()" style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-raised);cursor:pointer;font-size:11px;font-family:inherit;color:var(--text-primary)"><span style=\"font-size:18px\">📥</span><span style=\"font-weight:600\">ورود از اکسل</span><span style=\"color:var(--text-muted);font-size:10px\">افزودن مراکز جدید</span></button>'
     +'<button onclick="exportCentersExcel();closeModal(\'settingsModal\')" style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-raised);cursor:pointer;font-size:11px;font-family:inherit;color:var(--text-primary)"><span style=\"font-size:18px\">📊</span><span style=\"font-weight:600\">خروجی اکسل</span><span style=\"color:var(--text-muted);font-size:10px\">دانلود همه مراکز</span></button>'
     +'<button onclick="if(confirm(\'پاکسازی همه داده‌ها؟\'))clearAllData()" style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:1px solid #fca5a5;border-radius:8px;background:#fee2e220;cursor:pointer;font-size:11px;font-family:inherit;color:#dc2626"><span style=\"font-size:18px\">🗑</span><span style=\"font-weight:600\">پاکسازی داده‌ها</span><span style=\"font-size:10px\">حذف کامل اطلاعات</span></button>'
+    +(_isManager()?'<button onclick="closeModal(\'settingsModal\');openDistributionWizard()" style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:1px solid #c4b5fd;border-radius:8px;background:#f5f3ff;cursor:pointer;font-size:11px;font-family:inherit;color:#5b21b6"><span style=\"font-size:18px\">🔀</span><span style=\"font-weight:600\">تقسیم مراکز</span><span style=\"color:var(--text-muted);font-size:10px\">توزیع بین کارشناسان</span></button>':'')
     +'</div></div>';
   openModal('settingsModal','⚙ تنظیمات نرم‌افزار',body,foot,{lg:true});
 }
