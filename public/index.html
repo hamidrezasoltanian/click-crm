@@ -2011,18 +2011,14 @@ function _buildPCCache(){
   _PC_CACHE={};
   PROVINCES.forEach(function(p){
     var pname=p.name.replace(/[ي]/g,'ی').replace(/[ك]/g,'ک');
-    var raw=PC_RAW[pname]||[];
+    var raw=PC_RAW[pname]||PC_RAW[p.id]||[];
     _PC_CACHE[p.id]=raw.map(function(r){
-      return{
-        id:p.id+'||'+r[0],
-        row:r[0],
-        name:r[1].replace(/[ي]/g,'ی').replace(/[ك]/g,'ک'),
-        potential:r[2],
-        type:r[3],
-        lead:r[4],
-        province_id:p.id,
-        owner: p.owner // <--- اضافه شدن این خط برای ارث‌بری مسئول استان
-      };
+      if(Array.isArray(r)){
+        return{id:p.id+'||'+r[0],row:r[0],name:(r[1]||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک'),potential:r[2],type:r[3]||'',lead:r[4]||'سرنخ',province_id:p.id,owner:p.owner};
+      } else {
+        var rid=r.row||r[0]||0;
+        return{id:r.id||(p.id+'||'+rid),row:rid,name:(r.name||r[1]||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک'),potential:r.potential||r[2]||1,type:r.type||r[3]||'',lead:r.lead||r[4]||'سرنخ',province_id:p.id,owner:p.owner};
+      }
     });
   });
   _PC_CACHE['tehran']=CENTERS; 
@@ -7914,16 +7910,19 @@ function unifiedRestore(ev){
         var flatCenters = data.centersDB.centers;
         var newCENTERS = [];
         var newPC_RAW  = {};
+        var _provIdToName={};
+        PROVINCES.forEach(function(p){_provIdToName[p.id]=p.name;});
         flatCenters.forEach(function(c){
           var sid = String(c.id||'');
           if(sid.indexOf('||')<0){
             // Tehran center (id like c_1, c_42)
             newCENTERS.push(c);
           } else {
-            // Province center (id like p2||1)
+            // Province center — key by province NAME for _buildPCCache compatibility
             var provId = c.province_id || sid.split('||')[0];
-            if(!newPC_RAW[provId]) newPC_RAW[provId]=[];
-            newPC_RAW[provId].push(c);
+            var provName = _provIdToName[provId] || provId;
+            if(!newPC_RAW[provName]) newPC_RAW[provName]=[];
+            newPC_RAW[provName].push([c.row||0, c.name||'', c.potential||1, c.type||'', c.lead||'سرنخ']);
           }
         });
         // Save to IndexedDB (offline fallback)
