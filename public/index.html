@@ -4485,17 +4485,26 @@ function renderWpFullCenterList() {
     +'<th style="width:36px">#</th>'
     +'<th>نام مرکز</th><th>استان</th><th>کارشناس</th>'
     +'<th>وضعیت</th><th>پیگیری</th><th>عملیات</th>'
-    +'</tr></thead><tbody>'+tbody+'</tbody></table>'
+    +'</tr></thead><tbody id="wpFclTbody">'+tbody+'</tbody></table>'
     +'</div>'
-    +_wpFclExpertSummary(filtC.concat(filtU))
+    +'<div id="wpFclExpertSummaryDiv">'+_wpFclExpertSummary(filtC.concat(filtU))+'</div>'
     +'<div class="wp-fcl-footer">'
-    +'<span>'+(unschedEntries.length?'<strong>'+unschedEntries.length+'</strong> در هفته بدون تاریخ &middot; ':'')+allCenters.length+' مرکز در صف</span>'
+    +'<span id="wpFclFooterSpan">'+(unschedEntries.length?'<strong>'+unschedEntries.length+'</strong> در هفته بدون تاریخ &middot; ':'')+allCenters.length+' مرکز در صف</span>'
     +(weekId?'<span style="color:var(--text-muted)">«+ هفته» افزودن &middot; «📅 تعیین روز» زمان‌بندی</span>'
             :'<span style="color:#f59e0b">⚠ برای عملیات هفته انتخاب کنید</span>')
     +'</div>'
     +'</div>'
     +'</div>';
 
+  var _existTbody = document.getElementById('wpFclTbody');
+  if (_existTbody) {
+    _existTbody.innerHTML = tbody;
+    var _existFoot = document.getElementById('wpFclFooterSpan');
+    if (_existFoot) _existFoot.innerHTML = (unschedEntries.length?'<strong>'+unschedEntries.length+'</strong> در هفته بدون تاریخ &middot; ':'')+allCenters.length+' مرکز در صف';
+    var _existExp = document.getElementById('wpFclExpertSummaryDiv');
+    if (_existExp) _existExp.innerHTML = _wpFclExpertSummary(filtC.concat(filtU));
+    return;
+  }
   el.innerHTML = html;
 }
 
