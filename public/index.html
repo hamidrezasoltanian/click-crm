@@ -5168,8 +5168,8 @@ function calShowDay(dStr){
       var icon=it.type==='event'?'🗓':it.type==='followup'?'📅':'📋';
       var typeName=it.type==='event'?'رویداد':it.type==='followup'?'پیگیری':'برنامه هفته';
       var hnd='';
-      if(it.type==='event')hnd='onclick="closeModal('calDayModal');openEvModal('+it.evId+')"';
-      else if(it.type==='followup')hnd='onclick="closeModal('calDayModal');openCenterModal(''+it.rtype+'',''+it.rid+'')"';
+      if(it.type==='event')hnd='onclick="closeModal(\'calDayModal\');openEvModal('+it.evId+')"';
+      else if(it.type==='followup')hnd='onclick="closeModal(\'calDayModal\');openCenterModal(\''+it.rtype+'\',\''+it.rid+'\')"';
       return'<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-right:3px solid '+it.color+';background:var(--bg-raised);border-radius:6px;'+(hnd?'cursor:pointer':'')+'" '+(hnd||'')+'>'
         +'<span style="font-size:20px;flex-shrink:0">'+icon+'</span>'
         +'<div style="flex:1;overflow:hidden">'
@@ -5179,8 +5179,8 @@ function calShowDay(dStr){
         +(hnd?'<span style="font-size:13px;color:var(--brand)">←</span>':'')
       +'</div>';
     }).join('')+'</div>';
-  var foot='<button class="btn-secondary" onclick="closeModal('calDayModal')">بستن</button>'
-    +'<button class="btn-primary" onclick="closeModal('calDayModal');openEvModalDate(''+dStr+'')">➕ رویداد جدید</button>';
+  var foot='<button class="btn-secondary" onclick="closeModal(\'calDayModal\')">بستن</button>'
+    +'<button class="btn-primary" onclick="closeModal(\'calDayModal\');openEvModalDate(\''+dStr+'\')">➕ رویداد جدید</button>';
   openModal('calDayModal','📅 '+dStr+' <span style="font-size:11px;font-weight:400;color:var(--text-muted)">— '+allItems.length+' مورد</span>',body,foot);
 }
 
