@@ -7101,7 +7101,7 @@ async function init(){
       var dueCnt=0;
       Object.keys(DB.edits||{}).forEach(function(k){
         var e=DB.edits[k];
-        if(e&&e.followupDate&&e.followupDate<=today&&e.followupDate!=='')dueCnt++;
+        if(e&&e.followupDate&&e.followupDate<today&&e.followupDate!=='')dueCnt++;
       });
       if(dueCnt>0){
         showToast('⚠ '+dueCnt+' مرکز با پیگیری سررسیده دارید',5000);
