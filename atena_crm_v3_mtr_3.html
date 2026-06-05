@@ -10662,7 +10662,7 @@ function rAI(rows){
     +'<button onclick="copyReport()" style="width:100%;background:#334155;color:var(--text-muted);border:none;border-radius:7px;padding:8px;font-family:inherit;font-size:12px;cursor:pointer;margin-top:7px">📋 کپی برای سارا</button>'
     +'</div>'
     +'<button class="ai-btn"'+(AI_LOADING?' disabled':'')+' onclick="runAI()">'+(AI_LOADING?'⏳ در حال تحلیل...':'🤖 توصیه‌های هوشمند برای موارد بحرانی')+'</button>';
-  if(AI_TXT)h+='<div class="ai-res">'+AI_TXT+'</div>';
+  if(AI_TXT)h+='<div class="ai-res">'+esc(AI_TXT)+'</div>';
   return h;
 }
 function buildWeeklyReport(rows){
@@ -10687,7 +10687,7 @@ function buildWeeklyReport(rows){
     if(collAmt>0)lines.push('وصول از '+SNAP.at+': '+fM(collAmt));
   }
   lines.push('━━━━━━━━━━━━━━━━━━━━━━');
-  if(top3.length){lines.push('اولویت‌های فوری:');top3.forEach(function(r,i){lines.push((i+1)+'. '+r.customer+' — '+fF(r.rem)+' ت — '+r.od+' روز');});}
+  if(top3.length){lines.push('اولویت‌های فوری:');top3.forEach(function(r,i){lines.push((i+1)+'. '+esc(r.customer)+' — '+fF(r.rem)+' ت — '+r.od+' روز');});}
   return lines.join('\n');
 }
 function copyReport(){
