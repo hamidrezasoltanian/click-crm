@@ -2119,7 +2119,7 @@ function renderUserDashboard(){
     _processCenters([r],rtype);
   });
 
-  myOverdue.sort(function(a,b){return a.fd>b.fd?1:-1;});
+  myOverdue.sort(function(a,b){return a.fd<b.fd?1:-1;});
   myUpcoming.sort(function(a,b){return a.fd>b.fd?1:-1;});
   myRecommended.sort(function(a,b){return a.pot-b.pot;});
 
@@ -2278,7 +2278,7 @@ function renderDashboard(){
       if(st==='قرارداد بسته شد')ownerStats[ow].contracts++;
       if(st==='ملاقات انجام شد')ownerStats[ow].meetings++;
       var fd=e.followupDate||'';
-      if(fd&&fd<=today&&st!=='قرارداد بسته شد'&&st!=='غیرفعال')ownerStats[ow].overdue++;
+      if(fd&&fd<today&&st!=='قرارداد بسته شد'&&st!=='غیرفعال')ownerStats[ow].overdue++;
     }
     var fd2=e.followupDate||'';
     if(fd2&&fd2<today&&(e.status||'')!=='قرارداد بسته شد'&&(e.status||'')!=='غیرفعال')overdueTotal++;
@@ -7774,6 +7774,7 @@ function mgrDoneTask(recKey){
   showToast('✅ وظیفه انجام شد');
   renderUserDashboard();
   if(currentTab==='kpi')renderKPIPanel();
+  if(currentTab==='provinces')renderDashboard();
 }
 
 function _renderManagerTasksWidget(){
