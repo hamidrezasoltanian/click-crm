@@ -1128,7 +1128,7 @@ function fMatch(q,t){return!q||fNorm(t).indexOf(fNorm(q))>=0;}
 function nowTs(){return Date.now();}
 function stCls(st){var i=STATUS_LIST.indexOf(st);return STATUS_CLS[i]||'st-0';}
 function stHCls(st){var i=STATUS_LIST.indexOf(st);return H_CLS[i]||'h-st-0';}
-function lCls(lead){return LEAD_CLS[lead]||'lead-none';}
+function lCls(lead){var l=(lead||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک').trim();return LEAD_CLS[l]||'lead-none';}
 
 // ════════════════════════ STORAGE ══════════════════════
 var _actPage=0;
@@ -2435,7 +2435,7 @@ function getFiltered(){
     if(q&&!fMatch(q,r.name))return false;
     if(fp&&String(e.potential||r.potential)!==fp)return false;
     var st=e.status||'بدون تماس';if(fs&&st!==fs)return false;
-    var lead=e.lead||r.lead||'';if(fl&&lead!==fl)return false;
+    var lead=(e.lead||r.lead||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک').trim();if(fl&&lead!==fl)return false;
     var owner=e.owner||r.owner||'';if(effectiveOwner&&owner!==effectiveOwner)return false;
     if(ftp){var ctype=e.type||r.type||'';if(ctype.indexOf(ftp)<0)return false;}
     if(ft){var tgs=rTags(rtype,r.id);if(tgs.indexOf(ft)===-1)return false;}
@@ -2662,7 +2662,7 @@ function renderProvTable(){
       +'<td><button class="note-btn'+(notes.length?' has':'')+'" onclick="openNotes(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">📝'+(notes.length?' '+notes.length:'')+'</button>'
         +'<input style="margin-right:4px;width:100px;border:1px solid var(--border-input);border-radius:4px;padding:2px 5px;font-size:10px;direction:rtl" placeholder="یادداشت سریع" onkeydown="if(event.key===\'Enter\'&&this.value.trim()){addNote(\''+rtype+'\',\''+r.id+'\',this.value,this);}">'
         +notePreview+'</td>'
-      +'<td><button class="btn-assignweek" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">📋 هفته</button></td>'
+      +(function(){var _rk2=rtype+'_'+r.id;var _inWk=Object.keys(DB.weekEntries||{}).some(function(k){var we=DB.weekEntries[k];return (we.recKey||(we.rtype+'_'+we.rid))===_rk2;});return '<td><button class="btn-assignweek" style="'+(_inWk?'background:#7c3aed':'')+'" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">'+(_inWk?'↪ در هفته':'📋 هفته')+'</button></td>';})()
       +'<td>'+lastContactHtml+'</td>'
       +'</tr>';
   }).join(''):'<tr><td colspan="12" style="text-align:center;padding:40px;color:#94a3b8">نتیجه‌ای یافت نشد</td></tr>';
@@ -4947,31 +4947,60 @@ function saveScheduleFromModal(eKey) {
   showToast('📅 برنامه تنظیم شد', 2500);
 }
 function openAssignWeekForCenter(rtype,id,name){
-  var wks=wpGetWeeks();
-  var recentWks=wks.filter(function(w){return!w.isPast||wks.indexOf(w)>=wks.length-4;}).slice(-4).concat(
-    wks.filter(function(w){return w.isCurrent||!w.isPast;}).slice(0,4)
-  );
-  var shown=[];var seen={};
-  wks.filter(function(w){return w.isCurrent||!w.isPast;}).slice(0,8).concat(wks.filter(function(w){return w.isPast;}).slice(-2)).forEach(function(w){
-    if(!seen[w.id]){seen[w.id]=true;shown.push(w);}
-  });
-  shown.sort(function(a,b){return a.num-b.num;});
+  var wks=wpGetWeeks();
+  var shown=[];var seen={};
+  wks.filter(function(w){return w.isCurrent||!w.isPast;}).slice(0,8)
+    .concat(wks.filter(function(w){return w.isPast;}).slice(-3))
+    .forEach(function(w){if(!seen[w.id]){seen[w.id]=true;shown.push(w);}});
+  shown.sort(function(a,b){return a.num-b.num;});
 
-  var body = '<div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;background:var(--brand-bg);padding:8px;border-radius:6px;border:1px solid #bae6fd;">'
-    + '<label style="font-size:11px;font-weight:bold;color:#0369a1;">نوع برنامه:</label>'
-    + '<select id="wpActType" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:4px;font-size:11px;flex:1;">'
-    + '<option value="call">📞 تماس تلفنی</option>'
-    + '<option value="visit">🤝 ویزیت حضوری</option>'
-    + '</select></div>'
-    + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">مرکز «'+esc(name)+'» را به کدام هفته اضافه کنید:</div>'
-    + '<div style="display:flex;flex-direction:column;gap:5px;max-height:50vh;overflow-y:auto">'+shown.map(function(wt){
-      var eKey=wpEntryKey(wt.id,rtype,id);var we=DB.weekEntries[eKey];var isIn=!!we;
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;background:'+(isIn?'#dbeafe':wt.isCurrent?'#fffbeb':'#f8fafc')+';border-radius:6px;border:1px solid '+(isIn?'#93c5fd':wt.isCurrent?'#fcd34d':'#e2e8f0')+'">'
-        + '<div><div style="font-weight:600;font-size:12px">'+esc(wt.label)+'</div>'+(wt.isCurrent?'<span style="font-size:10px;color:#0ea5e9">◀ این هفته</span>':'')+'</div>'
-        + (isIn ? '<button class="btn-danger" style="padding:3px 8px;font-size:11px" onclick="wpRemoveEntry(\''+eKey+'\');closeModal(\'awc_'+id+'\');openAssignWeekForCenter(\''+rtype+'\',\''+id+'\',\''+esc(name)+'\')">حذف</button>'
-          : '<button class="btn-primary" style="padding:3px 8px;font-size:11px" onclick="var act=document.getElementById(\'wpActType\').value; addToWeekAuto(\''+wt.id+'\',\''+rtype+'\',\''+id+'\',\''+esc(name)+'\', act)">افزودن</button>')+'</div>';
-    }).join('')+'</div>';
-  openModal('awc_'+id,'📋 افزودن «'+esc(name)+'» به برنامه هفته',body,'<button class="btn-secondary" onclick="closeModal(\'awc_'+id+'\')">بستن</button>');
+  // پیدا کردن هفته‌هایی که این مرکز در آن‌ها هست
+  var recKey=rtype+'_'+id;
+  var currentWeekKeys={};
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];
+    var rk=we.recKey||(we.rtype+'_'+we.rid);
+    if(rk===recKey) currentWeekKeys[k.split(':::')[0]]=k;
+  });
+  var inWeekIds=Object.keys(currentWeekKeys);
+  var currentWeekLabel='';
+  if(inWeekIds.length){
+    var cw=wks.find(function(w){return w.id===inWeekIds[0];});
+    currentWeekLabel=cw?cw.label:inWeekIds[0];
+  }
+
+  var body='<div style="margin-bottom:10px;display:flex;gap:10px;align-items:center;background:var(--brand-bg);padding:8px;border-radius:6px;border:1px solid #bae6fd;">'
+    +'<label style="font-size:11px;font-weight:bold;color:#0369a1;">نوع برنامه:</label>'
+    +'<select id="wpActType" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:4px;font-size:11px;flex:1;">'
+    +'<option value="call">📞 تماس تلفنی</option>'
+    +'<option value="visit">🤝 ویزیت حضوری</option>'
+    +'</select></div>'
+    +(inWeekIds.length
+      ?'<div style="font-size:11px;background:#fef9c3;color:#854d0e;border:1px solid #fcd34d;border-radius:5px;padding:7px 10px;margin-bottom:10px">📌 این مرکز در حال حاضر در <strong>'+esc(currentWeekLabel)+'</strong> برنامه‌ریزی شده. برای انتقال روی هفته مقصد کلیک کنید.</div>'
+      :'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">مرکز «'+esc(name)+'» را به کدام هفته اضافه کنید:</div>'
+    )
+    +'<div style="display:flex;flex-direction:column;gap:5px;max-height:55vh;overflow-y:auto">'
+    +shown.map(function(wt){
+      var isInThisWeek=!!currentWeekKeys[wt.id];
+      var eKey=currentWeekKeys[wt.id]||wpEntryKey(wt.id,rtype,id);
+      var rowBg=isInThisWeek?'#dbeafe':wt.isCurrent?'#fffbeb':'var(--bg-raised)';
+      var rowBorder=isInThisWeek?'#93c5fd':wt.isCurrent?'#fcd34d':'var(--border)';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 10px;background:'+rowBg+';border-radius:6px;border:1px solid '+rowBorder+'">'
+        +'<div>'
+          +'<div style="font-weight:600;font-size:12px">'+esc(wt.label)+'</div>'
+          +(wt.isCurrent?'<span style="font-size:10px;color:#0ea5e9">◀ این هفته</span>':'')
+          +(isInThisWeek?'<span style="font-size:10px;color:#1e40af;font-weight:700"> · در برنامه</span>':'')
+        +'</div>'
+        +(isInThisWeek
+          ?'<button class="btn-danger" style="padding:3px 10px;font-size:11px" onclick="wpRemoveEntry(\''+eKey+'\');closeModal(\'awc_'+id+'\');openAssignWeekForCenter(\''+rtype+'\',\''+id+'\',\''+esc(name)+'\')">✕ حذف</button>'
+          :'<button class="btn-primary" style="padding:3px 10px;font-size:11px;background:'+(inWeekIds.length?'#8b5cf6':'#0ea5e9')+';" onclick="var act=document.getElementById(\'wpActType\').value;addToWeekAuto(\''+wt.id+'\',\''+rtype+'\',\''+id+'\',\''+esc(name)+'\',act)">'
+            +(inWeekIds.length?'↪ انتقال':'+ افزودن')
+          +'</button>'
+        )
+        +'</div>';
+    }).join('')+'</div>';
+
+  openModal('awc_'+id,'📋 برنامه هفته — «'+esc(name)+'»',body,'<button class="btn-secondary" onclick="closeModal(\'awc_'+id+'\')">بستن</button>');
 }
 
 function addToWeekAuto(weekId,rtype,id,name,actionType){
@@ -6178,7 +6207,7 @@ function renderAllCenters(viewMode){
       if(q&&!fMatch(q,c.name))return;
       if(fp&&String(e.potential!==undefined?e.potential:c.potential)!==fp)return;
       var st=e.status||'بدون تماس';if(fs&&st!==fs)return;
-      var lead=e.lead||c.lead||'';if(fl&&lead!==fl)return;
+      var lead=(e.lead||c.lead||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک').trim();if(fl&&lead!==fl)return;
       var owner=e.owner||c.owner||'';if(effectiveOwner&&owner!==effectiveOwner)return;
       if(ftp){var ctype=e.type||c.type||'';if(ctype.indexOf(ftp)<0)return;}
       if(ftg){var tgs=rTags(tp,c.id);if(tgs.indexOf(ftg)===-1)return;}
@@ -10375,6 +10404,7 @@ function bulkAddToWeekPlan(){
   keys.forEach(function(key){
     var parts=key.split('_');var rtype=parts[0];var rid=parts.slice(1).join('_');
     var eKey=wpEntryKey(weekId,rtype,rid);
+    wpRemoveFromOtherWeeks(key, weekId);
     if(!DB.weekEntries[eKey]){
       DB.weekEntries[eKey]={scheduledDate:null,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:key,addedBy:currentUser,actionType:'call'};
       added++;
