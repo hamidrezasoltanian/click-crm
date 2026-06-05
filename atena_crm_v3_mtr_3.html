@@ -9604,10 +9604,10 @@ function showCustomer(name){
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
       +'<div><div style="font-size:13px;font-weight:700">'+fF(r.rem)+' ریال</div>'
       +'<div style="font-size:11px;color:'+dC+';margin-top:2px">'+(r.od>0?'+'+r.od+' روز تأخیر':'جاری')+' · سررسید: '+r.due+'</div>'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">پیگیر: '+r.follower+'</div></div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">پیگیر: '+esc(r.follower)+'</div></div>'
       +(sc?'<span style="background:'+sc.c+'22;color:'+sc.c+';padding:3px 9px;border-radius:12px;font-size:10.5px;align-self:flex-start">'+sc.l+'</span>':'')
       +'</div>'
-      +(lastNote?'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;border-top:1px solid #334155;padding-top:5px">📝 '+lastNote.t+' <span style="color:var(--text-muted)">('+lastNote.d+')</span></div>':'')
+      +(lastNote?'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;border-top:1px solid #334155;padding-top:5px">📝 '+esc(lastNote.t)+' <span style="color:var(--text-muted)">('+esc(lastNote.d)+')</span></div>':'')
       +(m.forecast?'<div style="font-size:11px;color:#16a34a;margin-top:4px">📅 برآورد '+m.forecast.pct+'٪ — '+m.forecast.date+' — '+fM(r.rem*m.forecast.pct/100)+'</div>':'')
       +'</div>';
   });
@@ -9667,7 +9667,7 @@ function render(){
     +'<div class="kpi"><div class="kpi-l">میانگین تأخیر</div><div class="kpi-v" style="color:'+(avgD>45?'#ea580c':avgD>20?'#d97706':'#16a34a')+'">'+avgD+' روز</div><div class="kpi-ss">'+ovAny.length+' معوق</div></div>'
     +'</div>';
   html+='<div class="filters" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-  +folls().map(function(f){return'<button class="fchip'+(FILTER===f?' on':'')+'" onclick="setFilter(\''+f.replace(/'/g,"\\'")+'\')">'+f+'</button>';}).join('')
+  +folls().map(function(f){return'<button class="fchip'+(FILTER===f?' on':'')+'" onclick="setFilter(\''+f.replace(/'/g,"\\'")+'\')">'+esc(f)+'</button>';}).join('')
   +'<div style="margin-right:auto;display:flex;gap:5px;flex-shrink:0">'+'<button onclick="showMtrPrioritySend()" style="background:#0ea5e9;color:white;border:none;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">📨 ارسال اولویت‌دار</button>'+(mtrGetUnmappedFollowers().length?'<button onclick="showMtrFollowerMapping()" style="background:#f59e0b;color:white;border:none;border-radius:20px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap" title="کارشناسان ناشناس وجود دارد">🔗 تطبیق کارشناسان ⚠</button>':'<button onclick="showMtrFollowerMapping()" style="background:var(--bg-raised);color:var(--text-secondary);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">🔗 تطبیق کارشناسان</button>')+'<button onclick="showMtrFollowUpSend()" style="background:#16a34a20;color:#16a34a;border:1px solid #16a34a44;border-radius:20px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">📅 لیست پیگیری</button>'+'</div>'
   +'</div>';
   if(TAB==='priority')html+=rPriority(rows);
@@ -10370,7 +10370,7 @@ function rExp(r,m){
     +'<button class="date-btn" data-inv=\''+inv+'\' data-dtype=\'fu\' onclick="event.stopPropagation();openMtrDateModal(this.dataset.inv,this.dataset.dtype)">'+(m.nextFU||'📅 پیگیری')+'</button>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:700">یادداشت‌ها</div>';
-  if(m.notes&&m.notes.length)(m.notes||[]).slice(-3).forEach(function(n){h+='<div class="note-item">'+n.t+'<div style="font-size:10px;color:var(--text-muted);margin-top:2px">'+n.d+' · '+n.by+'</div></div>';});
+  if(m.notes&&m.notes.length)(m.notes||[]).slice(-3).forEach(function(n){h+='<div class="note-item">'+esc(n.t)+'<div style="font-size:10px;color:var(--text-muted);margin-top:2px">'+esc(n.d)+' · '+esc(n.by)+'</div></div>';});
   h+='<div class="note-row"><textarea class="note-ta" rows="2" placeholder="یادداشت جدید..." id="ni-'+inv+'"></textarea>'
     +'<button class="save-btn" onclick="var t=document.getElementById(\'ni-'+inv+'\');mtrAddNote(\''+inv+'\',t.value);t.value=\'\';render();toast(\'✅ ذخیره شد\')">ثبت</button></div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:700">📅 برآورد وصول</div>'
@@ -10428,7 +10428,7 @@ function rByRep(gTot){
     var fc=v.rows.filter(function(r){return gm(r.inv).forecast;}).length;
     var pct=gTot?v.amt/gTot*100:0;
     var coll=repColl[n]||0;
-    return'<div class="rep-card" style="cursor:pointer;active:opacity:.7" onclick="setFilter(\''+n.replace(/'/g,"\\'")+'\');mtrSwitchTab(\'priority\')"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-weight:700;font-size:13px">'+n+'</span><div style="display:flex;align-items:center;gap:7px"><span style="font-weight:800;color:#38bdf8;font-size:12.5px">'+fM(v.amt)+'</span><span style="font-size:10px;color:var(--text-muted);background:#334155;padding:2px 7px;border-radius:10px">نمایش ↗</span></div></div>'
+    return'<div class="rep-card" style="cursor:pointer;active:opacity:.7" onclick="setFilter(\''+n.replace(/'/g,"\\'")+'\');mtrSwitchTab(\'priority\')"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-weight:700;font-size:13px">'+esc(n)+'</span><div style="display:flex;align-items:center;gap:7px"><span style="font-weight:800;color:#38bdf8;font-size:12.5px">'+fM(v.amt)+'</span><span style="font-size:10px;color:var(--text-muted);background:#334155;padding:2px 7px;border-radius:10px">نمایش ↗</span></div></div>'
     +(coll>0?'<div style="font-size:11px;color:#16a34a;margin-bottom:4px">✅ وصول این دوره: '+fM(coll)+'</div>':'')
     +'<div class="rep-bg"><div class="rep-fill" style="width:'+pct.toFixed(1)+'%;background:'+(c60?'#dc2626':'#0ea5e9')+'"></div></div>'
     +'<div style="display:flex;gap:9px;font-size:11px;color:var(--text-muted);flex-wrap:wrap"><span>'+v.rows.length+' فاکتور</span><span>'+pct.toFixed(1)+'%</span>'+(fc?'<span style="color:#16a34a">📅 '+fc+' برآوردشده</span>':'')+(c60?'<span style="color:#dc2626;font-weight:700">⚠️ '+c60+' تخلف</span>':'')+'</div></div>';
@@ -10608,9 +10608,9 @@ function rCompare(currRows){
     delta.collected.forEach(function(x){
       h+='<div class="comp-row" style="background:#0a1f0a;border-color:#16a34a44">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-        +'<span style="font-size:12px;font-weight:700">'+x.prev.customer+'</span>'
+        +'<span style="font-size:12px;font-weight:700">'+esc(x.prev.customer)+'</span>'
         +'<span style="font-size:12px;font-weight:800;color:#16a34a">+'+fM(x.got)+'</span></div>'
-        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+x.prev.inv+' · '+x.prev.follower+' · مانده: '+fF(x.curr.rem)+' (قبلاً '+fF(x.prev.rem)+')</div>'
+        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+x.prev.inv+' · '+esc(x.prev.follower)+' · مانده: '+fF(x.curr.rem)+' (قبلاً '+fF(x.prev.rem)+')</div>'
         +'</div>';
     });
   }
@@ -10620,9 +10620,9 @@ function rCompare(currRows){
     delta.settled.forEach(function(x){
       h+='<div class="comp-row" style="background:#0a1f0a;border-color:#16a34a44;opacity:.8">'
         +'<div style="display:flex;justify-content:space-between">'
-        +'<span style="font-size:12px;font-weight:700;text-decoration:line-through;color:var(--text-muted)">'+x.customer+'</span>'
+        +'<span style="font-size:12px;font-weight:700;text-decoration:line-through;color:var(--text-muted)">'+esc(x.customer)+'</span>'
         +'<span style="font-size:12px;color:#16a34a;font-weight:700">'+fM(x.rem)+'</span></div>'
-        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+x.inv+' · '+x.follower+'</div>'
+        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+x.inv+' · '+esc(x.follower)+'</div>'
         +'</div>';
     });
   }
@@ -10632,9 +10632,9 @@ function rCompare(currRows){
     delta.newInv.forEach(function(r){
       h+='<div class="comp-row" style="background:#0a0f1f;border-color:#2563eb44">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-        +'<span style="font-size:12px;font-weight:700">'+r.customer+'</span>'
+        +'<span style="font-size:12px;font-weight:700">'+esc(r.customer)+'</span>'
         +'<span style="font-size:12px;color:#2563eb;font-weight:700">'+fF(r.rem)+' ت</span></div>'
-        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+r.inv+' · '+r.province+' · '+r.follower+' · سررسید: '+r.due+'</div>'
+        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+r.inv+' · '+esc(r.province)+' · '+esc(r.follower)+' · سررسید: '+r.due+'</div>'
         +'</div>';
     });
   }
@@ -10644,9 +10644,9 @@ function rCompare(currRows){
     delta.worsened.forEach(function(x){
       h+='<div class="comp-row" style="background:#1c0a0a;border-color:#dc262644">'
         +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-        +'<span style="font-size:12px;font-weight:700">'+x.prev.customer+'</span>'
+        +'<span style="font-size:12px;font-weight:700">'+esc(x.prev.customer)+'</span>'
         +'<span style="font-size:11px;color:#dc2626;font-weight:700">+'+x.diff+' روز تأخیر</span></div>'
-        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+x.prev.inv+' · '+x.prev.follower+' · الان: '+x.curr.od+' روز (قبلاً '+x.prev.od+')</div>'
+        +'<div style="font-size:10.5px;color:var(--text-muted)">#'+x.prev.inv+' · '+esc(x.prev.follower)+' · الان: '+x.curr.od+' روز (قبلاً '+x.prev.od+')</div>'
         +'</div>';
     });
   }
