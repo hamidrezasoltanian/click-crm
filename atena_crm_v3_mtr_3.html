@@ -862,7 +862,8 @@ tr.row-contracted td{background:#f0fdf4!important}
 </div>
 
 <!-- DASHBOARD -->
-<div id="dash" style="padding:12px 14px"></div>
+<div id="userDashPanel"></div>
+      <div id="dash" style="padding:12px 14px"></div>
 
 <!-- TODAY BANNER (with filters) -->
 <div id="banner" style="display:none" class="today-banner">
@@ -2071,8 +2072,150 @@ function backToProvinces(){
 }
 
 // ════════════════════════ DASHBOARD ═══════════════════
+
+// ════════════════════════ PERSONAL USER DASHBOARD ══════════════
+function renderUserDashboard(){
+  var el=document.getElementById('userDashPanel');if(!el)return;
+  var today=todayStr();
+  _buildPCCache();
+
+  // ── جمع‌آوری تمام مراکز متعلق به کاربر جاری ──────────────────
+  var myNoDate=[];    // بدون تاریخ پیگیری
+  var myOverdue=[];   // سررسیده
+  var myUpcoming=[];  // آینده
+  var myRecommended=[];// پیشنهادی (پتانسیل بالا، بدون فعالیت اخیر)
+
+  function _processCenters(arr, rtype){
+    arr.forEach(function(r){
+      var e=getE(rtype,r.id);
+      var owner=e.owner||r.owner||'';
+      if(owner!==currentUser)return;
+      var st=e.status||'بدون تماس';
+      if(st==='غیرفعال'||st==='قرارداد بسته شد')return;
+      var fd=e.followupDate||'';
+      var pot=e.potential!==undefined?parseInt(e.potential):parseInt(r.potential||1);
+      var item={rtype:rtype,id:r.id,name:r.name,pot:pot,status:st,fd:fd};
+      if(!fd){
+        myNoDate.push(item);
+      } else if(fd<today){
+        myOverdue.push(item);
+      } else {
+        myUpcoming.push(item);
+      }
+      // پیشنهادی: پتانسیل ۱ یا ۲، بدون فعالیت در ۳۰ روز اخیر
+      if(pot<=2&&!e._lastActivity){
+        myRecommended.push(item);
+      }
+    });
+  }
+
+  _processCenters(CENTERS,'center');
+  Object.keys(_PC_CACHE||{}).forEach(function(pv){
+    if(pv==='tehran')return;
+    (_PC_CACHE[pv]||[]).forEach(function(r){_processCenters([r],'pc');});
+  });
+  (DB.extra||[]).forEach(function(r){
+    var rtype=r.province_id==='tehran'?'center':'pc';
+    _processCenters([r],rtype);
+  });
+
+  myOverdue.sort(function(a,b){return a.fd>b.fd?1:-1;});
+  myUpcoming.sort(function(a,b){return a.fd>b.fd?1:-1;});
+  myRecommended.sort(function(a,b){return a.pot-b.pot;});
+
+  // ── مطالبات قابل پیگیری ───────────────────────────────────────
+  var myMtr=[];
+  if(typeof DATA!=='undefined'&&DATA&&DATA.length){
+    DATA.forEach(function(row){
+      var member=mtrFindMember?mtrFindMember(row.follower):null;
+      if(!member)return;
+      if(member.id!==currentUser&&member.name!==currentUser)return;
+      var rem=parseFloat(row.remaining)||0;
+      if(rem>0)myMtr.push({customer:row.customer||'—',invoice:row.invoice||'',rem:rem,od:parseFloat(row.overdue)||0});
+    });
+    myMtr.sort(function(a,b){return b.od-a.od;});
+  }
+
+  // ── رندر ──────────────────────────────────────────────────────
+  function _sectionCard(title, items, emptyMsg, renderItem){
+    var html='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:8px">'+title+'</div>';
+    if(!items.length){
+      html+='<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:10px 0">'+emptyMsg+'</div>';
+    } else {
+      html+='<div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto">';
+      items.slice(0,10).forEach(function(it){html+=renderItem(it);});
+      if(items.length>10)html+='<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:2px">و '+(items.length-10)+' مورد دیگر</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+    return html;
+  }
+
+  function _centerItem(it, dateColor){
+    var potColor=it.pot<=1?'#ef4444':it.pot<=2?'#f59e0b':'#94a3b8';
+    return '<div onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:5px 7px;background:var(--bg-raised);border-radius:5px;cursor:pointer;font-size:11px;border:1px solid var(--border)">'
+      +'<div style="display:flex;align-items:center;gap:5px;min-width:0">'
+      +'<span style="font-size:9px;font-weight:700;color:'+potColor+';flex-shrink:0">P'+it.pot+'</span>'
+      +'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)">'+esc(it.name)+'</span>'
+      +'</div>'
+      +(it.fd?'<span style="font-size:10px;color:'+dateColor+';flex-shrink:0;margin-right:4px">'+it.fd+'</span>':'')
+      +'</div>';
+  }
+
+  var sections='';
+  var uname=USERS[currentUser]||currentUser;
+  var totalItems=myOverdue.length+myNoDate.length+myUpcoming.length+myMtr.length+myRecommended.length;
+
+  sections+=_sectionCard(
+    '🔴 پیگیری معوق ('+myOverdue.length+')',
+    myOverdue,
+    '✅ پیگیری معوقی ندارید',
+    function(it){return _centerItem(it,'#dc2626');}
+  );
+  sections+=_sectionCard(
+    '📋 بدون تاریخ ('+myNoDate.length+')',
+    myNoDate,
+    '✅ همه مراکز تاریخ دارند',
+    function(it){return _centerItem(it,'#94a3b8');}
+  );
+  sections+=_sectionCard(
+    '📅 برنامه آینده ('+myUpcoming.length+')',
+    myUpcoming,
+    'هیچ ویزیتی برنامه‌ریزی نشده',
+    function(it){return _centerItem(it,'#0369a1');}
+  );
+  sections+=_sectionCard(
+    '⭐ مراکز پیشنهادی ('+myRecommended.length+')',
+    myRecommended,
+    'مرکز پیشنهادی وجود ندارد',
+    function(it){return _centerItem(it,'#94a3b8');}
+  );
+  if(typeof DATA!=='undefined'){
+    sections+=_sectionCard(
+      '💰 مطالبات ('+myMtr.length+')',
+      myMtr,
+      'مطالبات فعالی ندارید',
+      function(it){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 7px;background:var(--bg-raised);border-radius:5px;font-size:11px;border:1px solid var(--border)">'
+          +'<span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)">'+esc(it.customer)+'</span>'
+          +'<span style="flex-shrink:0;margin-right:6px;color:'+(it.od>0?'#dc2626':'#0369a1')+';font-weight:600">'+Number(it.rem).toLocaleString()+'</span>'
+          +'</div>';
+      }
+    );
+  }
+
+  el.innerHTML='<div style="background:linear-gradient(135deg,#eff6ff 0%,#f0fdf4 100%);border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:14px">'
+    +'<div style="font-size:13px;font-weight:800;color:#1e40af;margin-bottom:12px">👤 داشبورد شخصی — '+esc(uname)
+    +(totalItems?'<span style="background:#ef4444;color:#fff;font-size:10px;border-radius:10px;padding:1px 7px;margin-right:6px">'+totalItems+'</span>':'')
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">'+sections+'</div>'
+    +'</div>';
+}
+
 function renderDashboard(){
   var el=document.getElementById('dash');if(!el||_currentProvId)return;
+  renderUserDashboard();
 
   // ── جمع‌آوری داده ──────────────────────────────────────────
   var totalCenters=CENTERS.length
@@ -2950,7 +3093,18 @@ function buildTagItems(type,id,assigned){
       +(sel?'<span>✓</span>':'')+'</div>';
   }).join('');
 }
-function filterTagMenu(q,type,id){var el=document.getElementById('tagList');if(el)el.innerHTML=buildTagItems(type,id,null);}
+function filterTagMenu(q,type,id){
+  var el=document.getElementById('tagList');if(!el)return;
+  if(!q){el.innerHTML=buildTagItems(type,id,null);return;}
+  var nq=fNorm(q);
+  var assigned=rTags(type,id);
+  el.innerHTML=(DB.tags||[]).filter(function(t){return fNorm(t.name).indexOf(nq)>=0;}).map(function(t){
+    var sel=assigned.indexOf(t.id)!==-1;
+    return'<div class="tag-item'+(sel?' sel':'')+'" onclick="toggleTag(''+type+'',''+id+'','+t.id+')">'
+      +'<span><span class="tag-col" style="background:'+t.color+'"></span>'+esc(t.name)+'</span>'
+      +(sel?'<span>✓</span>':'')+'</div>';
+  }).join('');
+}
 function toggleTag(type,id,tagId){
   var k=recK(type,id);if(!DB.rTags[k])DB.rTags[k]=[];
   var idx=DB.rTags[k].indexOf(tagId);
@@ -3096,7 +3250,7 @@ function showContactPopup(ev, rtype, id) {
   var nameEl = document.getElementById('ccp-name');
   var bodyEl = document.getElementById('ccp-body');
   var nameTxt = (e.contactName||'')+( e.contactTitle ? ' ('+e.contactTitle+')' : '' );
-  nameEl.textContent = nameTxt || 'اطلاعات تماس';
+  if(nameEl)nameEl.textContent = nameTxt || 'اطلاعات تماس';
   var html = '';
   if (e.phones && e.phones.length) {
     e.phones.forEach(function(p) {
@@ -3104,7 +3258,7 @@ function showContactPopup(ev, rtype, id) {
     });
   }
   if (e.address) html += '<div class="contact-popup-row" style="margin-top:5px;color:var(--text-secondary)">📍 '+esc(e.address)+'</div>';
-  bodyEl.innerHTML = html || '<span style="color:var(--text-muted);font-size:11px">اطلاعاتی ثبت نشده</span>';
+  if(bodyEl)bodyEl.innerHTML = html || '<span style="color:var(--text-muted);font-size:11px">اطلاعاتی ثبت نشده</span>';
   var rect = ev.target.getBoundingClientRect();
   popup.style.top = (rect.bottom + 6) + 'px';
   popup.style.right = (window.innerWidth - rect.right - 10) + 'px';
@@ -3359,7 +3513,7 @@ function prcSelectCenter(key, name) {
 
 // ── Submit quote ───────────────────────────────────────────────────────────────
 function prcSubmitQuote() {
-  var centerName = document.getElementById('qb-center-name').value.trim();
+  var centerName = ((document.getElementById('qb-center-name')||{}).value||'').trim();
   if (!centerName) return showToast('لطفاً نام مرکز را وارد کنید', 2000);
   var items = [];
   _prcProducts.forEach(function(p) {
@@ -3567,7 +3721,7 @@ function prcCenterSearch2(q) {
 }
 
 function prcLoadCenterConfig() {
-  var key = document.getElementById('cfg-center-key').value.trim();
+  var key = ((document.getElementById('cfg-center-key')||{}).value||'').trim();
   if (!key) return showToast('لطفاً نام مرکز را جستجو کنید', 2000);
   fetch('/api/pricing/center/' + encodeURIComponent(key))
     .then(function(r){return r.json();}).then(function(cfg) {
@@ -3583,8 +3737,8 @@ function prcLoadCenterConfig() {
 }
 
 function prcSaveCenterConfig() {
-  var key  = document.getElementById('cfg-center-key').value.trim();
-  var name = document.getElementById('cfg-center-name').value.trim();
+  var key  = ((document.getElementById('cfg-center-key')||{}).value||'').trim();
+  var name = ((document.getElementById('cfg-center-name')||{}).value||'').trim();
   if (!key || !name) return showToast('لطفاً ابتدا مرکز را جستجو و انتخاب کنید', 2000);
   var payload = {
     center_name: name,
@@ -7886,7 +8040,7 @@ function openKPILog(userId){
 
 function _saveCallLog(userId){
   var date=document.getElementById('lc_date').value.trim();
-  var count=parseInt(document.getElementById('lc_count').value)||0;
+  var count=parseInt((document.getElementById('lc_count')||{}).value)||0;
   var note=(document.getElementById('lc_note').value||'').trim();
   if(!date||count<1){showToast('تاریخ و تعداد تماس را وارد کنید');return;}
   ensureKPIDB();
@@ -7917,7 +8071,7 @@ function _saveVisitLog(userId){
   var isCenterMode=centerRow&&centerRow.style.display!=='none';
   if(isCenterMode){
     // مرکز خاص
-    var date=(document.getElementById('lv_date2')||document.getElementById('lv_date')).value.trim();
+    var date=(((document.getElementById('lv_date2')||document.getElementById('lv_date'))||{}).value||'').trim();
     var center=(document.getElementById('lv_center').value||'').trim();
     var note=(document.getElementById('lv_note2')||document.getElementById('lv_note')).value.trim();
     if(!date){showToast('تاریخ را وارد کنید');return;}
@@ -7934,7 +8088,7 @@ function _saveVisitLog(userId){
   saveDB();showToast('✅ ویزیت ثبت شد');closeModal('kpiLogModal');renderKPIPanel();
 }
 function _saveSaleLog(userId){
-  var date=document.getElementById('ls_date').value.trim();
+  var date=((document.getElementById('ls_date')||{}).value||'').trim();
   var center=(document.getElementById('ls_center').value||'').trim();
   var amount=parseFloat(document.getElementById('ls_amount').value)||0;
   var isCash=document.getElementById('ls_cash').value==='1';
@@ -7984,11 +8138,11 @@ function openKPITargets(userId,month){
 }
 function _doSaveKPITargets(userId,month){
   var t={
-    callsPerDay:parseInt(document.getElementById('kt_calls').value)||10,
-    visitsPerWeek:parseInt(document.getElementById('kt_visits').value)||5,
-    salesCount:parseInt(document.getElementById('kt_sales').value)||5,
-    salesAmount:parseFloat(document.getElementById('kt_amount').value)||0,
-    cashPct:parseInt(document.getElementById('kt_cash').value)||50
+    callsPerDay:parseInt((document.getElementById('kt_calls')||{}).value)||10,
+    visitsPerWeek:parseInt((document.getElementById('kt_visits')||{}).value)||5,
+    salesCount:parseInt((document.getElementById('kt_sales')||{}).value)||5,
+    salesAmount:parseFloat((document.getElementById('kt_amount')||{}).value)||0,
+    cashPct:parseInt((document.getElementById('kt_cash')||{}).value)||50
   };
   saveKPITarget(userId,month,t);
   showToast('✅ اهداف KPI ذخیره شد');
