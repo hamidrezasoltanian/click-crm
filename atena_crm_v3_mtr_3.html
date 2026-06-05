@@ -1995,6 +1995,7 @@ function switchTab(tab){
     var b=document.getElementById('tab_'+t);if(b)b.classList.toggle('active',t===tab);
   });
   document.getElementById('dash').style.display=(tab==='provinces')?'':'none';
+  var _udp=document.getElementById('userDashPanel');if(_udp)_udp.style.display=(tab==='provinces')?'':'none';
   document.getElementById('banner').style.display='none';
   document.getElementById('filtersBar').style.display=(tab==='provinces')?'flex':'none';
   document.getElementById('tableArea').style.display=(tab==='provinces')?'':'none';
@@ -2180,7 +2181,7 @@ function renderUserDashboard(){
   var myMtr=[];
   if(typeof DATA!=='undefined'&&DATA&&DATA.length){
     DATA.forEach(function(row){
-      var member=mtrFindMember?mtrFindMember(row.follower):null;
+      var member=(typeof mtrFindMember==='function')?mtrFindMember(row.follower):null;
       if(!member)return;
       if(member.id!==currentUser&&member.name!==currentUser)return;
       var rem=parseFloat(row.remaining)||0;
@@ -3912,6 +3913,7 @@ function openCenterModal(rtype,id){
   }
   var centers=getProvCenters(prov||'tehran');
   var r=centers.find(function(x){return String(x.id)===String(id);});
+  if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);});}
   if(!r){showToast('مرکز یافت نشد');return;}
   var e=getE(rtype,r.id);
   var st=e.status||'بدون تماس';var lead=e.lead||r.lead||'سرنخ';
@@ -5343,6 +5345,7 @@ function collectCalItems(){
   });
   // week entries
   Object.values(DB.weekEntries||{}).forEach(function(we){
+    if(!we||typeof we!=='object')return;
     if(!we.scheduledDate)return;var pts=we.scheduledDate.split('/').map(Number);if(pts.length!==3)return;
     items.push({type:'week',jDate:we.scheduledDate,jy:pts[0],jm:pts[1],jd:pts[2],time:null,
       title:'📋 '+getRecLabel(we.recKey)+(we.done?' ✓':''),color:we.done?'#22c55e':'#8b5cf6',sk:jMs(pts[0],pts[1],pts[2])});
@@ -7908,7 +7911,7 @@ function _renderManagerTasksWidget(){
 
 function renderKPIPanel(){
   ensureKPIDB();
-  if(!_kpiUser)_kpiUser=currentUser||Object.keys(USERS)[0];
+  if(!_kpiUser||!USERS[_kpiUser])_kpiUser=USERS[currentUser]?currentUser:Object.keys(USERS)[0];
   if(!_kpiMonth)_kpiMonth=currentJMonth();
   var data;
   try{data=calcKPIs(_kpiUser,_kpiMonth);}catch(err){
