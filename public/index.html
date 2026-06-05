@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>پورتال فروش آتنا زیست درمان v2.1</title>
 <!-- cache-bust: v2.1 -->
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){});}</script>
 <!-- Vazirmatn از jsDelivr — npm package، بدون Google dependency -->
 <style>
 @font-face{
@@ -103,6 +104,30 @@
   button,select,input[type=text],input[type=number],input[type=password],input[type=email]{min-height:36px}
   .tab-btn{min-height:40px}
 }
+
+#mtrBadge{display:none;background:#dc2626;color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 5px;min-width:16px;text-align:center;margin-right:4px;vertical-align:middle;}
+#gSearchOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:flex-start;justify-content:center;padding-top:80px}
+#gSearchOverlay.open{display:flex}
+#gSearchBox{background:var(--bg-card);border-radius:14px;width:min(560px,92vw);box-shadow:0 24px 64px rgba(0,0,0,.4);overflow:hidden}
+#gSearchInput{width:100%;box-sizing:border-box;padding:14px 16px;font-size:16px;font-family:inherit;border:none;background:transparent;color:var(--text-primary);outline:none;border-bottom:1px solid var(--border)}
+#gSearchResults{max-height:380px;overflow-y:auto}
+.gs-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border-subtle,#1e2d4a)}
+.gs-item:hover,.gs-item.gs-sel{background:var(--bg-hover,var(--bg-raised))}
+.gs-icon{font-size:18px;flex-shrink:0;width:26px;text-align:center}
+.gs-main{flex:1;overflow:hidden}
+.gs-title{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-sub{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-empty{padding:24px;text-align:center;color:var(--text-muted);font-size:13px}
+
+.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg-card);border-top:1px solid var(--border);z-index:800;padding-bottom:env(safe-area-inset-bottom)}
+.mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px 6px;cursor:pointer;border:none;background:none;font-size:9px;color:var(--text-muted);font-family:inherit;gap:2px;transition:color .2s}
+.mob-tab.active{color:#0ea5e9}
+.mob-tab .mob-icon{font-size:20px;line-height:1}
+@media(max-width:640px){
+  .mobile-nav{display:flex!important}
+  body{padding-bottom:60px}
+}
+@media(min-width:641px){body{padding-bottom:0}}
 
 /* ── Extra small ≤380px ─────────────────────────────────────*/
 @media(max-width:380px){
@@ -839,7 +864,7 @@ tr.row-contracted td{background:#f0fdf4!important}
     <span id="uSelDot" style="width:10px;height:10px;border-radius:50%;background:#8b5cf6;display:inline-block;margin-left:6px;vertical-align:middle;flex-shrink:0"></span>
     <span id="currentUserDisplay" style="font-size:12px;color:var(--topbar-text);font-weight:600;margin-left:4px"></span>
     <select id="uSel" onchange="onUserChange(this.value)" style="display:none"></select>
-    <button class="top-btn" onclick="openQS()" title="جستجو سریع (Ctrl+K)" style="background:rgba(255,255,255,.15);font-size:13px">🔍</button>
+    <button class="top-btn" onclick="openGSearch()" title="جستجو سریع (Ctrl+K)" style="background:rgba(255,255,255,.15);font-size:13px">🔍 <span style="font-size:11px;opacity:.7">Ctrl+K</span></button>
     <button class="top-btn" onclick="doLogout()" style="background:rgba(220,38,38,.2);border-color:rgba(220,38,38,.4)">خروج</button>
     <button class="top-btn" id="themeTglBtn" onclick="toggleTheme()" title="تغییر تم" style="font-size:13px;min-width:72px">🌙 دارک</button>
     <button class="top-btn" onclick="openUserMgmt()" title="مدیریت کاربران" style="background:rgba(139,92,246,.2);border-color:rgba(139,92,246,.4)">👥 کاربران</button>
@@ -862,7 +887,7 @@ tr.row-contracted td{background:#f0fdf4!important}
   <button class="tab-btn" id="tab_activity" onclick="switchTab('activity')">📜 فعالیت‌ها</button>
   <button class="tab-btn" id="tab_kpi" onclick="switchTab('kpi')" style="color:#f59e0b">📊 KPI</button>
   <button class="tab-btn" id="tab_manager" onclick="switchTab('manager')" style="color:#8b5cf6">📊 بررسی مدیر</button>
-  <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" style="color:#0ea5e9;font-weight:700">💰 مطالبات</button>
+  <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" style="color:#0ea5e9;font-weight:700"><span id="mtrBadge"></span>💰 مطالبات</button>
   <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" style="color:#16a34a;font-weight:700">🏷 قیمت‌گذاری</button>
 </div>
 
@@ -1138,8 +1163,12 @@ function stHCls(st){var i=STATUS_LIST.indexOf(st);return H_CLS[i]||'h-st-0';}
 function lCls(lead){var l=(lead||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک').trim();return LEAD_CLS[l]||'lead-none';}
 
 // ════════════════════════ STORAGE ══════════════════════
+var _undoStack=[];
+var _redoStack=[];
+var MAX_UNDO=50;
+var _undoSuppressed=false;
 var _actPage=0;
-var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{}};
+var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
 // ── Login/Auth helpers ────────────────────────────────────────
@@ -1189,11 +1218,40 @@ async function loadDB(){
     console.warn('Server fetch failed, using empty DB:',e.message);
   }
 }
+function _saveDBNow(){
+  fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(DB)}).catch(function(e){console.warn('saveDB sync failed:',e.message);});
+}
 function saveDB(){
   clearTimeout(_saveDebounceTimer);
-  _saveDebounceTimer=setTimeout(function(){
-    fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(DB)}).catch(function(e){console.warn('saveDB sync failed:',e.message);});
-  },800);
+  _saveDebounceTimer=setTimeout(function(){_saveDBNow();},300);
+}
+function saveDBSync(){clearTimeout(_saveDebounceTimer);_saveDBNow();}
+
+function exportDBJson(){
+  var data=JSON.stringify({version:2,exportedAt:new Date().toISOString(),db:DB},null,2);
+  var blob=new Blob([data],{type:'application/json'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='atena_crm_backup_'+todayStr().replace(/\//g,'-')+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  showToast('✅ پشتیبان دانلود شد');
+}
+function importDBJson(input){
+  var file=input.files&&input.files[0];if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var parsed=JSON.parse(e.target.result);
+      var src=parsed.db||parsed;
+      if(!src||typeof src!=='object'||!src.edits)throw new Error('فایل معتبر نیست');
+      if(!confirm('⚠ این عملیات داده‌های فعلی را جایگزین می‌کند. ادامه می‌دهید؟'))return;
+      Object.assign(DB,src);
+      saveDBSync();
+      showToast('✅ داده‌ها بازیابی شدند — صفحه رفرش می‌شود',2000);
+      setTimeout(function(){location.reload();},2200);
+    }catch(err){showToast('❌ خطا: '+err.message);}
+  };
+  reader.readAsText(file);
+  input.value='';
 }
 
 // Server backup download
@@ -1890,6 +1948,8 @@ function _getCenterName(type,id){
   return ex?ex.name:id;
 }
 function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]={};
+  if(!_undoSuppressed){var _prevVal=DB.edits[k][field];_undoStack.push({type:type,id:id,field:field,val:_prevVal});if(_undoStack.length>MAX_UNDO)_undoStack.shift();_redoStack=[];}
+  if(!_undoSuppressed){DB.changeLog=DB.changeLog||[];DB.changeLog.push({at:new Date().toISOString(),by:currentUser,rkey:type+'_'+id,field:field,val:val});if(DB.changeLog.length>500)DB.changeLog=DB.changeLog.slice(-500);}
   var _auditFields=['status','owner','lead','potential','followupDate','contactName','contactTitle','phones','address'];
   if(_auditFields.indexOf(field)>=0){
     var _oldV=DB.edits[k][field]!==undefined?DB.edits[k][field]:'';
@@ -1903,6 +1963,24 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
   DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);var _cFields=['contactName','contactTitle','phones','address'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contactName:_ce.contactName||'',contactTitle:_ce.contactTitle||'',      phones:_ce.phones||[],address:_ce.address||''})  }).catch(function(){});}}
 function rTags(type,id){return DB.rTags[recK(type,id)]||[];}
 function tagById(id){return(DB.tags||[]).find(function(t){return t.id===id;});}
+function undoEdit(){
+  if(!_undoStack.length){showToast('⚠ چیزی برای بازگشت نیست');return;}
+  var op=_undoStack.pop();
+  var currVal=(getE(op.type,op.id)||{})[op.field];
+  _redoStack.push({type:op.type,id:op.id,field:op.field,val:currVal});
+  _undoSuppressed=true;setE(op.type,op.id,op.field,op.val);_undoSuppressed=false;
+  showToast('↩ بازگشت انجام شد');
+  if(currentTab==='provinces')renderDashboard();
+}
+function redoEdit(){
+  if(!_redoStack.length){showToast('⚠ چیزی برای تکرار نیست');return;}
+  var op=_redoStack.pop();
+  var currVal=(getE(op.type,op.id)||{})[op.field];
+  _undoStack.push({type:op.type,id:op.id,field:op.field,val:currVal});
+  _undoSuppressed=true;setE(op.type,op.id,op.field,op.val);_undoSuppressed=false;
+  showToast('↪ تکرار انجام شد');
+  if(currentTab==='provinces')renderDashboard();
+}
 
 // ════════════════════════ DATA HELPERS ════════════════
 // تهران + ۳۰ استان دیگر — cached
@@ -2011,6 +2089,8 @@ function switchTab(tab){
   var pricingP=document.getElementById('pricingPanel');if(pricingP)pricingP.style.display=(tab==='pricing')?'':'none';
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
   if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
+  // update mobile nav
+  (function(){var tabs=['provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
   if(tab==='provinces'){
     renderDashboard();renderBanner();
     if(!_currentProvId){
@@ -4007,6 +4087,22 @@ function openCenterModal(rtype,id){
       return'<div class="note-item">'+esc(n.text)+'<div class="note-meta"><span>'+esc(n.user)+'</span><span>'+n.date+'</span></div></div>';
     }).join('')+'</div>':'');
 
+  // ── change history section ──
+  var rkey=rtype+'_'+r.id;
+  var hist=(DB.changeLog||[]).filter(function(h){return h.rkey===rkey;}).slice(-5).reverse();
+  var fNames={status:'وضعیت',followupDate:'تاریخ پیگیری',contactName:'مخاطب',owner:'کارشناس',notes:'یادداشت',lead:'سرنخ',potential:'پتانسیل'};
+  body+='<div style="margin-top:10px;padding:8px 12px;background:var(--bg-raised);border-radius:8px;border:1px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px">📋 تغییرات اخیر</div>'
+    +(hist.length?hist.map(function(h){
+      var d=new Date(h.at);var jd=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
+      var ds=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+      return'<div style="font-size:10.5px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="color:var(--text-secondary)">'+esc(fNames[h.field]||h.field)+'</span>'
+        +' ← '+esc(String(h.val||'—').substring(0,30))
+        +' <span style="opacity:.6;margin-right:4px">'+esc(h.by||'')+' · '+ds+'</span></div>';
+    }).join(''):'<div style="font-size:11px;color:var(--text-muted)">هنوز تغییری ثبت نشده</div>')
+    +'</div>';
+
   var foot='<button style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="closeModal(\'cm_'+id+'\');confirmDeleteCenter(\''+rtype+'\',\''+id+'\',\''+esc(r.name)+'\')">🗑 حذف</button>'
     +'<button style="background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openCenterAudit(\''+recK(rtype,r.id)+'\',\''+esc(r.name)+'\')">📋 تاریخچه</button>'
     +'<button class="btn-secondary" onclick="closeModal(\'cm_'+id+'\')">بستن</button>'
@@ -5694,6 +5790,73 @@ function renderActivity(){
   out+='</div>';
   el.innerHTML=out;
 }
+// ════════════════════════ GLOBAL SEARCH (Ctrl+K) ══════════════
+var _gSearchSel=0;
+function openGSearch(){
+  document.getElementById('gSearchOverlay').classList.add('open');
+  setTimeout(function(){var el=document.getElementById('gSearchInput');if(el){el.value='';el.focus();}gSearchQuery('');},50);
+}
+function closeGSearch(){document.getElementById('gSearchOverlay').classList.remove('open');}
+function gSearchQuery(q){
+  q=(q||'').trim();
+  var res=[];
+  if(q.length>=1){
+    var qn=fNorm(q);
+    _buildPCCache();
+    (CENTERS||[]).forEach(function(c){
+      if(res.length>=12)return;
+      var name=c.name||'';
+      if(fNorm(name).indexOf(qn)!==-1){
+        var e=getE('center',c.id)||{};
+        var cid=c.id;
+        res.push({icon:'🏥',title:esc(name),sub:esc(e.status||'بدون تماس'),action:function(){closeGSearch();openCenterModal('center',cid);}});
+      }
+    });
+    Object.keys(_PC_CACHE||{}).forEach(function(pv){if(res.length>=12)return;(_PC_CACHE[pv]||[]).forEach(function(c){
+      if(res.length>=12)return;
+      var name=c.name||c.center_name||'';
+      if(fNorm(name).indexOf(qn)!==-1){
+        var e=getE('pc',c.id)||{};var cid=c.id;
+        res.push({icon:'🏢',title:esc(name),sub:esc(e.status||c.province_name||''),action:function(){closeGSearch();openCenterModal('pc',cid);}});
+      }
+    });});
+    (DB.events||[]).forEach(function(ev){
+      if(!ev||!ev.title)return;
+      if(fNorm(ev.title).indexOf(qn)!==-1){
+        res.push({icon:'🗓',title:esc(ev.title),sub:esc(ev.date||''),action:function(){closeGSearch();switchTab('calendar');}});
+      }
+    });
+    (PROVINCES||[]).forEach(function(p){
+      var pn=p.name||p.n||'';
+      if(fNorm(pn).indexOf(qn)!==-1){
+        var pid=p.id;
+        res.push({icon:'🗺',title:esc(pn),sub:'استان',action:function(){closeGSearch();switchTab('provinces');openProvince(pid);}});
+      }
+    });
+  }
+  _gSearchSel=0;
+  var el=document.getElementById('gSearchResults');
+  if(!el)return;
+  if(!res.length){el.innerHTML='<div class="gs-empty">'+(q?'نتیجه‌ای یافت نشد':'برای جستجو تایپ کنید…')+'</div>';return;}
+  el.innerHTML=res.map(function(r,i){
+    return'<div class="gs-item'+(i===0?' gs-sel':'')+'" data-idx="'+i+'" onmouseenter="gSearchHover('+i+')" onclick="gSearchExec('+i+')">'
+      +'<span class="gs-icon">'+r.icon+'</span>'
+      +'<div class="gs-main"><div class="gs-title">'+r.title+'</div>'+(r.sub?'<div class="gs-sub">'+r.sub+'</div>':'')+'</div>'
+      +'</div>';
+  }).join('');
+  el._results=res;
+}
+function gSearchHover(i){_gSearchSel=i;var items=document.querySelectorAll('.gs-item');items.forEach(function(el,j){el.classList.toggle('gs-sel',j===i);});}
+function gSearchExec(i){var el=document.getElementById('gSearchResults');if(!el||!el._results)return;var r=el._results[i];if(r&&r.action)r.action();}
+function gSearchKey(e){
+  var el=document.getElementById('gSearchResults');
+  var items=el?el.querySelectorAll('.gs-item'):[];
+  if(e.key==='ArrowDown'){e.preventDefault();_gSearchSel=Math.min(_gSearchSel+1,items.length-1);gSearchHover(_gSearchSel);}
+  else if(e.key==='ArrowUp'){e.preventDefault();_gSearchSel=Math.max(_gSearchSel-1,0);gSearchHover(_gSearchSel);}
+  else if(e.key==='Enter'){e.preventDefault();gSearchExec(_gSearchSel);}
+  else if(e.key==='Escape'){closeGSearch();}
+}
+
 // ════════════════════════ QUICK SEARCH ═══════════════
 function openQS(){
   var o=document.getElementById('qsOverlay');
@@ -6687,6 +6850,15 @@ function openSettings(){
   var foot='<button class="btn-secondary" onclick="closeModal(\'settingsModal\')">انصراف</button>'
     +'<button style="background:var(--bg-raised);color:var(--text-secondary);border:1px solid #fcd34d;border-radius:5px;padding:6px 12px;cursor:pointer;font-size:12px;font-family:inherit" onclick="cleanupOrphanedEntries(true);renderDashboard()">🧹 پاک‌سازی ورودی‌های منسوخ</button>'
     +'<button class="btn-primary" onclick="saveSettings()">💾 ذخیره تنظیمات</button>';
+  // Backup/Restore JSON section
+  body += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:8px">💾 پشتیبان‌گیری داده‌ها</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button onclick="exportDBJson()" class="btn-secondary" style="font-size:12px">📥 دانلود پشتیبان JSON</button>'
+    +'<label class="btn-secondary" style="font-size:12px;cursor:pointer">📤 بازیابی از فایل<input type="file" accept=".json" onchange="importDBJson(this)" style="display:none"></label>'
+    +'</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-top:6px">پشتیبان شامل همه مراکز، یادداشت‌ها، تنظیمات و مطالبات می‌شود</div>'
+    +'</div>';
   // Data management section
   body += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">'
     +'<div style="font-size:12px;font-weight:700;margin-bottom:10px">📂 مدیریت داده‌ها</div>'
@@ -7118,7 +7290,9 @@ async function init(){
   },1500);
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape'){closeAllModals();closeQS();}
-    if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();openQS();}
+    if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();openGSearch();}
+    if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){var ae=document.activeElement;var isInput=ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA');if(!isInput){e.preventDefault();undoEdit();}}
+    if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){var ae2=document.activeElement;var isInput2=ae2&&(ae2.tagName==='INPUT'||ae2.tagName==='TEXTAREA');if(!isInput2){e.preventDefault();redoEdit();}}
   });
   initSSE();
 }
@@ -9413,6 +9587,30 @@ function dpToday(){var t=TODAY_STR.split('/').map(Number);DP.vy=t[0];DP.vm=t[1];
 function dpClear(){if(DP.cb)DP.cb('');dpClose();}
 function dpClose(){var el=document.getElementById('mtr-dpOv');if(el)el.remove();}
 
+function mtrSparkline(){
+  var pts=DB.mtrTrend||[];
+  if(pts.length<2)return'';
+  var W=260,H=48,pad=4;
+  var vals=pts.map(function(p){return p.total;});
+  var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+  var range=mx-mn||1;
+  var coords=vals.map(function(v,i){
+    var x=pad+(W-pad*2)*i/(vals.length-1);
+    var y=H-pad-(H-pad*2)*(v-mn)/range;
+    return x+','+y;
+  }).join(' ');
+  var lastPtStr=coords.split(' ').pop();var lx=lastPtStr.split(',')[0],ly=lastPtStr.split(',')[1];
+  var trend=vals[vals.length-1]>=vals[vals.length-2]?'🔴':'🟢';
+  return'<div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px">'+trend+' روند مطالبات ('+pts.length+' نقطه)</div>'
+    +'<svg width="'+W+'" height="'+H+'" style="overflow:visible;display:block">'
+    +'<polyline points="'+coords+'" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linejoin="round"/>'
+    +'<circle cx="'+lx+'" cy="'+ly+'" r="3" fill="#0ea5e9"/>'
+    +'</svg>'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-top:4px">آخرین: '+fM(vals[vals.length-1])+'</div>'
+    +'</div>';
+}
+
 // ═══════════ AMOUNT / URGENCY ═══════════
 function fM(r){if(!r&&r!==0)return'—';if(!r)return'—';return Math.round(r).toLocaleString();}
 function fF(r){return r?Math.round(r).toLocaleString():'—';}
@@ -9539,6 +9737,18 @@ function processAB(ab){
   // Load prev snap if not already set
   if(!SNAP)SNAP=loadSnap();
   saveData(DATA); // persist across page reload
+  // record trend point for sparkline
+  (function(){
+    DB.mtrTrend=DB.mtrTrend||[];
+    var tTotal=DATA.reduce(function(s,r){return s+(r.rem||0);},0);
+    var tDate=todayStr();
+    var last=DB.mtrTrend[DB.mtrTrend.length-1];
+    if(!last||last.d!==tDate){
+      DB.mtrTrend.push({d:tDate,total:tTotal,count:DATA.length});
+      if(DB.mtrTrend.length>12)DB.mtrTrend=DB.mtrTrend.slice(-12);
+      saveDB();
+    }
+  })();
   updateReminder();render();
   // auto-map followers then open modal only for remaining unknowns
   setTimeout(function(){
@@ -9660,7 +9870,7 @@ function render(){
   var ov60=rows.filter(function(r){return r.od>60;});
   var ovAny=rows.filter(function(r){return r.od>0;});
   var avgD=ovAny.length?Math.round(ovAny.reduce(function(s,r){return s+r.od;},0)/ovAny.length):0;
-  var html='<div class="kpi-g">'
+  var html=mtrSparkline()+'<div class="kpi-g">'
     +'<div class="kpi"><div class="kpi-l">کل مطالبات</div><div class="kpi-v">'+fM(total)+'</div><div class="kpi-ss">ریال</div></div>'
     +'<div class="kpi" style="border-color:'+(ov60.length?'#dc2626':'#334155')+'"><div class="kpi-l">تخلف ۶۰ روز</div><div class="kpi-v" style="color:#dc2626">'+ov60.length+' فاکتور</div><div class="kpi-ss" style="color:#dc2626">'+fM(tot(ov60))+'</div></div>'
     +'<div class="kpi"><div class="kpi-l">فاکتور باز</div><div class="kpi-v">'+rows.length+'</div></div>'
@@ -9677,6 +9887,10 @@ function render(){
   else if(TAB==='compare')html+=rCompare(rows);
   else html+=rAI(rows);
   var _main=document.getElementById('mtr-main');if(_main)_main.innerHTML=html;
+  // update overdue badge on mtr tab
+  var _ovCount=(typeof DATA!=='undefined'?DATA:[]).filter(function(r){return r&&r.od>0;}).length;
+  var _badge=document.getElementById('mtrBadge');
+  if(_badge){_badge.textContent=_ovCount>0?String(_ovCount):'';_badge.style.display=_ovCount>0?'inline':'none';}
 }
 
 // ═══════════ PRIORITY TAB ═══════════
@@ -11300,5 +11514,19 @@ function _centerNameSimilar(a,b){
   <div id="ccp-name" class="contact-popup-name"></div>
   <div id="ccp-body"></div>
 </div>
+<div id="gSearchOverlay" onclick="if(event.target===this)closeGSearch()">
+  <div id="gSearchBox">
+    <input id="gSearchInput" placeholder="جستجو در مراکز، رویدادها... (Ctrl+K)" oninput="gSearchQuery(this.value)" onkeydown="gSearchKey(event)" autocomplete="off" dir="auto">
+    <div id="gSearchResults"><div class="gs-empty">برای جستجو تایپ کنید…</div></div>
+  </div>
+</div>
+<nav class="mobile-nav" id="mobileNav">
+  <button class="mob-tab" onclick="switchTab('provinces')"><span class="mob-icon">🗺</span>استان‌ها</button>
+  <button class="mob-tab" onclick="switchTab('weekplan')"><span class="mob-icon">📅</span>هفته</button>
+  <button class="mob-tab" onclick="switchTab('calendar')"><span class="mob-icon">🗓</span>تقویم</button>
+  <button class="mob-tab" onclick="switchTab('checklist')"><span class="mob-icon">✅</span>چک‌لیست</button>
+  <button class="mob-tab" onclick="switchTab('activity')"><span class="mob-icon">📊</span>فعالیت</button>
+  <button class="mob-tab" onclick="switchTab('mtr')"><span class="mob-icon">💰</span>مطالبات</button>
+</nav>
 </body>
 </html>
