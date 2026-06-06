@@ -3280,7 +3280,7 @@ function filterTagMenu(q,type,id){
   var assigned=rTags(type,id);
   el.innerHTML=(DB.tags||[]).filter(function(t){return fNorm(t.name).indexOf(nq)>=0;}).map(function(t){
     var sel=assigned.indexOf(t.id)!==-1;
-    return'<div class="tag-item'+(sel?' sel':'')+'" onclick="toggleTag(''+type+'',''+id+'','+t.id+')">'
+    return'<div class="tag-item'+(sel?' sel':'')+'" onclick="toggleTag(\''+type+'\',\''+id+'\','+t.id+')">'
       +'<span><span class="tag-col" style="background:'+_safeColor(t.color)+'"></span>'+esc(t.name)+'</span>'
       +(sel?'<span>✓</span>':'')+'</div>';
   }).join('');
