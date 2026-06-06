@@ -994,6 +994,30 @@ tr.row-contracted td{background:#f0fdf4!important}
 .notif-ack-badge{font-size:10px;color:#16a34a;font-weight:700;padding:2px 6px;background:#dcfce7;border-radius:5px;border:1px solid #86efac}
 .notif-acked{opacity:.75}
 
+/* ══ ONBOARDING WIDGET ══ */
+#onboardingWidget{position:fixed;bottom:20px;left:20px;z-index:9999;max-width:360px;width:calc(100% - 40px);background:var(--bg-card);border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);direction:rtl;font-family:inherit;transition:opacity .3s,transform .3s;animation:_obSlideIn .35s ease}
+@keyframes _obSlideIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+#onboardingWidget.ob-minimized #onboardingBody,#onboardingWidget.ob-minimized #onboardingFooter{display:none!important}
+#onboardingWidget .ob-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+#onboardingWidget .ob-header-title{font-size:13px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:7px}
+#onboardingWidget .ob-header-btns{display:flex;gap:6px}
+#onboardingWidget .ob-mini-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;padding:1px 4px;line-height:1;border-radius:4px;font-family:inherit}
+#onboardingWidget .ob-mini-btn:hover{background:var(--bg-raised);color:var(--text-primary)}
+#onboardingWidget .ob-step-indicator{display:flex;gap:4px;padding:8px 16px 4px;align-items:center}
+#onboardingWidget .ob-step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .2s}
+#onboardingWidget .ob-step-dot.active{background:var(--brand)}
+#onboardingWidget .ob-step-label{font-size:10px;color:var(--text-muted);margin-right:4px}
+#onboardingWidget .ob-body{padding:10px 16px 8px;font-size:12px;color:var(--text-primary);line-height:1.7}
+#onboardingWidget .ob-body ul{margin:6px 0 0 0;padding-right:18px}
+#onboardingWidget .ob-body li{margin-bottom:4px}
+#onboardingWidget .ob-day-title{font-size:13px;font-weight:700;color:var(--brand);margin-bottom:7px}
+#onboardingWidget .ob-footer{display:flex;justify-content:space-between;align-items:center;padding:8px 16px 12px;gap:8px}
+#onboardingWidget .ob-nav-btns{display:flex;gap:6px}
+#onboardingWidget .ob-btn-nav{font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);cursor:pointer;font-family:inherit;transition:background .15s}
+#onboardingWidget .ob-btn-nav:hover{background:var(--brand);color:#fff;border-color:var(--brand)}
+#onboardingWidget .ob-btn-dismiss{font-size:10px;padding:4px 8px;border-radius:5px;border:1px solid #fca5a5;background:#fee2e220;color:#dc2626;cursor:pointer;font-family:inherit;white-space:nowrap}
+#onboardingWidget .ob-btn-dismiss:hover{background:#fee2e2}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('XLSX CDN failed - only TSV format supported offline')"></script>
 </head>
@@ -1988,9 +2012,13 @@ function initSettings(){
     DB.settings={
       companyName:(DB.settings&&DB.settings.companyName)||'آتنا زیست درمان',
       members:(DB.settings&&DB.settings.members)||JSON.parse(JSON.stringify(_DEFAULT_MEMBERS)),
-      ckItems:(DB.settings&&DB.settings.ckItems)||null
+      ckItems:(DB.settings&&DB.settings.ckItems)||null,
+      firstUse:(DB.settings&&DB.settings.firstUse)||{},
+      onboardingDisabled:(DB.settings&&DB.settings.onboardingDisabled)||{}
     };
   }
+  if(!DB.settings.firstUse)DB.settings.firstUse={};
+  if(!DB.settings.onboardingDisabled)DB.settings.onboardingDisabled={};
   if(DB.settings.statusList&&DB.settings.statusList.length>=2)STATUS_LIST=DB.settings.statusList;
   if(DB.settings.leadList&&DB.settings.leadList.length>=2)LEAD_LIST=DB.settings.leadList;
   if(DB.settings.typeList&&DB.settings.typeList.length>=1)TYPE_LIST=DB.settings.typeList;
