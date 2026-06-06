@@ -48,22 +48,11 @@ router.put('/db', async (req, res) => {
       delete mainData._mtr;
     }
 
-    // Merge weekEntries and edits to prevent data loss on concurrent saves
-    const storedResult = await query("SELECT value FROM app_data WHERE key = 'main'");
-    const current = storedResult.rows.length ? storedResult.rows[0].value : {};
-    const merged = Object.assign({}, current, mainData);
-    if (current.weekEntries && mainData.weekEntries) {
-      merged.weekEntries = Object.assign({}, current.weekEntries, mainData.weekEntries);
-    }
-    if (current.edits && mainData.edits) {
-      merged.edits = Object.assign({}, current.edits, mainData.edits);
-    }
-
     await query(
       `INSERT INTO app_data (key, value, updated_at, updated_by)
        VALUES ('main', $1, NOW(), $2)
        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
-      [JSON.stringify(merged), req.user.username]
+      [JSON.stringify(mainData), req.user.username]
     );
 
     try { if (_broadcast) _broadcast('db-updated', { by: req.user.username, at: Date.now() }, req.user.username); } catch(e) {}
