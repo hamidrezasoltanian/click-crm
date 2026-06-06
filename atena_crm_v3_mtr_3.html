@@ -942,6 +942,29 @@ tr.row-contracted td{background:#f0fdf4!important}
 .contact-popup-row a{color:#0369a1;text-decoration:none;direction:ltr}
 .contact-popup-row a:hover{text-decoration:underline}
 .qf-btn:hover,.qf-btn.active{background:#dbeafe;border-color:#3b82f6;color:#1e40af}
+/* ── Notification Bell ── */
+.notif-bell-wrap{position:relative;display:inline-flex}
+#notifBell{background:rgba(245,158,11,.2);border-color:rgba(245,158,11,.5);font-size:14px}
+.notif-badge{position:absolute;top:-5px;left:-5px;background:#ef4444;color:#fff;border-radius:50%;font-size:9px;font-weight:700;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;pointer-events:none;border:2px solid var(--bg-topbar)}
+/* ── Daily Monitor Modal ── */
+.dm-section{margin-bottom:18px}
+.dm-expert-head{background:var(--bg-raised);border-radius:8px 8px 0 0;padding:8px 14px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border:1px solid var(--border)}
+.dm-center-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--border);border-top:none;background:var(--bg-card);flex-wrap:wrap}
+.dm-center-row:last-child{border-radius:0 0 8px 8px}
+.dm-center-name{font-weight:600;font-size:12px;flex:1;min-width:100px;color:var(--text-primary)}
+.dm-status-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap}
+.dm-act-chip{font-size:10px;padding:2px 7px;border-radius:8px;background:#dcfce7;color:#166534;border:1px solid #86efac}
+.dm-noact-chip{font-size:10px;padding:2px 7px;border-radius:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.dm-changes-list{font-size:10px;color:var(--text-secondary);flex:100%}
+/* ── Notification Panel ── */
+.notif-panel{position:fixed;top:56px;left:10px;width:320px;max-height:450px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:3000;display:flex;flex-direction:column;overflow:hidden}
+.notif-panel-head{padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+.notif-item{padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .2s}
+.notif-item:hover{background:var(--bg-raised)}
+.notif-item.unread{border-right:3px solid #f59e0b;background:rgba(245,158,11,.05)}
+.notif-item-msg{font-size:12px;color:var(--text-primary);line-height:1.5}
+.notif-item-time{font-size:10px;color:var(--text-muted);margin-top:3px}
+.notif-empty{padding:30px;text-align:center;color:var(--text-muted);font-size:13px}
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('XLSX CDN failed - only TSV format supported offline')"></script>
@@ -957,6 +980,7 @@ tr.row-contracted td{background:#f0fdf4!important}
     <span id="uSelDot" style="width:10px;height:10px;border-radius:50%;background:#8b5cf6;display:inline-block;margin-left:6px;vertical-align:middle;flex-shrink:0"></span>
     <span id="currentUserDisplay" style="font-size:12px;color:var(--topbar-text);font-weight:600;margin-left:4px"></span>
     <select id="uSel" onchange="onUserChange(this.value)" style="display:none"></select>
+    <span class="notif-bell-wrap"><button class="top-btn" id="notifBell" onclick="toggleNotifPanel()" title="اعلان‌ها">🔔</button><span id="notifBadge" class="notif-badge" style="display:none">0</span></span>
     <button class="top-btn" onclick="openGSearch()" title="جستجو سریع (Ctrl+K)" style="background:rgba(255,255,255,.15);font-size:13px">🔍 <span style="font-size:11px;opacity:.7">Ctrl+K</span></button>
     <button class="top-btn" onclick="doLogout()" style="background:rgba(220,38,38,.2);border-color:rgba(220,38,38,.4)">خروج</button>
     <button class="top-btn" id="themeTglBtn" onclick="toggleTheme()" title="تغییر تم" style="font-size:13px;min-width:72px">🌙 دارک</button>
@@ -1113,6 +1137,7 @@ tr.row-contracted td{background:#f0fdf4!important}
     </div>
     <button class="cal-nb cal-today-btn" onclick="wpGoThisWeek()" style="font-size:11px;padding:5px 10px">این هفته</button>
     <button onclick="wpExportExcel()" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit" title="دانلود Excel برنامه هفته">⬇ Excel</button>
+    <button id="wpDailyMonBtn" onclick="openDailyMonitor()" style="background:rgba(139,92,246,.85);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;display:none" title="گزارش فعالیت امروز">📊 گزارش امروز</button>
   </div>
   <div id="wpBulkBar">
     <span id="wpBulkCount"></span>
@@ -1261,7 +1286,7 @@ var _redoStack=[];
 var MAX_UNDO=50;
 var _undoSuppressed=false;
 var _actPage=0;
-var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[]};
+var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
 // ── Login/Auth helpers ────────────────────────────────────────
@@ -2056,7 +2081,7 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
       }).catch(function(){});
     }
   }
-  DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);var _cFields=['contactName','contactTitle','phones','address','contacts'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contacts:_ce.contacts||[],address:_ce.address||''})  }).catch(function(){});}}
+  DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();if(field==='followupDate'&&val){(function(){var _p=(val+'').split('/').map(Number);if(_p.length!==3||isNaN(_p[0]))return;var _ndMs=jMs(_p[0],_p[1],_p[2]);Object.keys(DB.weekEntries||{}).forEach(function(_wk){var _we=DB.weekEntries[_wk];if(_we.rtype!==type||_we.rid!==id||_we.done)return;var _wId=_wk.split(':::')[0];var _mWk=(typeof wpGetWeeks==='function'?wpGetWeeks():[]).find(function(w){return w.id===_wId;});if(!_mWk)return;var _wsMs=jMs(_mWk.wsArr[0],_mWk.wsArr[1],_mWk.wsArr[2]);var _weMs=jMs(_mWk.weArr[0],_mWk.weArr[1],_mWk.weArr[2]);if(_ndMs>=_wsMs&&_ndMs<=_weMs)_we.scheduledDate=val;});})();}saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);if(field==='followupDate'&&currentTab==='weekplan')setTimeout(renderWeekPlan,50);var _cFields=['contactName','contactTitle','phones','address','contacts'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contacts:_ce.contacts||[],address:_ce.address||''})  }).catch(function(){});}}
 function rTags(type,id){return DB.rTags[recK(type,id)]||[];}
 function tagById(id){return(DB.tags||[]).find(function(t){return t.id===id;});}
 function undoEdit(){
@@ -2159,6 +2184,7 @@ function onUserChange(u){
   renderDashboard();renderBanner();
   if(currentTab==='provinces'||currentTab==='province_view')renderTable();
   else if(currentTab==='checklist')renderChecklist();
+  updateNotifBadge();
 }
 
 // ════════════════════════ TAB SWITCH ══════════════════
@@ -2207,7 +2233,7 @@ function switchTab(tab){
     }
     renderTable();
   }
-  else if(tab==='weekplan')renderWeekPlan();
+  else if(tab==='weekplan'){var _dmb=document.getElementById('wpDailyMonBtn');if(_dmb)_dmb.style.display=_isManager()?'':'none';renderWeekPlan();}
   else if(tab==='calendar')renderCalendar();
   else if(tab==='checklist')renderChecklist();
   else if(tab==='activity'){_actPage=0;renderActivity();}
@@ -4412,8 +4438,8 @@ function openCenterModal(rtype,id){
     +'<label>تاریخ پیگیری بعدی</label>'
     +'<div style="display:flex;gap:5px;align-items:center">'
     +'<input id="mfd_'+id+'" type="text" value="'+fd+'" readonly class="fd-inp'+(fd&&fd<today?' ov':'')+'" style="cursor:pointer;flex:1" '
-    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();})">'
-    +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
+    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
+    +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
     +'</div>'
     +'<label>برچسب‌ها</label>'
     +'<div id="tagArea_'+id+'" style="display:flex;flex-wrap:wrap;gap:4px;padding:7px;background:var(--bg-raised);border-radius:6px;min-height:30px;border:1px solid var(--border)">'
@@ -5976,6 +6002,209 @@ function saveWpAssign(weekId){
   if(selWp&&weekId){var ptsWp=weekId.split('/');if(ptsWp[0])_wpYear=parseInt(ptsWp[0]);wpBuildSelect();selWp.value=weekId;}
   closeModal('wpAssign');renderWeekPlan();showToast('ذخیره شد ✅');
 }
+
+// ════════════════════════ NOTIFICATIONS ════════════════════
+function _initNotif(){if(!DB.notifications)DB.notifications=[];}
+
+function sendNotif(toUser,message,centerKey){
+  _initNotif();
+  var n={id:Date.now()+'_'+Math.random().toString(36).slice(2),to:toUser,from:currentUser,at:new Date().toISOString(),message:message,centerKey:centerKey||'',read:false};
+  DB.notifications.push(n);
+  if(DB.notifications.length>300)DB.notifications=DB.notifications.slice(-300);
+  saveDB();
+  updateNotifBadge();
+  showToast('\u{1F4E9} اعلان برای '+(USERS[toUser]||toUser)+' ارسال شد',2000);
+}
+
+function updateNotifBadge(){
+  _initNotif();
+  var unread=DB.notifications.filter(function(n){return n.to===currentUser&&!n.read;}).length;
+  var badge=document.getElementById('notifBadge');
+  if(badge){badge.textContent=unread;badge.style.display=unread>0?'flex':'none';}
+}
+
+var _notifPanelOpen=false;
+function toggleNotifPanel(){
+  var existing=document.getElementById('notifPanel');
+  if(existing){existing.remove();_notifPanelOpen=false;return;}
+  _notifPanelOpen=true;
+  _initNotif();
+  var myNotifs=DB.notifications.filter(function(n){return n.to===currentUser;}).slice().reverse();
+  var panel=document.createElement('div');
+  panel.id='notifPanel';panel.className='notif-panel';
+  var unreadIds=myNotifs.filter(function(n){return !n.read;}).map(function(n){return n.id;});
+  var head='<div class="notif-panel-head"><span>\u{1F514} اعلان‌های من</span>'
+    +(unreadIds.length?'<button onclick="markAllNotifsRead()" style="font-size:10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer">همه خوانده شد</button>':'')
+    +'</div>';
+  var body='';
+  if(!myNotifs.length){
+    body='<div class="notif-empty">اعلانی وجود ندارد</div>';
+  } else {
+    body=myNotifs.map(function(n){
+      var timeAgo=_timeAgo(n.at);
+      var nid=n.id;
+      return '<div class="notif-item'+(n.read?'':' unread')+'" onclick="markNotifRead(\''+nid+'\')">'
+        +'<div class="notif-item-msg">'+esc(n.message)+'</div>'
+        +'<div class="notif-item-time">از: '+(USERS[n.from]||n.from)+' · '+timeAgo+'</div>'
+        +'</div>';
+    }).join('');
+  }
+  panel.innerHTML=head+body;
+  document.body.appendChild(panel);
+  setTimeout(function(){
+    unreadIds.forEach(function(id){
+      var nx=DB.notifications.find(function(x){return x.id===id;});
+      if(nx)nx.read=true;
+    });
+    saveDB();updateNotifBadge();
+    var p=document.getElementById('notifPanel');
+    if(p)p.querySelectorAll('.notif-item.unread').forEach(function(el){el.classList.remove('unread');});
+  },2000);
+  setTimeout(function(){
+    document.addEventListener('click',function _nClose(ev){
+      var p=document.getElementById('notifPanel');
+      if(p&&!p.contains(ev.target)&&ev.target.id!=='notifBell'){p.remove();_notifPanelOpen=false;}
+      document.removeEventListener('click',_nClose);
+    });
+  },100);
+}
+
+function markNotifRead(nid){
+  _initNotif();
+  var nx=DB.notifications.find(function(x){return x.id===nid;});
+  if(nx){nx.read=true;saveDB();updateNotifBadge();}
+}
+function markAllNotifsRead(){
+  _initNotif();
+  DB.notifications.forEach(function(n){if(n.to===currentUser)n.read=true;});
+  saveDB();updateNotifBadge();
+  var p=document.getElementById('notifPanel');
+  if(p){var btn=p.querySelector('.notif-panel-head button');if(btn)btn.remove();p.querySelectorAll('.notif-item.unread').forEach(function(el){el.classList.remove('unread');});}
+}
+function _timeAgo(isoStr){
+  var diff=Math.floor((Date.now()-new Date(isoStr).getTime())/1000);
+  if(diff<60)return'لحظاتی پیش';
+  if(diff<3600)return Math.floor(diff/60)+' دقیقه پیش';
+  if(diff<86400)return Math.floor(diff/3600)+' ساعت پیش';
+  return Math.floor(diff/86400)+' روز پیش';
+}
+
+// ════════════════════════ DAILY ACTIVITY MONITOR ════════════════════
+function openDailyMonitor(){
+  if(!_isManager()){showToast('⚠ این بخش فقط برای مدیران است');return;}
+  _buildPCCache();
+  var today=todayStr();
+  var todayEntries=[];
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];
+    if(we.done||we.rtype==='mtr')return;
+    if(we.scheduledDate!==today)return;
+    var rtype=we.rtype||'center',rid=we.rid||'';
+    var e=getE(rtype,rid);
+    var owner=e.owner||'';
+    if(!owner){
+      if(rtype==='center'){var c=CENTERS.find(function(x){return x.id===rid;});if(c&&c.owner)owner=c.owner;}
+      else{_buildPCCache();var _pId=rid.split('||')[0];var _arr=_PC_CACHE[_pId]||[];var _c=_arr.find(function(x){return x.id===rid;});if(_c&&_c.owner)owner=_c.owner;}
+    }
+    var name=we.centerName||getRecLabel(rtype+'_'+rid)||'?';
+    var acts=_getTodayActivities(rtype,rid,today);
+    todayEntries.push({key:k,rtype:rtype,rid:rid,name:name,owner:owner,actType:we.actionType||'call',status:e.status||'بدون تماس',activities:acts});
+  });
+
+  var byOwner={};
+  todayEntries.forEach(function(en){
+    var o=en.owner||'__none__';
+    if(!byOwner[o])byOwner[o]=[];
+    byOwner[o].push(en);
+  });
+
+  var totalCenters=todayEntries.length;
+  var activeCenters=todayEntries.filter(function(en){return en.activities.length>0;}).length;
+  var inactiveCenters=totalCenters-activeCenters;
+
+  var body='<div style="margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap">'
+    +'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#16a34a">'+totalCenters+'</div><div style="font-size:11px;color:#166534">مرکز امروز</div></div>'
+    +'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#16a34a">'+activeCenters+'</div><div style="font-size:11px;color:#166534">با فعالیت</div></div>'
+    +'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#dc2626">'+inactiveCenters+'</div><div style="font-size:11px;color:#991b1b">بدون گزارش</div></div>'
+    +'</div>';
+
+  if(!totalCenters){
+    body+='<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:10px">\u{1F4CB}</div><div>هیچ مرکزی برای امروز برنامه‌ریزی نشده</div></div>';
+  } else {
+    Object.keys(byOwner).sort().forEach(function(ow){
+      var entries=byOwner[ow];
+      var owName=ow==='__none__'?'بدون مسئول':(USERS[ow]||ow);
+      var owActive=entries.filter(function(en){return en.activities.length>0;}).length;
+      body+='<div class="dm-section">'
+        +'<div class="dm-expert-head">'
+        +'<span>\u{1F464} '+esc(owName)+'</span>'
+        +'<span style="font-size:11px;color:var(--text-secondary)">'+entries.length+' مرکز — '+owActive+' فعال / '+(entries.length-owActive)+' بدون گزارش</span>'
+        +(ow!=='__none__'&&(entries.length-owActive)>0?'<button onclick="sendReminderToExpert(\''+ow+'\')" style="margin-right:auto;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;padding:2px 10px;cursor:pointer;font-size:10px;font-family:inherit">\u{1F4E9} یادآوری</button>':'')
+        +'</div>';
+      entries.forEach(function(en){
+        var hasAct=en.activities.length>0;
+        var actTypeLabel=en.actType==='visit'?'\u{1F91D} ویزیت':'\u{1F4DE} تماس';
+        body+='<div class="dm-center-row">'
+          +'<div class="dm-center-name">'+esc(en.name)+'</div>'
+          +'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:8px;border:1px solid #7dd3fc">'+actTypeLabel+'</span>'
+          +'<span class="dm-status-badge" style="background:var(--bg-raised);border:1px solid var(--border)">'+esc(en.status)+'</span>'
+          +(hasAct
+            ?'<span class="dm-act-chip">✓ فعال</span>'
+            :'<span class="dm-noact-chip">✗ بدون گزارش</span>')
+          +(hasAct?'<div class="dm-changes-list">'+en.activities.slice(0,5).map(function(a){return _fieldLabel(a.field)+': '+esc(String(a.val||''));}).join(' &nbsp;|&nbsp; ')+'</div>':'')
+          +'</div>';
+      });
+      body+='</div>';
+    });
+  }
+
+  var foot='<button class="btn-secondary" onclick="closeModal(\'dmModal\')">بستن</button>'
+    +'<button class="btn-primary" onclick="openDailyMonitor()">\u{1F504} بروزرسانی</button>';
+  openModal('dmModal','\u{1F4CA} گزارش فعالیت روزانه — '+today,body,foot,{xl:true});
+}
+
+function _getTodayActivities(rtype,rid,today){
+  var rkey=rtype+'_'+rid;
+  var log=DB.changeLog||[];
+  return log.filter(function(l){
+    if(l.rkey!==rkey)return false;
+    if(!l.at)return false;
+    var d=l.at.slice(0,10);
+    var parts=d.split('-').map(Number);
+    if(parts.length!==3)return false;
+    var jd=g2j(parts[0],parts[1],parts[2]);
+    var jdStr=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+    return jdStr===today;
+  });
+}
+
+function _fieldLabel(field){
+  var map={status:'وضعیت',lead:'سرنخ',potential:'فرصت',followupDate:'تاریخ پیگیری',owner:'مسئول',tags:'برچسب',notes:'یادداشت',contacts:'تماس'};
+  return map[field]||field;
+}
+
+function sendReminderToExpert(expertUser){
+  var today=todayStr();
+  var noActEntries=[];
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];
+    if(we.done||we.scheduledDate!==today||we.rtype==='mtr')return;
+    var rtype=we.rtype||'center',rid=we.rid||'';
+    var e=getE(rtype,rid);
+    var owner=e.owner||'';
+    if(!owner){
+      if(rtype==='center'){var c=CENTERS.find(function(x){return x.id===rid;});if(c&&c.owner)owner=c.owner;}
+      else{_buildPCCache();var _pId=rid.split('||')[0];var _arr=_PC_CACHE[_pId]||[];var _c=_arr.find(function(x){return x.id===rid;});if(_c&&_c.owner)owner=_c.owner;}
+    }
+    if(owner!==expertUser)return;
+    var acts=_getTodayActivities(rtype,rid,today);
+    if(acts.length===0)noActEntries.push(we.centerName||getRecLabel(rtype+'_'+rid)||'?');
+  });
+  if(!noActEntries.length){showToast('✅ این کارشناس برای همه مراکز گزارش داده است');return;}
+  var msg='لطفاً برای مراکز زیر که امروز برنامه دارید گزارش وارد کنید: '+noActEntries.slice(0,5).join('، ')+(noActEntries.length>5?' و '+(noActEntries.length-5)+' مرکز دیگر':'');
+  sendNotif(expertUser,msg,'');
+}
+
 // ════════════════════════ CALENDAR ════════════════════
 function initEvents(){if(!DB.events)DB.events=[];if(DB.events.length)_nextEvId=Math.max.apply(null,DB.events.map(function(e){return e.id;}))+1;}
 function collectCalItems(){
@@ -7837,8 +8066,8 @@ async function init(){
     showLoginOverlay();return;
   }
   await loadDB();
-  initSettings();initTags();initWeekTags();initEvents();
-  buildUSERS();
+  initSettings();initTags();initWeekTags();initEvents();_initNotif();
+  buildUSERS();updateNotifBadge();
   loadMasterCenters().then(function(){
     _typeFilterBuilt=false;
     cleanupOrphanedEntries(false);
