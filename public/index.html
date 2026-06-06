@@ -5426,9 +5426,9 @@ function wpMarkDoneKey(eKey){
     +'<input id="_mdk_nextdate" type="text" value="'+defNextStr+'" readonly class="fd-inp" style="cursor:pointer;width:100%;box-sizing:border-box" '
     +'onclick="openJDP(this,function(v){document.getElementById(\'_mdk_nextdate\').value=v;})">'
     +'</div>';
-  var footer='<button class="btn-primary" style="background:#16a34a;border-color:#16a34a" onclick="_wpFinishDone(''+eKey+'',true)">✅ ثبت + پیگیری بعدی</button>'
-    +'<button class="btn-secondary" onclick="_wpFinishDone(''+eKey+'',false)">بدون پیگیری</button>'
-    +'<button class="btn-secondary" onclick="closeModal('wpDoneModal')">انصراف</button>';
+  var footer='<button class="btn-primary" style="background:#16a34a;border-color:#16a34a" onclick="_wpFinishDone(\''+eKey+'\',true)">✅ ثبت + پیگیری بعدی</button>'
+    +'<button class="btn-secondary" onclick="_wpFinishDone(\''+eKey+'\',false)">بدون پیگیری</button>'
+    +'<button class="btn-secondary" onclick="closeModal(\'wpDoneModal\')">انصراف</button>';
   openModal('wpDoneModal','✅ انجام شد',body,footer);
 }
 function jAddDays(jy,jm,jd,days){
