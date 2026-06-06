@@ -5611,15 +5611,36 @@ function saveScheduleFromModal(eKey) {
       weekDates.push(d[0]+'/'+p2(d[1])+'/'+p2(d[2]));
     }
     if(weekDates.indexOf(dateVal)<0){
-      var wStart=weekDates[0];var wEnd=weekDates[6];
-      var proceed=window.confirm('⚠ تاریخ «'+dateVal+'» خارج از محدوده این هفته است.\n(هفته از '+wStart+' تا '+wEnd+')\n\nتاریخ پیگیری ذخیره می‌شود ولی مرکز در لیست بدون تاریخ می‌ماند.\n\nادامه می‌دهید؟');
-      if(!proceed)return;
-      // خارج از هفته: فقط followupDate را ذخیره کن ، scheduledDate دست نخور
-      DB.weekEntries[eKey].actionType = actVal;
-      var _we=DB.weekEntries[eKey];var _rt=_we.rtype;var _ri=_we.rid;
-      if(_rt&&_ri){setE(_rt,_ri,'followupDate',dateVal);}
+      // date outside current week — auto-move entry to the correct week
+      var ndp2=dateVal.split('/').map(Number);
+      var ndMs2=jMs(ndp2[0],ndp2[1],ndp2[2]);
+      var destWeek=null;
+      [ndp2[0]-1,ndp2[0],ndp2[0]+1].forEach(function(yr){
+        if(destWeek)return;
+        getYearWeeks(yr).forEach(function(wk2){
+          if(destWeek)return;
+          var wsMs2=jMs(wk2.wsArr[0],wk2.wsArr[1],wk2.wsArr[2]);
+          var weMs2=jMs(wk2.weArr[0],wk2.weArr[1],wk2.weArr[2]);
+          if(ndMs2>=wsMs2&&ndMs2<=weMs2)destWeek=wk2;
+        });
+      });
+      var _we2=DB.weekEntries[eKey];
+      if(destWeek&&_we2){
+        var newKey2=wpEntryKey(destWeek.id,_we2.rtype,_we2.rid);
+        if(newKey2!==eKey){
+          DB.weekEntries[newKey2]=Object.assign({},_we2,{scheduledDate:dateVal,actionType:actVal,done:false,doneDate:null});
+          delete DB.weekEntries[eKey];
+        } else {
+          DB.weekEntries[eKey].scheduledDate=dateVal;
+          DB.weekEntries[eKey].actionType=actVal;
+        }
+        if(_we2.rtype&&_we2.rid)setE(_we2.rtype,_we2.rid,'followupDate',dateVal);
+        _wpYear=destWeek.jYear;
+        var _sel2=document.getElementById('wpSel');
+        if(_sel2){wpBuildSelect();_sel2.value=destWeek.id;}
+      }
       saveDB();closeModal('schModal');renderWeekPlan();
-      showToast('📅 تاریخ پیگیری ذخیره شد', 2500);
+      showToast('↪ انتقال به '+(destWeek?destWeek.label:dateVal), 2500);
       return;
     }
   }
