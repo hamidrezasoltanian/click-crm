@@ -746,7 +746,7 @@ input:checked+.pl-toggle-sl:before{transform:translateX(18px)}
 .pl-sett-sec{background:var(--bg-card);border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--card-shadow);border:1px solid var(--border)}
 .pl-sett-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:2px}
 .pl-sett-desc{font-size:11px;color:var(--text-muted);margin-bottom:12px}
-.pl-sett-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.pl-sett-grid{display:flex;flex-direction:column;gap:6px}
 .pl-sett-row{display:flex;align-items:center;gap:7px;background:var(--bg-raised);border-radius:7px;padding:7px 10px;border:1px solid var(--border)}
 .pl-sett-key{font-size:10px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:5px;padding:2px 7px;min-width:55px;text-align:center;flex-shrink:0;direction:ltr}
 .pl-sett-inp{flex:1;padding:5px 9px;border:2px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);transition:border-color .2s}
@@ -4155,46 +4155,110 @@ function plResetComm(){
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
-function plRenderSett(){
-  var tg=document.getElementById('pl-sett-tiers');
-  if(tg)tg.innerHTML=_plSETT.tiers.map(function(t,i){
-    var isLast=i===_plSETT.tiers.length-1;
-    return '<div class="pl-sett-row">'
-      +'<span class="pl-sett-key">سطح '+plToFa(i+1)+'</span>'
-      +'<input class="pl-sett-inp" id="plst-lbl-'+i+'" value="'+esc(t.label)+'" placeholder="نام سطح">'
-      +(isLast?'<span class="pl-sett-lbl" style="color:var(--text-muted);font-size:10px">بدون سقف</span>'
-        :'<span class="pl-sett-lbl">حداکثر:</span><input class="pl-sett-inp num" id="plst-max-'+i+'" type="number" value="'+t.max+'" min="1">')
-      +'</div>';
-  }).join('');
-  var pg=document.getElementById('pl-sett-pay');
-  if(pg)pg.innerHTML=Object.keys(_plSETT.payLabels).map(function(k){
-    return '<div class="pl-sett-row"><span class="pl-sett-key">'+k+'</span><input class="pl-sett-inp" id="plsp-'+k+'" value="'+esc(_plSETT.payLabels[k])+'"></div>';
-  }).join('');
-  var cg=document.getElementById('pl-sett-centers');
-  if(cg)cg.innerHTML=Object.keys(_plSETT.centers).map(function(k){
-    return '<div class="pl-sett-row"><span class="pl-sett-key">'+(PL_CENTER_ICONS[k]||'')+' '+k+'</span><input class="pl-sett-inp" id="plsc-'+k+'" value="'+esc(_plSETT.centers[k])+'"></div>';
-  }).join('');
-  var clg=document.getElementById('pl-sett-commlabels');
-  if(clg)clg.innerHTML=Object.keys(_plSETT.commLabels).map(function(k){
-    return '<div class="pl-sett-row"><span class="pl-sett-key">'+k+'</span><input class="pl-sett-inp" id="plscl-'+k+'" value="'+esc(_plSETT.commLabels[k])+'" placeholder="نام پورسانت"></div>';
-  }).join('');
-  var cng=document.getElementById('pl-sett-commnames');
-  if(cng)cng.innerHTML=Object.keys(_plSETT.commNames).map(function(k){
-    return '<div class="pl-sett-row"><span class="pl-sett-key">'+k+'</span><input class="pl-sett-inp" id="plscn-'+k+'" value="'+esc(_plSETT.commNames[k])+'" placeholder="نام دسته"></div>';
-  }).join('');
+function _plSettObj(pfx){
+  if(pfx==='plsp')return _plSETT.payLabels;
+  if(pfx==='plsc')return _plSETT.centers;
+  if(pfx==='plscl')return _plSETT.commLabels;
+  if(pfx==='plscn')return _plSETT.commNames;
+  return {};
 }
-function plSaveSett(){
+function _plFlushObjSection(pfx){
+  var obj=_plSettObj(pfx);var keys=Object.keys(obj);
+  var newObj={};
+  keys.forEach(function(k,i){
+    var kEl=document.getElementById(pfx+'-key-'+i);
+    var vEl=document.getElementById(pfx+'-val-'+i);
+    var nk=kEl?kEl.value.trim():k;
+    var nv=vEl?vEl.value.trim():obj[k];
+    if(nk&&nv)newObj[nk]=nv;
+  });
+  keys.forEach(function(k){delete obj[k];});
+  Object.assign(obj,newObj);
+}
+function _plFlushTiers(){
   _plSETT.tiers=_plSETT.tiers.map(function(t,i){
     var lbl=(document.getElementById('plst-lbl-'+i)||{}).value||t.label;
     var maxEl=document.getElementById('plst-max-'+i);
     var max=maxEl?(parseFloat(maxEl.value)||t.max):t.max;
     return{label:lbl.trim()||t.label,max:max};
   });
-  Object.keys(_plSETT.payLabels).forEach(function(k){var el=document.getElementById('plsp-'+k);if(el&&el.value.trim())_plSETT.payLabels[k]=el.value.trim();});
-  Object.keys(_plSETT.centers).forEach(function(k){var el=document.getElementById('plsc-'+k);if(el&&el.value.trim())_plSETT.centers[k]=el.value.trim();});
-  Object.keys(_plSETT.commLabels).forEach(function(k){var el=document.getElementById('plscl-'+k);if(el&&el.value.trim())_plSETT.commLabels[k]=el.value.trim();});
-  Object.keys(_plSETT.commNames).forEach(function(k){var el=document.getElementById('plscn-'+k);if(el&&el.value.trim())_plSETT.commNames[k]=el.value.trim();});
-  plApplySett();plSaveAll();plRenderRep();
+}
+function _plObjSectionHTML(pfx,data,placeholder){
+  var keys=Object.keys(data);
+  var rows=keys.map(function(k,i){
+    return '<div class="pl-sett-row">'
+      +'<input class="pl-sett-inp" id="'+pfx+'-key-'+i+'" value="'+esc(k)+'" placeholder="کد" style="width:100px;flex:none;direction:ltr;font-size:11px">'
+      +'<input class="pl-sett-inp" id="'+pfx+'-val-'+i+'" value="'+esc(data[k])+'" placeholder="'+esc(placeholder)+'">'
+      +(keys.length>1?'<button onclick="plRemoveSettKey(\''+pfx+'\','+i+')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:16px;line-height:1;padding:0 3px;flex-shrink:0" title="حذف">✕</button>':'')
+      +'</div>';
+  }).join('');
+  return rows
+    +'<div style="display:flex;gap:5px;margin-top:4px">'
+    +'<input id="'+pfx+'-new-key" type="text" placeholder="کد جدید..." style="width:100px;flex:none;direction:ltr;font-size:11px;padding:5px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+    +'<input id="'+pfx+'-new-val" type="text" placeholder="'+esc(placeholder)+'..." style="flex:1;font-size:12px;padding:5px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+    +'<button onclick="plAddSettKey(\''+pfx+'\')" style="padding:5px 14px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700;flex-shrink:0">+ اضافه</button>'
+    +'</div>';
+}
+function plAddSettKey(pfx){
+  _plFlushObjSection(pfx);
+  var kEl=document.getElementById(pfx+'-new-key');
+  var vEl=document.getElementById(pfx+'-new-val');
+  if(!kEl||!vEl)return;
+  var k=kEl.value.trim();var v=vEl.value.trim();
+  if(!k||!v){showToast('کد و نام نمایشی را وارد کنید');return;}
+  var obj=_plSettObj(pfx);
+  if(obj.hasOwnProperty(k)){showToast('این کد قبلاً وجود دارد');return;}
+  obj[k]=v;kEl.value='';vEl.value='';
+  plRenderSett();
+}
+function plRemoveSettKey(pfx,i){
+  _plFlushObjSection(pfx);
+  var obj=_plSettObj(pfx);var keys=Object.keys(obj);
+  if(keys.length<=1){showToast('حداقل یک ردیف باید باقی بماند');return;}
+  delete obj[keys[i]];
+  plRenderSett();
+}
+function plAddTier(){
+  _plFlushTiers();
+  var n=_plSETT.tiers.length;
+  var prevMax=n>1?_plSETT.tiers[n-2].max:100;
+  _plSETT.tiers.splice(n-1,0,{label:'سطح جدید',max:prevMax+100});
+  plRenderSett();
+}
+function plRemoveTier(i){
+  _plFlushTiers();
+  if(_plSETT.tiers.length<=1){showToast('حداقل یک سطح باید باقی بماند');return;}
+  _plSETT.tiers.splice(i,1);
+  plRenderSett();
+}
+function plRenderSett(){
+  var tg=document.getElementById('pl-sett-tiers');
+  if(tg){
+    var tiersHtml=_plSETT.tiers.map(function(t,i){
+      var isLast=i===_plSETT.tiers.length-1;
+      return '<div class="pl-sett-row">'
+        +'<input class="pl-sett-inp" id="plst-lbl-'+i+'" value="'+esc(t.label)+'" placeholder="نام سطح" style="flex:2">'
+        +(isLast?'<span class="pl-sett-lbl" style="font-size:10px">بدون سقف</span>'
+          :'<span class="pl-sett-lbl">حداکثر:</span><input class="pl-sett-inp num" id="plst-max-'+i+'" type="number" value="'+t.max+'" min="1">')
+        +(i>0?'<button onclick="plRemoveTier('+i+')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:16px;line-height:1;padding:0 3px;flex-shrink:0" title="حذف">✕</button>':'<span style="width:22px;flex-shrink:0"></span>')
+        +'</div>';
+    }).join('');
+    tg.innerHTML=tiersHtml
+      +'<button onclick="plAddTier()" style="margin-top:4px;padding:5px 14px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700">+ افزودن سطح</button>';
+  }
+  var pg=document.getElementById('pl-sett-pay');
+  if(pg)pg.innerHTML=_plObjSectionHTML('plsp',_plSETT.payLabels,'نام نمایشی');
+  var cg=document.getElementById('pl-sett-centers');
+  if(cg)cg.innerHTML=_plObjSectionHTML('plsc',_plSETT.centers,'نام مرکز');
+  var clg=document.getElementById('pl-sett-commlabels');
+  if(clg)clg.innerHTML=_plObjSectionHTML('plscl',_plSETT.commLabels,'برچسب پورسانت');
+  var cng=document.getElementById('pl-sett-commnames');
+  if(cng)cng.innerHTML=_plObjSectionHTML('plscn',_plSETT.commNames,'نام دسته');
+}
+function plSaveSett(){
+  _plFlushTiers();
+  ['plsp','plsc','plscl','plscn'].forEach(_plFlushObjSection);
+  plApplySett();plSaveAll();plRenderRep();plRenderSett();
   var s=document.getElementById('pl-sett-status');
   if(s){s.textContent='✅ تنظیمات با موفقیت ذخیره شد';s.className='pl-status ok';setTimeout(function(){s.className='pl-status';},3000);}
 }
