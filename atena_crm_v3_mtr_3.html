@@ -2051,7 +2051,7 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
       }).catch(function(){});
     }
   }
-  DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);var _cFields=['contactName','contactTitle','phones','address'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contactName:_ce.contactName||'',contactTitle:_ce.contactTitle||'',      phones:_ce.phones||[],address:_ce.address||''})  }).catch(function(){});}}
+  DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);var _cFields=['contactName','contactTitle','phones','address','contacts'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contacts:_ce.contacts||[],address:_ce.address||''})  }).catch(function(){});}}
 function rTags(type,id){return DB.rTags[recK(type,id)]||[];}
 function tagById(id){return(DB.tags||[]).find(function(t){return t.id===id;});}
 function undoEdit(){
@@ -3252,7 +3252,7 @@ function renderProvTable(){
         +(function(){var _mi=typeof MTR_BY_CENTER!=='undefined'?MTR_BY_CENTER[r.id]:null;if(!_mi||!_mi.length)return '';var _ov=_mi.filter(function(x){return x.od>45;});var _warn=_mi.filter(function(x){return x.od>20&&x.od<=45;});var _col=_ov.length?'#dc2626':_warn.length?'#d97706':'#0ea5e9';return '<span title="مطالبات باز" style="background:'+_col+';color:var(--text-primary);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px;cursor:default">💰 '+_mi.length+'</span>';})()
         +'<button class="ctr-link" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'+esc(r.name)+'</button>'
         +phoneHtml
-        +(e.phones&&e.phones.length||e.address||e.contactName?'<button onclick="event.stopPropagation();showContactPopup(event,\''+rtype+'\',\''+r.id+'\')" title="اطلاعات تماس" style="background:none;border:none;cursor:pointer;font-size:10px;padding:0 2px;color:#0369a1;vertical-align:middle">📋</button>':'')
+        +(e.phones&&e.phones.length||e.address||e.contactName||(e.contacts&&e.contacts.length)?'<button onclick="event.stopPropagation();showContactPopup(event,\''+rtype+'\',\''+r.id+'\')" title="اطلاعات تماس" style="background:none;border:none;cursor:pointer;font-size:10px;padding:0 2px;color:#0369a1;vertical-align:middle">📋</button>':'')
         +renderTagCell(rtype,r.id)+'</td>'
       +'<td><select class="pot-btn pot-'+pot+'" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'potential\',parseInt(this.value));this.className=\'pot-btn pot-\'+this.value">'
         +[1,2,3,4].map(function(v){return'<option value="'+v+'"'+(pot==v?' selected':'')+'>'+v+'</option>';}).join('')+'</select></td>'
@@ -3715,14 +3715,18 @@ function showContactPopup(ev, rtype, id) {
   var popup = document.getElementById('centerContactPopup');
   var nameEl = document.getElementById('ccp-name');
   var bodyEl = document.getElementById('ccp-body');
-  var nameTxt = (e.contactName||'')+( e.contactTitle ? ' ('+e.contactTitle+')' : '' );
-  if(nameEl)nameEl.textContent = nameTxt || 'اطلاعات تماس';
+  var contacts = _getContacts(rtype, id);
+  if(nameEl)nameEl.textContent = (contacts.length===1&&contacts[0].name)?contacts[0].name:(contacts.length>0?contacts.length+' مخاطب':'اطلاعات تماس');
   var html = '';
-  if (e.phones && e.phones.length) {
-    e.phones.forEach(function(p) {
-      if (p) html += '<div class="contact-popup-row"><a href="tel:'+esc(p)+'" onclick="event.stopPropagation()" style="color:#0369a1;text-decoration:none;direction:ltr;display:block">📞 '+esc(p)+'</a></div>';
-    });
-  }
+  contacts.forEach(function(c, ci) {
+    if(c.name||c.title||(c.phones&&c.phones.length)){
+      if(contacts.length>1) html += '<div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-top:'+(ci>0?'8':'0')+'px;margin-bottom:3px">'+(c.name||'مخاطب '+(ci+1))+(c.title?' — '+c.title:'')+'</div>';
+      else if(c.name||c.title) html += '<div class="contact-popup-row" style="font-weight:600;font-size:12px">'+(c.name||'')+(c.title?' ('+c.title+')':'')+'</div>';
+      (c.phones||[]).forEach(function(p){
+        if(p) html += '<div class="contact-popup-row"><a href="tel:'+esc(p)+'" onclick="event.stopPropagation()" style="color:#0369a1;text-decoration:none;direction:ltr;display:block">📞 '+esc(p)+'</a></div>';
+      });
+    }
+  });
   if (e.address) html += '<div class="contact-popup-row" style="margin-top:5px;color:var(--text-secondary)">📍 '+esc(e.address)+'</div>';
   if(bodyEl)bodyEl.innerHTML = html || '<span style="color:var(--text-muted);font-size:11px">اطلاعاتی ثبت نشده</span>';
   var rect = ev.target.getBoundingClientRect();
@@ -4311,33 +4315,13 @@ function openCenterModal(rtype,id){
     +'</div>'
         // ── بخش اطلاعات تماس ──
     +'<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;margin-top:6px;border:1px solid var(--border)">'
-    +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:10px;display:flex;align-items:center;gap:5px">📞 اطلاعات تماس</div>'
-    // مخاطب
-    +'<div class="m-2col" style="margin-bottom:8px">'
-    +'<div><label style="font-size:10px">نام مخاطب</label>'
-    +'<input type="text" value="'+esc(e.contactName||'')+'" placeholder="نام مخاطب..." style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" '
-    +'onchange="setE(\''+rtype+'\',\''+r.id+'\',\'contactName\',this.value)"></div>'
-    +'<div><label style="font-size:10px">سمت</label>'
-    +'<input type="text" value="'+esc(e.contactTitle||'')+'" placeholder="مثلاً: مدیر خرید..." style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" '
-    +'onchange="setE(\''+rtype+'\',\''+r.id+'\',\'contactTitle\',this.value)"></div>'
+    +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">'
+    +'<span>📞 اطلاعات تماس</span>'
+    +'<button onclick="addContact(\''+rtype+'\',\''+r.id+'\',\''+id+'\')" style="padding:3px 10px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:11px;font-family:inherit;cursor:pointer;font-weight:700">+ افزودن مخاطب</button>'
     +'</div>'
-    // شماره‌های تماس
-    +'<label style="font-size:10px">شماره‌های تماس</label>'
-    +'<div id="phoneArea_'+id+'" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">'
-    +(e.phones&&e.phones.length?e.phones.map(function(ph,pi){
-      return'<div style="display:flex;gap:5px;align-items:center">'
-        +'<a href="tel:'+esc(ph)+'" style="font-size:14px;text-decoration:none;flex-shrink:0" title="تماس" onclick="event.stopPropagation()">📞</a>'
-        +'<input type="text" value="'+esc(ph)+'" style="flex:1;direction:ltr;font-size:12px;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" '
-        +'onchange="updateCenterPhone(\''+rtype+'\',\''+r.id+'\','+pi+',this.value)">'
-        +'<button onclick="removeCenterPhone(\''+rtype+'\',\''+r.id+'\','+pi+')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;padding:4px 8px;font-size:11px">✕</button>'
-        +'</div>';
-    }).join(''):'')
-    +'<div style="display:flex;gap:5px">'
-    +'<input id="newPhone_'+id+'" type="text" placeholder="افزودن شماره تماس..." style="flex:1;direction:ltr;font-size:12px;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" onkeydown="if(event.key===\'Enter\')addCenterPhone(\''+rtype+'\',\''+r.id+'\')">'
-    +'<button onclick="addCenterPhone(\''+rtype+'\',\''+r.id+'\')" style="background:#0ea5e9;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:5px 12px;font-size:11px;font-family:inherit">+</button>'
-    +'</div></div>'
+    +'<div id="contactsArea_'+id+'">'+_buildContactsHTML(rtype,r.id,id)+'</div>'
     // آدرس
-    +'<label style="font-size:10px">آدرس</label>'
+    +'<label style="font-size:10px;margin-top:8px;display:block">آدرس</label>'
     +'<textarea id="maddr_'+id+'" placeholder="آدرس کامل مرکز..." rows="2" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl" '
     +'onchange="setE(\''+rtype+'\',\''+r.id+'\',\'address\',this.value)">'+esc(e.address||'')+'</textarea>'
     +'</div>'
@@ -4516,43 +4500,99 @@ function removeCenterTag(ev,rtype,id,tagId){
   }
 }
 
-// ── تلفن مرکز ──────────────────────────────────────────────────
-function _getPhones(rtype,id){var e=getE(rtype,id);return(e.phones||[]).slice();}
-function _setPhones(rtype,id,phones){setE(rtype,id,'phones',phones.filter(function(p){return p&&p.trim();}));}
-
-function addCenterPhone(rtype,id){
-  var inp=document.getElementById('newPhone_'+id);
-  if(!inp)return;
-  var ph=inp.value.trim();if(!ph)return;
-  var phones=_getPhones(rtype,id);
-  if(phones.indexOf(ph)>=0){showToast('این شماره قبلاً ثبت شده');return;}
-  phones.push(ph);_setPhones(rtype,id,phones);inp.value='';
-  _refreshPhoneArea(rtype,id);
+// ── Multi-contact helpers ─────────────────────────────────────────────────
+function _getContacts(rtype,id){
+  var e=getE(rtype,id);
+  if(e.contacts&&e.contacts.length)return e.contacts.map(function(c){return{name:c.name||'',title:c.title||'',phones:(c.phones||[]).slice()};});
+  if(e.contactName||e.contactTitle||(e.phones&&e.phones.length))
+    return [{name:e.contactName||'',title:e.contactTitle||'',phones:(e.phones||[]).slice()}];
+  return [];
 }
-function removeCenterPhone(rtype,id,idx){
-  var phones=_getPhones(rtype,id);
-  phones.splice(idx,1);_setPhones(rtype,id,phones);
-  _refreshPhoneArea(rtype,id);
+function _saveContacts(rtype,id,contacts){
+  setE(rtype,id,'contacts',contacts.slice());
 }
-function updateCenterPhone(rtype,id,idx,val){
-  var phones=_getPhones(rtype,id);
-  phones[idx]=val;_setPhones(rtype,id,phones);
+function _refreshContactsArea(rtype,id,domId){
+  var area=document.getElementById('contactsArea_'+(domId||id));
+  if(area)area.innerHTML=_buildContactsHTML(rtype,id,domId||id);
 }
-function _refreshPhoneArea(rtype,id){
-  var area=document.getElementById('phoneArea_'+id);if(!area)return;
-  var phones=_getPhones(rtype,id);
-  var html=phones.map(function(ph,pi){
-    return'<div style="display:flex;gap:5px;align-items:center">'
-      +'<input type="text" value="'+esc(ph)+'" style="flex:1;direction:ltr;font-size:12px" '
-      +'onchange="updateCenterPhone(\''+rtype+'\',\''+id+'\','+pi+',this.value)">'
-      +'<button onclick="removeCenterPhone(\''+rtype+'\',\''+id+'\','+pi+')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;padding:4px 8px;font-size:11px">✕</button>'
+function _buildContactsHTML(rtype,rid,domId){
+  var contacts=_getContacts(rtype,rid);
+  if(!contacts.length)return '<div style="color:var(--text-muted);font-size:11px;padding:4px 0;text-align:center">هنوز مخاطبی اضافه نشده</div>';
+  var inp='width:100%;box-sizing:border-box;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)';
+  return contacts.map(function(c,ci){
+    var phonesHtml=(c.phones||[]).map(function(ph,pi){
+      return'<div style="display:flex;gap:5px;align-items:center;margin-bottom:3px">'
+        +'<a href="tel:'+esc(ph)+'" style="font-size:13px;text-decoration:none;flex-shrink:0" title="تماس" onclick="event.stopPropagation()">📞</a>'
+        +'<input type="text" value="'+esc(ph)+'" style="flex:1;direction:ltr;font-size:12px;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" '
+        +'onchange="updateContactPhone(\''+rtype+'\',\''+rid+'\','+ci+','+pi+',this.value)">'
+        +'<button onclick="removeContactPhone(\''+rtype+'\',\''+rid+'\','+ci+','+pi+',\''+domId+'\'" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;padding:3px 7px;font-size:11px;flex-shrink:0">✕</button>'
+        +'</div>';
+    }).join('');
+    return'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--text-secondary)">مخاطب '+(ci+1)+'</span>'
+      +'<button onclick="removeContact(\''+rtype+'\',\''+rid+'\','+ci+',\''+domId+'\'" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:11px;padding:0 2px" title="حذف مخاطب">🗑 حذف</button>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
+      +'<div><label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:2px">نام</label>'
+      +'<input type="text" value="'+esc(c.name)+'" placeholder="نام مخاطب..." style="'+inp+'" '
+      +'onchange="updateContactField(\''+rtype+'\',\''+rid+'\','+ci+',\'name\',this.value)"></div>'
+      +'<div><label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:2px">سمت</label>'
+      +'<input type="text" value="'+esc(c.title)+'" placeholder="مثلاً: مدیر خرید..." style="'+inp+'" '
+      +'onchange="updateContactField(\''+rtype+'\',\''+rid+'\','+ci+',\'title\',this.value)"></div>'
+      +'</div>'
+      +'<label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:4px">شماره‌های تماس</label>'
+      +phonesHtml
+      +'<div style="display:flex;gap:5px;margin-top:3px">'
+      +'<input id="newPhone_'+domId+'_'+ci+'" type="text" placeholder="شماره جدید..." style="flex:1;direction:ltr;font-size:12px;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" '
+      +'onkeydown="if(event.key===\'Enter\')addContactPhone(\''+rtype+'\',\''+rid+'\','+ci+',\''+domId+'\')">'  
+      +'<button onclick="addContactPhone(\''+rtype+'\',\''+rid+'\','+ci+',\''+domId+'\'" style="background:#0ea5e9;color:#fff;border:none;border-radius:5px;cursor:pointer;padding:4px 10px;font-size:11px;font-family:inherit;flex-shrink:0">+</button>'
+      +'</div>'
       +'</div>';
   }).join('');
-  html+='<div style="display:flex;gap:5px">'
-    +'<input id="newPhone_'+id+'" type="text" placeholder="افزودن شماره تماس..." style="flex:1;direction:ltr;font-size:12px" onkeydown="if(event.key===\'Enter\')addCenterPhone(\''+rtype+'\',\''+id+'\')">'
-    +'<button onclick="addCenterPhone(\''+rtype+'\',\''+id+'\')" style="background:#0ea5e9;color:var(--text-primary);border:none;border-radius:5px;cursor:pointer;padding:4px 10px;font-size:11px;font-family:inherit">+</button>'
-    +'</div>';
-  area.innerHTML=html;
+}
+function addContact(rtype,id,domId){
+  var contacts=_getContacts(rtype,id);
+  contacts.push({name:'',title:'',phones:[]});
+  _saveContacts(rtype,id,contacts);
+  _refreshContactsArea(rtype,id,domId||id);
+}
+function removeContact(rtype,id,ci,domId){
+  var contacts=_getContacts(rtype,id);
+  contacts.splice(ci,1);
+  _saveContacts(rtype,id,contacts);
+  _refreshContactsArea(rtype,id,domId||id);
+}
+function updateContactField(rtype,id,ci,field,val){
+  var contacts=_getContacts(rtype,id);
+  if(!contacts[ci])return;
+  contacts[ci][field]=val;
+  _saveContacts(rtype,id,contacts);
+}
+function addContactPhone(rtype,id,ci,domId){
+  var inp=document.getElementById('newPhone_'+(domId||id)+'_'+ci);
+  if(!inp)return;
+  var ph=inp.value.trim();if(!ph)return;
+  var contacts=_getContacts(rtype,id);
+  if(!contacts[ci])return;
+  if((contacts[ci].phones||[]).indexOf(ph)>=0){showToast('این شماره قبلاً ثبت شده');return;}
+  contacts[ci].phones.push(ph);
+  _saveContacts(rtype,id,contacts);
+  inp.value='';
+  _refreshContactsArea(rtype,id,domId||id);
+}
+function removeContactPhone(rtype,id,ci,pi,domId){
+  var contacts=_getContacts(rtype,id);
+  if(!contacts[ci])return;
+  contacts[ci].phones.splice(pi,1);
+  _saveContacts(rtype,id,contacts);
+  _refreshContactsArea(rtype,id,domId||id);
+}
+function updateContactPhone(rtype,id,ci,pi,val){
+  var contacts=_getContacts(rtype,id);
+  if(!contacts[ci])return;
+  contacts[ci].phones[pi]=val;
+  _saveContacts(rtype,id,contacts);
 }
 
 // ════════════════════════ NOTES ════════════════════════
