@@ -1031,6 +1031,7 @@ tr.row-contracted td{background:#f0fdf4!important}
   <button class="tab-btn" id="tab_checklist" onclick="switchTab('checklist')">✅ چک‌لیست روزانه</button>
   <button class="tab-btn" id="tab_activity" onclick="switchTab('activity')">📜 فعالیت‌ها</button>
   <button class="tab-btn" id="tab_changelog" onclick="switchTab('changelog')" style="display:none;color:#7c3aed;font-weight:700">🗃 لاگ تغییرات</button>
+  <button class="tab-btn" id="tab_tasks" onclick="switchTab('tasks')" style="color:#7c3aed;font-weight:700">📌 وظایف</button>
   <button class="tab-btn" id="tab_kpi" onclick="switchTab('kpi')" style="color:#f59e0b">📊 KPI</button>
   <button class="tab-btn" id="tab_manager" onclick="switchTab('manager')" style="color:#8b5cf6">📊 بررسی مدیر</button>
   <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" style="color:#0ea5e9;font-weight:700"><span id="mtrBadge"></span>💰 مطالبات</button>
@@ -1223,6 +1224,7 @@ tr.row-contracted td{background:#f0fdf4!important}
 <div id="actPanel" style="display:none"></div>
 
 <!-- CHANGELOG PANEL -->
+<div id="tasksPanel" style="display:none;max-width:900px;margin:0 auto"></div>
 <div id="changelogPanel" style="display:none;padding:14px 16px;max-width:1200px;margin:0 auto"></div>
 
 <!-- MANAGER KPI PANEL -->
@@ -1318,7 +1320,7 @@ var _redoStack=[];
 var MAX_UNDO=50;
 var _undoSuppressed=false;
 var _actPage=0;
-var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[]};
+var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
 // ── Login/Auth helpers ────────────────────────────────────────
@@ -2235,6 +2237,7 @@ function switchTab(tab){
   document.getElementById('tableArea').style.display=(tab==='provinces')?'':'none';
   document.getElementById('wpPanel').style.display=(tab==='weekplan')?'':'none';
   var _clp=document.getElementById('changelogPanel');if(_clp)_clp.style.display=(tab==='changelog')?'':'none';
+  var _tp=document.getElementById('tasksPanel');if(_tp)_tp.style.display=(tab==='tasks')?'':'none';
   document.getElementById('calPanel').style.display=(tab==='calendar')?'':'none';
   document.getElementById('ckPanel').style.display=(tab==='checklist')?'':'none';
   document.getElementById('actPanel').style.display=(tab==='activity')?'':'none';
@@ -2268,10 +2271,12 @@ function switchTab(tab){
   }
   else if(tab==='weekplan'){var _dmb=document.getElementById('wpDailyMonBtn');if(_dmb)_dmb.style.display=_isManager()?'':'none';renderWeekPlan();}
   var _clBtn=document.getElementById('tab_changelog');if(_clBtn)_clBtn.style.display=_isManager()?'':'none';
+  var _tBtn=document.getElementById('tab_tasks');if(_tBtn)_tBtn.style.display='';
   else if(tab==='calendar')renderCalendar();
   else if(tab==='checklist')renderChecklist();
   else if(tab==='activity'){_actPage=0;renderActivity();}
   else if(tab==='changelog')renderChangelog();
+  else if(tab==='tasks')renderTasksPanel();
   else if(tab==='manager')renderManagerPanel();
   else if(tab==='kpi')renderKPIPanel();
 }
@@ -4378,27 +4383,68 @@ document.addEventListener('click', function(ev) {
   if (popup && popup.classList.contains('show') && !popup.contains(ev.target)) hideContactPopup();
 });
 function openCenterAudit(centerKey, centerName) {
-  fetch('/api/audit?key='+encodeURIComponent(centerKey)+'&limit=30')
-    .then(function(r){return r.json();})
-    .then(function(rows){
-      if(!rows.length){openModal('auditModal','📋 تاریخچه — '+esc(centerName),'<div style="text-align:center;padding:30px;color:var(--text-muted)">هیچ تغییری ثبت نشده</div>','<button class="btn-secondary" onclick="closeModal(\'auditModal\')">بستن</button>');return;}
-      var FIELD_LABELS={status:'وضعیت',owner:'مسئول',lead:'سرنخ',potential:'پتانسیل',followupDate:'تاریخ پیگیری'};
-      var body='<div style="display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow-y:auto;padding:4px">'
-        +rows.map(function(r){
-          var dt=new Date(r.changed_at);
-          var dStr=dt.toLocaleDateString('fa-IR')+'  '+p2(dt.getHours())+':'+p2(dt.getMinutes());
-          var fLabel=FIELD_LABELS[r.field]||r.field;
-          return '<div style="background:var(--bg-raised);border-radius:6px;padding:8px 10px;font-size:11px">'
-            +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-            +'<span style="font-weight:700;color:var(--text-primary)">'+esc(fLabel)+'</span>'
-            +'<span style="color:var(--text-muted)">'+esc(dStr)+'</span></div>'
-            +'<div style="color:var(--text-muted)">'+esc(r.old_value||'—')+' ← <span style="color:#0ea5e9;font-weight:600">'+esc(r.new_value||'—')+'</span></div>'
-            +'<div style="font-size:10px;color:var(--text-muted);margin-top:2px">توسط: '+esc(r.changed_by)+'</div>'
-            +'</div>';
-        }).join('')
+  var rtype=centerKey.split('_')[0], rid=centerKey.split('_')[1];
+  var events=[];
+  // changeLog
+  (DB.changeLog||[]).filter(function(h){return h.rkey===centerKey;}).forEach(function(h){
+    var d=new Date(h.at);
+    var fmap={status:'وضعیت',owner:'مسئول',lead:'سرنخ',potential:'پتانسیل',followupDate:'تاریخ پیگیری',nameOverride:'نام',address:'آدرس','type':'نوع'};
+    events.push({ts:d.getTime(),type:'change',icon:'✏️',color:'#8b5cf6',
+      title:(fmap[h.field]||h.field)+' تغییر کرد',
+      detail:'مقدار: '+String(h.val||'—').substring(0,40),
+      by:h.by,at:d,dateStr:''});
+  });
+  // notes
+  (DB.notes[rtype+'_'+rid]||[]).forEach(function(n){
+    var dp=n.date?n.date.split('/').map(Number):null;
+    var g=dp?j2g(dp[0],dp[1],dp[2]):[2000,1,1];
+    var ts=dp?new Date(g[0],g[1]-1,g[2]).getTime():0;
+    events.push({ts:ts,type:'note',icon:'📝',color:'#0ea5e9',
+      title:'یادداشت',detail:String(n.text||'').substring(0,60),by:n.user,at:null,dateStr:n.date||''});
+  });
+  // weekEntries done
+  Object.values(DB.weekEntries||{}).filter(function(we){return we.recKey===centerKey&&we.done;}).forEach(function(we){
+    var dp=we.doneDate?we.doneDate.split('/').map(Number):null;
+    var ts=dp?jMs(dp[0],dp[1],dp[2]):0;
+    var icon=we.actionType==='visit'?'🤝':'📞';
+    events.push({ts:ts,type:'done',icon:icon,color:'#22c55e',
+      title:(we.actionType==='visit'?'ویزیت انجام شد':'تماس انجام شد'),
+      detail:(we.doneResult?'نتیجه: '+we.doneResult+' ':'')+(we.doneNote||''),
+      by:we.addedBy||'',at:null,dateStr:we.doneDate||''});
+  });
+  // tasks
+  (DB.tasks||[]).filter(function(t){return t.centerKey===centerKey;}).forEach(function(t){
+    var dp=t.dueDate?t.dueDate.split('/').map(Number):null;
+    var ts=dp?jMs(dp[0],dp[1],dp[2]):0;
+    events.push({ts:ts,type:'task',icon:t.done?'✅':'📌',color:t.done?'#22c55e':'#f59e0b',
+      title:(t.done?'وظیفه انجام شد':'وظیفه')+': '+String(t.title||'').substring(0,30),
+      detail:t.note||'',by:t.owner||'',at:null,dateStr:t.dueDate||''});
+  });
+
+  events.sort(function(a,b){return b.ts-a.ts;});
+
+  var body='<div style="max-height:70vh;overflow-y:auto;padding:4px">';
+  if(!events.length){
+    body+='<div style="text-align:center;padding:30px;color:var(--text-muted)">هیچ رویدادی ثبت نشده</div>';
+  } else {
+    body+='<div style="position:relative">';
+    events.forEach(function(ev){
+      var dateStr=ev.dateStr||(ev.at?(function(){var d=ev.at,jd=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());return jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);})():'');
+      var timeStr=ev.at?(' — '+p2(ev.at.getHours())+':'+p2(ev.at.getMinutes())):'';
+      body+='<div style="position:relative;margin-bottom:10px;padding:8px 10px;background:var(--bg-raised);border-radius:8px;border-right:3px solid '+ev.color+'">'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+        +'<span style="font-size:14px">'+ev.icon+'</span>'
+        +'<span style="font-weight:700;font-size:12px;color:var(--text-primary)">'+esc(ev.title)+'</span>'
+        +'<span style="font-size:10px;color:var(--text-muted);margin-right:auto">'+esc(dateStr+timeStr)+'</span>'
+        +'</div>'
+        +(ev.detail?'<div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">'+esc(ev.detail)+'</div>':'')
+        +(ev.by?'<div style="font-size:10px;color:var(--text-muted)">توسط: '+esc((typeof USERS!=='undefined'?USERS[ev.by]||ev.by:ev.by))+'</div>':'')
         +'</div>';
-      openModal('auditModal','📋 تاریخچه — '+esc(centerName),body,'<button class="btn-secondary" onclick="closeModal(\'auditModal\')">بستن</button>');
-    }).catch(function(){showToast('⚠ خطا در بارگذاری تاریخچه');});
+    });
+    body+='</div>';
+  }
+  body+='</div>';
+  openModal('auditModal','📅 تاریخچه — '+esc(centerName),body,'<button class="btn-secondary" onclick="closeModal(\'auditModal\')">\u0628\u0633\u062a\u0646</button>',{lg:true});
 }
 
 function _updateExtraCenterProv(id,newProvId){
@@ -5691,10 +5737,18 @@ function wpMarkDoneKey(eKey){
   var td=todayStr();var tdp=td.split('/').map(Number);
   var defNext=jAddDays(tdp[0],tdp[1],tdp[2],7);
   var defNextStr=defNext[0]+'/'+(defNext[1]<10?'0'+defNext[1]:defNext[1])+'/'+(defNext[2]<10?'0'+defNext[2]:defNext[2]);
+  var _resultOpts=['موفق — قرارداد','پیشنهاد ارسال شد','نیاز به پیگیری','عدم علاقه','قابل دسترس نبود','دیگر'];
   var body='<div style="padding:6px 0">'
-    +'<div style="margin-bottom:12px;font-size:13px;color:var(--text-secondary)">مرکز: <b>'+esc(cname)+'</b></div>'
-    +'<div style="margin-bottom:10px;font-size:13px">آیا می‌خواهید تاریخ پیگیری بعدی تنظیم شود؟</div>'
-    +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">تاریخ پیگیری بعدی</label>'
+    +'<div style="margin-bottom:10px;font-size:13px;color:var(--text-secondary)">مرکز: <b>'+esc(cname)+'</b></div>'
+    +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">نتیجه</label>'
+    +'<select id="_mdk_result" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);margin-bottom:8px">'
+    +_resultOpts.map(function(o){return'<option value="'+o+'">'+o+'</option>';}).join('')
+    +'</select>'
+    +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">یادداشت / جزئیات</label>'
+    +'<textarea id="_mdk_note" rows="2" placeholder="توضیحات..." style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl;margin-bottom:8px"></textarea>'
+    +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">اقدام بعدی</label>'
+    +'<input id="_mdk_nextaction" type="text" placeholder="مثلاً: ارسال کاتالوگ، تماس با مدیر..." style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);margin-bottom:8px">'
+    +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">تاریخ پیگیری بعدی</label>'
     +'<input id="_mdk_nextdate" type="text" value="'+defNextStr+'" readonly class="fd-inp" style="cursor:pointer;width:100%;box-sizing:border-box" '
     +'onclick="openJDP(this,function(v){document.getElementById(\'_mdk_nextdate\').value=v;})">'
     +'</div>';
@@ -5712,6 +5766,9 @@ function _wpFinishDone(eKey,setNext){
   if(!DB.weekEntries[eKey])return;
   var we=DB.weekEntries[eKey];
   we.done=true;we.doneDate=todayStr();
+  we.doneResult=(document.getElementById('_mdk_result')||{}).value||'';
+  we.doneNote=(document.getElementById('_mdk_note')||{}).value||'';
+  we.doneNextAction=(document.getElementById('_mdk_nextaction')||{}).value||'';
   var rtype=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');
   var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
   var cname=we.centerName||getRecLabel(rtype+'_'+rid)||'';
@@ -6422,6 +6479,150 @@ function renderChangelog(){
     _clAutoRefreshTimer = setTimeout(function(){if(currentTab==='changelog')renderChangelog();}, 30000);
   }
 }
+
+// ════════════════════════ TASK MANAGEMENT ════════════════════════
+var _taskFilter='all'; // all | mine | overdue | done
+
+function _ensureTasks(){if(!DB.tasks)DB.tasks=[];}
+
+function renderTasksPanel(){
+  var el=document.getElementById('tasksPanel');if(!el)return;
+  _ensureTasks();
+  var today=todayStr();
+  var members=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
+  var allCenters=[];
+  getAllProvinces().forEach(function(p){
+    var rt=getProvType(p.id);
+    getProvCenters(p.id).forEach(function(c){
+      var e=getE(rt,c.id);
+      allCenters.push({rtype:rt,id:c.id,name:e.nameOverride||c.name,key:rt+'_'+c.id});
+    });
+  });
+  var tasks=DB.tasks.filter(function(t){
+    if(_taskFilter==='mine')return t.owner===currentUser;
+    if(_taskFilter==='overdue')return !t.done&&t.dueDate&&t.dueDate<today;
+    if(_taskFilter==='done')return t.done;
+    return !t.done;
+  });
+
+  var html='<div class="task-wrap">';
+  // Add task form
+  html+='<div class="task-add-form">'
+    +'<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#7c3aed">+ افزودن وظیفه جدید</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div><label style="font-size:11px;display:block;margin-bottom:3px">عنوان وظیفه</label>'
+    +'<input id="nt_title" type="text" placeholder="عنوان وظیفه..."></div>'
+    +'<div><label style="font-size:11px;display:block;margin-bottom:3px">مسئول</label>'
+    +'<select id="nt_owner"><option value="">—</option>'
+    +members.filter(function(m){return m.id!=='guest';}).map(function(m){return'<option value="'+m.id+'"'+(m.id===currentUser?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div><label style="font-size:11px;display:block;margin-bottom:3px">تاریخ سررسید</label>'
+    +'<input id="nt_due" type="text" readonly class="fd-inp" style="cursor:pointer" onclick="openJDP(this,function(v){document.getElementById(\'nt_due\').value=v;})"></div>'
+    +'<div><label style="font-size:11px;display:block;margin-bottom:3px">اولویت</label>'
+    +'<select id="nt_pri"><option value="2">معمولی</option><option value="1">بالا</option><option value="3">پایین</option></select></div>'
+    +'</div>'
+    +'<div style="margin-top:6px"><label style="font-size:11px;display:block;margin-bottom:3px">مرکز مرتبط (اختیاری)</label>'
+    +'<select id="nt_center" style=""><option value="">—</option>'
+    +allCenters.slice(0,200).map(function(c){return'<option value="'+esc(c.key)+'">'+esc(c.name)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div style="margin-top:6px"><label style="font-size:11px;display:block;margin-bottom:3px">یادداشت</label>'
+    +'<textarea id="nt_note" rows="2" placeholder="توضیحات..."></textarea></div>'
+    +'<button class="btn-primary" style="margin-top:4px" onclick="_addTask()">+ ثبت وظیفه</button>'
+    +'</div>';
+
+  // Filter buttons
+  html+='<div class="task-filters">'
+    +'<span style="font-size:12px;font-weight:700;color:var(--text-secondary)">نمایش:</span>'
+    +[['all','فعال'],['mine','وظایف من'],['overdue','سررسید گذشته'],['done','انجام شده']].map(function(f){
+      return'<button class="task-filter-btn'+(_taskFilter===f[0]?' active':'')+'" onclick="_taskFilter=\''+f[0]+'\';renderTasksPanel()">'+f[1]+'</button>';
+    }).join('')
+    +'<span style="margin-right:auto;font-size:11px;color:var(--text-muted)">'+tasks.length+' وظیفه</span>'
+    +'</div>';
+
+  if(!tasks.length){
+    html+='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">هیچ وظیفه‌ای یافت نشد</div>';
+  } else {
+    tasks.sort(function(a,b){
+      if(a.done!==b.done)return a.done?1:-1;
+      var pa=a.priority||2,pb=b.priority||2;if(pa!==pb)return pa-pb;
+      if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:1;
+      return 0;
+    });
+    tasks.forEach(function(t){
+      var overdue=!t.done&&t.dueDate&&t.dueDate<today;
+      var owner=members.find(function(m){return m.id===t.owner;});
+      var priLabel=['','بالا','معمولی','پایین'][t.priority||2]||'معمولی';
+      var priCls=['','task-pri-1','task-pri-2','task-pri-3'][t.priority||2]||'task-pri-2';
+      html+='<div class="task-item'+(t.done?' done-task':'')+'">'
+        +'<div class="task-check" onclick="_toggleTask(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'
+        +'<div class="task-body">'
+        +'<div class="task-title">'+esc(t.title||'—')+'</div>'
+        +'<div class="task-meta">'
+        +(t.dueDate?'<span style="color:'+(overdue?'#dc2626':'var(--text-muted)')+'">📅 '+t.dueDate+(overdue?' (سررسید گذشته)':'')+'</span>':'')
+        +(owner?'<span>👤 '+esc(owner.name)+'</span>':'')
+        +'<span class="task-pri '+priCls+'">'+priLabel+'</span>'
+        +(t.centerKey?'<span style="color:#0ea5e9;cursor:pointer" onclick="openCenterModal(\''+t.centerKey.split(\'_\')[0]+'\',\''+t.centerKey.split(\'_\')[1]+'\')">🏥 '+esc(_getTaskCenterName(t.centerKey))+'</span>':'')
+        +'</div>'
+        +(t.note?'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">'+esc(t.note)+'</div>':'')
+        +(t.done&&t.doneAt?'<div style="font-size:10px;color:#22c55e;margin-top:2px">✅ انجام شد: '+t.doneAt+'</div>':'')
+        +'</div>'
+        +'<button class="task-del-btn" onclick="_deleteTask(\''+t.id+'\')">🗑</button>'
+        +'</div>';
+    });
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function _getTaskCenterName(centerKey){
+  if(!centerKey)return '';
+  var parts=centerKey.split('_');
+  if(parts.length<2)return centerKey;
+  var c=getCenterById(parts[0],parts[1]);
+  if(c){var e=getE(parts[0],parts[1]);return e.nameOverride||c.name||centerKey;}
+  return centerKey;
+}
+
+function _addTask(){
+  _ensureTasks();
+  var title=(document.getElementById('nt_title')||{}).value||'';
+  if(!title.trim()){showToast('عنوان وظیفه را وارد کنید');return;}
+  var task={
+    id:Date.now()+'_'+Math.random().toString(36).slice(2,6),
+    title:title.trim(),
+    owner:(document.getElementById('nt_owner')||{}).value||currentUser,
+    dueDate:(document.getElementById('nt_due')||{}).value||'',
+    priority:parseInt((document.getElementById('nt_pri')||{}).value)||2,
+    centerKey:(document.getElementById('nt_center')||{}).value||'',
+    note:(document.getElementById('nt_note')||{}).value||'',
+    done:false,
+    doneAt:'',
+    createdBy:currentUser,
+    createdAt:new Date().toISOString()
+  };
+  DB.tasks.push(task);
+  saveDB();
+  showToast('✅ وظیفه ثبت شد');
+  renderTasksPanel();
+}
+
+function _toggleTask(tid){
+  _ensureTasks();
+  var t=DB.tasks.find(function(x){return x.id==tid;});
+  if(!t)return;
+  t.done=!t.done;
+  t.doneAt=t.done?todayStr():'';
+  saveDB();
+  renderTasksPanel();
+}
+
+function _deleteTask(tid){
+  _ensureTasks();
+  DB.tasks=DB.tasks.filter(function(x){return x.id!=tid;});
+  saveDB();
+  renderTasksPanel();
+}
+
 
 function _clGetName(rkey){
   if(!rkey) return '?';
@@ -8269,6 +8470,63 @@ function renderManagerPanel(){
   });
   html+='</tbody></table></div></div>';
 
+  // ── Pipeline Matrix (potential x status) ──────────────────
+  (function(){
+    var potLevels=[1,2,3,4];
+    var potLabels={'1':'پتانسیل ۱ (بالا)','2':'پتانسیل ۲','3':'پتانسیل ۳','4':'پتانسیل ۴ (پایین)'};
+    var potColors={'1':'#16a34a','2':'#0284c7','3':'#f59e0b','4':'#94a3b8'};
+    var matrix={};
+    potLevels.forEach(function(p){matrix[p]={};STATUS_LIST.forEach(function(s){matrix[p][s]=[];});});
+    allProvs.forEach(function(pr){
+      var rt=getProvType(pr.id);
+      getProvCenters(pr.id).forEach(function(c){
+        var e=getE(rt,c.id);
+        var pot=String(e.potential!==undefined?e.potential:(c.potential||4));
+        var st=e.status||'بدون تماس';
+        if(matrix[pot]&&matrix[pot][st]!==undefined){
+          matrix[pot][st].push({rtype:rt,id:c.id,name:e.nameOverride||c.name});
+        }
+      });
+    });
+    var stColors={'بدون تماس':'#94a3b8','تماس اولیه':'#0ea5e9','ملاقات انجام شد':'#f59e0b','پیشنهاد ارسال شد':'#0284c7','قرارداد بسته شد':'#22c55e','غیرفعال':'#dc2626'};
+    html+='<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-top:18px">'
+      +'<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">📊 ماتریس پایپ‌لاین — پتانسیل × وضعیت</div>'
+      +'<div style="overflow-x:auto;padding:12px"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+      +'<thead><tr style="background:var(--bg-raised)">'
+      +'<th style="padding:6px 10px;text-align:right;white-space:nowrap">پتانسیل</th>';
+    STATUS_LIST.forEach(function(s){
+      html+='<th style="padding:6px 8px;text-align:center;border-right:1px solid var(--border);white-space:nowrap;color:'+(stColors[s]||'#555')+'">'
+        +esc(s)+'</th>';
+    });
+    html+='<th style="padding:6px 8px;text-align:center;font-weight:700">جمع</th>'
+      +'</tr></thead><tbody>';
+    potLevels.forEach(function(p){
+      var rowTotal=0;
+      STATUS_LIST.forEach(function(s){rowTotal+=(matrix[p][s]||[]).length;});
+      html+='<tr style="border-bottom:1px solid var(--border)">'
+        +'<td style="padding:6px 10px;font-weight:700;color:'+(potColors[p]||'#555')+'">'+potLabels[p]+'</td>';
+      STATUS_LIST.forEach(function(s){
+        var cells=matrix[p][s]||[];
+        var cnt=cells.length;
+        var tooltip=cells.slice(0,5).map(function(c){return c.name;}).join('، ')+(cells.length>5?'…':'');
+        html+='<td style="text-align:center;padding:6px 8px;border-right:1px solid var(--border)">'
+          +(cnt>0?'<span title="'+esc(tooltip)+'" style="display:inline-block;min-width:24px;padding:2px 6px;border-radius:10px;background:'+(stColors[s]||'#e2e8f0')+'22;color:'+(stColors[s]||'#555')+';font-weight:700;cursor:default">'+cnt+'</span>':'<span style="color:var(--text-muted)">—</span>')
+          +'</td>';
+      });
+      html+='<td style="text-align:center;padding:6px 8px;font-weight:700">'+rowTotal+'</td>'
+        +'</tr>';
+    });
+    // totals row
+    html+='<tr style="background:var(--bg-raised);font-weight:700"><td style="padding:6px 10px">جمع کل</td>';
+    var grandTotal=0;
+    STATUS_LIST.forEach(function(s){
+      var colTotal=potLevels.reduce(function(sum,p){return sum+(matrix[p][s]||[]).length;},0);
+      grandTotal+=colTotal;
+      html+='<td style="text-align:center;padding:6px 8px;border-right:1px solid var(--border)">'+colTotal+'</td>';
+    });
+    html+='<td style="text-align:center;padding:6px 8px">'+grandTotal+'</td></tr>';
+    html+='</tbody></table></div></div>';
+  })();
   // Refresh button
   html+='<div style="text-align:center;margin-top:10px">'
     +'<button onclick="renderManagerPanel()" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:6px 16px;cursor:pointer;font-size:12px;font-family:inherit">🔄 بروزرسانی</button>'
@@ -8465,6 +8723,7 @@ async function init(){
     }catch(e){}
     switchTab(currentTab);
     var _clbtn=document.getElementById('tab_changelog');if(_clbtn)_clbtn.style.display=_isManager()?'':'none';
+    var _tbtn=document.getElementById('tab_tasks');if(_tbtn)_tbtn.style.display='';
     // بعد از اتمام init، history navigation فعال می‌شود
     _navReady=true;
     try{history.replaceState({v:1,tab:currentTab,provId:_currentProvId||null},'',window.location.pathname+window.location.search);}catch(e){}
@@ -9043,7 +9302,28 @@ function exportKPIReport() {
     '<style>body{font-family:Vazirmatn,Tahoma,sans-serif;padding:20px;direction:rtl;background:#fff;color:#1e293b}' +
     'table{width:100%;border-collapse:collapse;margin:16px 0}th,td{border:1px solid #e2e8f0;padding:10px 14px;text-align:right}' +
     'th{background:#f1f5f9;font-weight:700}.score-big{font-size:48px;font-weight:900;text-align:center;padding:20px}' +
-    '.green{color:#16a34a}.red{color:#dc2626}.orange{color:#f59e0b}h1{font-size:20px;border-bottom:2px solid #e2e8f0;padding-bottom:10px}</style></head><body>';
+    '.green{color:#16a34a}.red{color:#dc2626}.orange{color:#f59e0b}h1{font-size:20px;border-bottom:2px solid #e2e8f0;padding-bottom:10px}
+/* ── Task Management ── */
+.task-wrap{padding:14px}
+.task-filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.task-filter-btn{padding:5px 12px;border-radius:16px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);cursor:pointer;font-size:11px;font-family:inherit}
+.task-filter-btn.active{background:#7c3aed;color:#fff;border-color:#7c3aed}
+.task-item{background:var(--bg-card);border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);display:flex;gap:10px;align-items:flex-start}
+.task-item.done-task{opacity:.6}
+.task-check{width:18px;height:18px;border-radius:50%;border:2px solid #7c3aed;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;background:transparent}
+.task-item.done-task .task-check{background:#22c55e;border-color:#22c55e;color:#fff}
+.task-body{flex:1;min-width:0}
+.task-title{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:3px}
+.task-item.done-task .task-title{text-decoration:line-through;color:var(--text-muted)}
+.task-meta{font-size:10px;color:var(--text-muted);display:flex;gap:8px;flex-wrap:wrap}
+.task-pri{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700}
+.task-pri-1{background:#fef3c7;color:#92400e}
+.task-pri-2{background:#e0f2fe;color:#075985}
+.task-pri-3{background:#f1f5f9;color:#64748b}
+.task-del-btn{padding:3px 8px;border:none;border-radius:4px;background:#fee2e2;color:#dc2626;cursor:pointer;font-size:11px;font-family:inherit;flex-shrink:0}
+.task-add-form{background:var(--bg-raised);border-radius:8px;padding:12px;margin-bottom:14px;border:1px solid var(--border)}
+.task-add-form input,.task-add-form select,.task-add-form textarea{width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);margin-bottom:6px}
+</style></head><body>';
   html += '<h1>📊 گزارش عملکرد KPI — ' + (USERS[_kpiUser]||_kpiUser) + ' — ' + jMonthLabel(_kpiMonth) + '</h1>';
   var ov = data.overall;
   var oc = ov>=80?'green':ov>=50?'orange':'red';
