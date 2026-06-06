@@ -1231,9 +1231,10 @@ function saveDBSync(){clearTimeout(_saveDebounceTimer);_saveDBNow();}
 function exportDBJson(){
   var data=JSON.stringify({version:2,exportedAt:new Date().toISOString(),db:DB},null,2);
   var blob=new Blob([data],{type:'application/json'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  var a=document.createElement('a');var _burl=URL.createObjectURL(blob);a.href=_burl;
   a.download='atena_crm_backup_'+todayStr().replace(/\//g,'-')+'.json';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(_burl);},60000);
   showToast('✅ پشتیبان دانلود شد');
 }
 function importDBJson(input){
@@ -5821,6 +5822,18 @@ function gSearchQuery(q){
         res.push({icon:'🏢',title:esc(name),sub:esc(e.status||c.province_name||''),action:function(){closeGSearch();openCenterModal('pc',cid);}});
       }
     });});
+    // DB.extra (manually added centers)
+    var _mainCIds=new Set((CENTERS||[]).map(function(c){return String(c.id);}));
+    (DB.extra||[]).forEach(function(c){
+      if(res.length>=12)return;
+      var ertype=c.province_id==='tehran'?'center':'pc';
+      if(ertype==='center'&&_mainCIds.has(String(c.id)))return;
+      var name=c.name||c.center_name||'';
+      if(fNorm(name).indexOf(qn)!==-1){
+        var e=getE(ertype,c.id)||{};var cid=c.id;var crt=ertype;
+        res.push({icon:'➕',title:esc(name),sub:esc(e.status||c.province_name||'مرکز اضافه‌شده'),action:function(){closeGSearch();openCenterModal(crt,cid);}});
+      }
+    });
     (DB.events||[]).forEach(function(ev){
       if(!ev||!ev.title)return;
       if(fNorm(ev.title).indexOf(qn)!==-1){
@@ -5891,6 +5904,16 @@ function qsSearch(q){
         results.push({type:'مرکز استانی',icon:'🏢',name:c.name,sub:e.status||'بدون تماس',action:"switchTab('provinces');closeQS()"});
       }
     });
+  });
+  // مراکز اضافه‌شده (DB.extra)
+  var _qsMainIds=new Set((CENTERS||[]).map(function(c){return String(c.id);}));
+  (DB.extra||[]).forEach(function(c){
+    var ertype=c.province_id==='tehran'?'center':'pc';
+    if(ertype==='center'&&_qsMainIds.has(String(c.id)))return;
+    if(fNorm(c.name||'').indexOf(qn)>=0){
+      var e=getE(ertype,c.id);
+      results.push({type:'مرکز اضافه‌شده',icon:'➕',name:c.name,sub:e.status||'بدون تماس',action:"switchTab('provinces');closeQS()"});
+    }
   });
   // برنامه هفته
   Object.keys(DB.weekEntries||{}).forEach(function(k){
