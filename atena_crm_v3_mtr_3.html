@@ -5444,6 +5444,7 @@ function _wpFinishDone(eKey,setNext){
   var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
   var cname=we.centerName||getRecLabel(rtype+'_'+rid)||'';
   var actionType=we.actionType||'call';
+  var _foundWeekLabel='';
   if(setNext){
     var nextDate=(document.getElementById('_mdk_nextdate')||{}).value||'';
     if(nextDate&&rtype&&rid){
@@ -5465,6 +5466,11 @@ function _wpFinishDone(eKey,setNext){
         if(foundWeek){
           var newKey=wpEntryKey(foundWeek.id,rtype,rid);
           DB.weekEntries[newKey]={scheduledDate:nextDate,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:rtype+'_'+rid,centerName:cname,actionType:actionType,addedBy:currentUser};
+          // navigate week plan to destination week so entry is visible
+          _wpYear=foundWeek.jYear;
+          var _sel=document.getElementById('wpSel');
+          if(_sel){wpBuildSelect();_sel.value=foundWeek.id;}
+          _foundWeekLabel=foundWeek.label;
         }
       }
     }
@@ -5472,7 +5478,7 @@ function _wpFinishDone(eKey,setNext){
   closeModal('wpDoneModal');
   saveDBSync();renderWeekPlan();renderDashboard();
   if(currentTab==='provinces'&&_currentProvId)setTimeout(renderTable,100);
-  showToast('✅ انجام شد!',2000);
+  showToast(_foundWeekLabel?'✅ انجام شد — پیگیری در '+_foundWeekLabel:'✅ انجام شد!',3000);
   if(currentTab==='kpi')setTimeout(renderKPIPanel,300);
 }
 var _wpDragging = null;
