@@ -747,6 +747,11 @@ input:checked+.pl-toggle-sl:before{transform:translateX(18px)}
 .pl-sett-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:2px}
 .pl-sett-desc{font-size:11px;color:var(--text-muted);margin-bottom:12px}
 .pl-sett-grid{display:flex;flex-direction:column;gap:6px}
+.pl-cell-edit{cursor:pointer;border-radius:4px;transition:background .12s}
+.pl-cell-edit:hover{background:rgba(14,165,233,.12)}
+.pl-cell-inp{width:110px;padding:3px 6px;border:2px solid var(--brand);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);text-align:center;direction:ltr}
+.pl-cell-inp.wide{width:160px}
+[data-theme="dark"] .pl-cell-edit:hover{background:rgba(56,189,248,.15)}
 .pl-sett-row{display:flex;align-items:center;gap:7px;background:var(--bg-raised);border-radius:7px;padding:7px 10px;border:1px solid var(--border)}
 .pl-sett-key{font-size:10px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:5px;padding:2px 7px;min-width:55px;text-align:center;flex-shrink:0;direction:ltr}
 .pl-sett-inp{flex:1;padding:5px 9px;border:2px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);transition:border-color .2s}
@@ -4022,21 +4027,59 @@ function plRenderExpert(){
 function plSetExpQty(i,v){_plExpQty[i]=Math.max(0,parseInt(v)||0);plRenderExpert();}
 
 // ── MANAGEMENT ────────────────────────────────────────────────────────────────
+function _plCellEdit(i,field,isNum){
+  var id='plcell-'+i+'-'+field;
+  var sz=isNum===false?'wide':'';
+  return '<td id="'+id+'" class="pl-cell-edit tc" onclick="plEditCell('+i+',\''+field+'\','+(!isNum)+')">'+
+    (field==='buyPrice'?'<span style="color:#f59e0b;font-weight:700">'+plFmt(_plP[i].buyPrice)+'</span>':
+     field==='name'?'<span class="pl-pname" style="font-size:12px">'+esc(_plP[i].name)+'</span>':
+     (_plP[i].channels[field]?plFmt(_plP[i].channels[field]):'<span style="color:var(--text-muted)">—</span>'))+'</td>';
+}
 function plRenderOverview(){
   var tbody=document.getElementById('pl-overview-tbody');if(!tbody)return;
+  var CHANS=['hospital','faradis','daramazon','tamin','modd','noor','barakat','bahman','salajeghe','doctor'];
   tbody.innerHTML=_plP.map(function(p,i){
     return '<tr>'
       +'<td class="pl-rnum">'+plToFa(i+1)+'</td>'
-      +'<td class="pl-pname">'+esc(p.name)+'</td>'
-      +'<td class="tr" style="color:#f59e0b;font-weight:700">'+plFmt(p.buyPrice)+'</td>'
-      +'<td class="tr">'+plFmt(p.channels.hospital)+'</td>'
+      +_plCellEdit(i,'name',false)
+      +_plCellEdit(i,'buyPrice',true)
+      +_plCellEdit(i,'hospital',true)
       +'<td class="tc"><span class="pl-margin-chip '+plMarginCls(p.buyPrice,p.channels.hospital)+'">'+plMarginPct(p.buyPrice,p.channels.hospital)+'</span></td>'
-      +'<td class="tr">'+plFmt(p.channels.faradis)+'</td>'
-      +'<td class="tr">'+plFmt(p.channels.tamin)+'</td>'
-      +'<td class="tr">'+plFmt(p.channels.modd||0)+'</td>'
-      +'<td class="tr">'+plFmt(p.channels.doctor)+'</td>'
+      +_plCellEdit(i,'faradis',true)
+      +_plCellEdit(i,'daramazon',true)
+      +_plCellEdit(i,'tamin',true)
+      +_plCellEdit(i,'modd',true)
+      +_plCellEdit(i,'noor',true)
+      +_plCellEdit(i,'barakat',true)
+      +_plCellEdit(i,'bahman',true)
+      +_plCellEdit(i,'salajeghe',true)
+      +_plCellEdit(i,'doctor',true)
       +'</tr>';
   }).join('');
+}
+function plEditCell(prodIdx,field,isText){
+  var id='plcell-'+prodIdx+'-'+field;
+  var td=document.getElementById(id);if(!td)return;
+  var cur=field==='name'?_plP[prodIdx].name:(field==='buyPrice'?_plP[prodIdx].buyPrice:(_plP[prodIdx].channels[field]||''));
+  var inp='<input class="pl-cell-inp'+(isText?' wide':'')+'" type="'+(isText?'text':'number')+'" value="'+esc(String(cur))+'" min="0" '
+    +'onblur="plSaveCell('+prodIdx+',''+field+'',this.value)" '
+    +'onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){event.preventDefault();plRenderOverview();}">';
+  td.innerHTML=inp;
+  var el=td.querySelector('input');if(el){el.focus();el.select();}
+}
+function plSaveCell(prodIdx,field,val){
+  var p=_plP[prodIdx];
+  if(field==='name'){
+    var nm=val.trim();if(!nm)return plRenderOverview();
+    p.name=nm;
+  } else {
+    var n=Math.round(parseFloat(val));
+    if(isNaN(n)||n<0)return plRenderOverview();
+    if(field==='buyPrice')p.buyPrice=n;
+    else p.channels[field]=(n||null);
+  }
+  plSaveAll();plRenderOverview();plRenderRep();
+  showToast('✅ ذخیره شد',1200);
 }
 function plRenderBuyInputs(){
   var grid=document.getElementById('pl-buy-grid');if(!grid)return;
@@ -12017,16 +12060,23 @@ function _centerNameSimilar(a,b){
     <div id="pl-m-overview">
       <div class="pl-card">
         <div class="pl-card-head"><span>جدول قیمت‌ها و مارژین</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;padding:0 2px">کلیک روی هر قیمت برای ویرایش مستقیم</div>
         <div class="pl-tbl-wrap">
           <table class="pl-tbl">
             <thead><tr>
-              <th>#</th><th>محصول</th>
-              <th class="tc">قیمت خرید</th>
+              <th style="width:28px">#</th>
+              <th>محصول</th>
+              <th class="tc">خرید</th>
               <th class="tc">بیمارستان</th>
-              <th class="tc">مارژین%</th>
+              <th class="tc" style="width:52px">مارژین</th>
               <th class="tc">فرادیس</th>
+              <th class="tc">درمازون</th>
               <th class="tc">تامین/نور</th>
               <th class="tc">مدد</th>
+              <th class="tc">نور/هاشمی</th>
+              <th class="tc">برکت</th>
+              <th class="tc">بهمن</th>
+              <th class="tc">سلاجقه</th>
               <th class="tc">پزشک</th>
             </tr></thead>
             <tbody id="pl-overview-tbody"></tbody>
