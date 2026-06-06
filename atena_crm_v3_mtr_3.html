@@ -758,6 +758,15 @@ input:checked+.pl-toggle-sl:before{transform:translateX(18px)}
 .pl-status.err{display:block;background:#fee2e2;color:#991b1b}
 [data-theme="dark"] .pl-status.ok{background:#14532d;color:#86efac}
 [data-theme="dark"] .pl-status.err{background:#450a0a;color:#fca5a5}
+.pl-lock{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center}
+.pl-lock-icon{font-size:56px;margin-bottom:12px}
+.pl-lock-title{font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:6px}
+.pl-lock-sub{font-size:13px;color:var(--text-secondary);margin-bottom:20px}
+.pl-pw-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.pl-pw-inp{padding:9px 14px;border-radius:8px;border:2px solid var(--border-input);background:var(--bg-input);color:var(--text-primary);font-family:inherit;font-size:14px;width:180px;text-align:center;letter-spacing:2px}
+.pl-pw-inp:focus{outline:none;border-color:var(--brand)}
+.pl-pw-err{color:#dc2626;font-size:12px;margin-top:8px;display:none;font-weight:600}
+[data-theme="dark"] .pl-pw-err{color:#fca5a5}
 .pl-diff-pos{color:#16a34a;font-weight:700}
 .pl-diff-neg{color:#dc2626;font-weight:700}
 @keyframes pl-row-glow{0%{background:rgba(14,165,233,.07)}100%{background:transparent}}
@@ -3808,9 +3817,9 @@ var _plP,_plCOMM,_plSETT,_plCOMMLabels,_plCOMMNames,_plCENTERS,_plPAYLBL,_plTIER
 var _plRepQty=[],_plExpQty=[];
 
 function plLoadData(){
-  _plSETT=JSON.parse(localStorage.getItem('atena_SETTINGS')||'null')||JSON.parse(JSON.stringify(PL_DEFAULT_SETT));
-  _plP=JSON.parse(localStorage.getItem('atena_P')||'null')||PL_DEFAULT_PRODUCTS.map(function(p){return JSON.parse(JSON.stringify(p));});
-  _plCOMM=JSON.parse(localStorage.getItem('atena_COMM')||'null')||JSON.parse(JSON.stringify(PL_DEFAULT_COMM));
+  _plSETT=(DB.pricingSettings&&DB.pricingSettings.tiers)?DB.pricingSettings:JSON.parse(JSON.stringify(PL_DEFAULT_SETT));
+  _plP=(DB.pricingProducts&&DB.pricingProducts.length)?DB.pricingProducts.map(function(p){return JSON.parse(JSON.stringify(p));}):PL_DEFAULT_PRODUCTS.map(function(p){return JSON.parse(JSON.stringify(p));});
+  _plCOMM=(DB.pricingComm&&Object.keys(DB.pricingComm).length)?DB.pricingComm:JSON.parse(JSON.stringify(PL_DEFAULT_COMM));
   plApplySett();
   _plRepQty=_plP.map(function(){return 0;});
   _plExpQty=_plP.map(function(){return 0;});
@@ -3824,9 +3833,10 @@ function plApplySett(){
   _plTIERS=s.tiers.map(function(t,i){return{label:t.label,max:t.max,cls:['','t2','t3','t4'][i]||'t4'};});
 }
 function plSaveAll(){
-  localStorage.setItem('atena_P',JSON.stringify(_plP));
-  localStorage.setItem('atena_COMM',JSON.stringify(_plCOMM));
-  localStorage.setItem('atena_SETTINGS',JSON.stringify(_plSETT));
+  DB.pricingProducts=_plP;
+  DB.pricingComm=_plCOMM;
+  DB.pricingSettings=_plSETT;
+  saveDB();
 }
 function plFmt(n){return n>0?n.toLocaleString():'—';}
 function plPct(b,p){var d=(b-p)/b*100;return d>0.01?d.toFixed(1)+'%':null;}
@@ -3841,9 +3851,6 @@ function pricingLazyInit(){
   if(_plInited)return;
   _plInited=true;
   plLoadData();
-  // Show management tab only for manager role
-  var mgmtBtn=document.getElementById('pl-t-mgmt');
-  if(mgmtBtn)mgmtBtn.style.display=_isManager()?'':'none';
   plRenderRep();
   document.getElementById('pl-upd-date').textContent='آخرین آپدیت: '+new Date().toLocaleDateString('fa-IR');
 }
@@ -3854,7 +3861,35 @@ function plSwitchTab(t){
     var b=document.getElementById('pl-t-'+k);if(b)b.classList.toggle('on',k===t);
   });
   if(t==='expert')plRenderExpert();
-  if(t==='mgmt'){plRenderOverview();plRenderBuyInputs();plRenderSett();}
+  if(t==='mgmt'){
+    if(_plMgmtOk){plRenderOverview();plRenderBuyInputs();plRenderSett();}
+  }
+}
+function plCheckPw(){
+  var inp=document.getElementById('pl-pw-inp');
+  if(!inp)return;
+  if(inp.value==='62604193'){
+    _plMgmtOk=true;
+    document.getElementById('pl-mgmt-lock').style.display='none';
+    document.getElementById('pl-mgmt-panel').style.display='';
+    document.getElementById('pl-pw-err').style.display='none';
+    inp.value='';
+    plRenderOverview();plRenderBuyInputs();plRenderSett();
+    var exp=document.getElementById('pl-expert');
+    if(exp&&exp.style.display!=='none')plRenderExpert();
+  } else {
+    document.getElementById('pl-pw-err').style.display='block';
+    inp.value='';inp.focus();
+  }
+}
+function plLockMgmt(){
+  _plMgmtOk=false;
+  document.getElementById('pl-mgmt-lock').style.display='';
+  document.getElementById('pl-mgmt-panel').style.display='none';
+  var inp=document.getElementById('pl-pw-inp');if(inp)inp.value='';
+  plSwitchTab('rep');
+  var exp=document.getElementById('pl-expert');
+  if(exp&&exp.style.display!=='none')plRenderExpert();
 }
 
 function plSwitchMtab(t){
@@ -3946,7 +3981,7 @@ function plRenderExpert(){
   var lbl=document.getElementById('pl-comm-toggle-lbl');if(lbl)lbl.textContent=useComm?'بله':'خیر';
   var grp=document.getElementById('pl-comm-type-grp');if(grp)grp.style.display=useComm?'':'none';
   var thComm=document.getElementById('pl-th-comm');if(thComm)thComm.style.display=useComm?'':'none';
-  var showMargin=_isManager();
+  var showMargin=_plMgmtOk;
   var thMarg=document.getElementById('pl-th-margin');if(thMarg)thMarg.style.display=showMargin?'':'none';
   var eMarginW=document.getElementById('pl-e-margin-wrap');if(eMarginW)eMarginW.style.display=showMargin?'':'none';
   var ePctW=document.getElementById('pl-e-pct-wrap');if(ePctW)ePctW.style.display=showMargin?'':'none';
@@ -11730,7 +11765,7 @@ function _centerNameSimilar(a,b){
 <div class="pl-tabs" id="pl-tabs">
   <button class="pl-tbtn on" id="pl-t-rep" onclick="plSwitchTab('rep')">📋 نماینده</button>
   <button class="pl-tbtn" id="pl-t-expert" onclick="plSwitchTab('expert')">🔍 کارشناس فروش</button>
-  <button class="pl-tbtn" id="pl-t-mgmt" onclick="plSwitchTab('mgmt')" style="display:none">⚙️ مدیریت</button>
+  <button class="pl-tbtn" id="pl-t-mgmt" onclick="plSwitchTab('mgmt')">⚙️ مدیریت</button>
 </div>
 
 <!-- ── REP TAB ── -->
@@ -11841,7 +11876,32 @@ function _centerNameSimilar(a,b){
 
 <!-- ── MGMT TAB ── -->
 <div id="pl-mgmt" style="display:none">
-  <div class="pl-content">
+
+  <!-- Lock screen -->
+  <div id="pl-mgmt-lock">
+    <div class="pl-content">
+      <div class="pl-card" style="padding:0">
+        <div class="pl-lock">
+          <div class="pl-lock-icon">🔐</div>
+          <div class="pl-lock-title">دسترسی محدود</div>
+          <div class="pl-lock-sub">این بخش نیاز به رمز عبور دارد</div>
+          <div class="pl-pw-row">
+            <input type="password" class="pl-pw-inp" id="pl-pw-inp" placeholder="رمز عبور" maxlength="12"
+              onkeydown="if(event.key==='Enter')plCheckPw()">
+            <button onclick="plCheckPw()" style="padding:9px 18px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">ورود</button>
+          </div>
+          <div class="pl-pw-err" id="pl-pw-err">رمز عبور اشتباه است</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Management panel (unlocked) -->
+  <div id="pl-mgmt-panel" style="display:none">
+  <div class="pl-content" style="padding-top:8px">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="plLockMgmt()" style="padding:5px 14px;border-radius:7px;border:2px solid #fca5a5;background:#fee2e2;color:#dc2626;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">🔒 قفل</button>
+    </div>
     <div style="display:flex;gap:6px;border-bottom:2px solid var(--border);margin-bottom:16px;overflow-x:auto">
       <button class="pl-tbtn on" id="pl-mt-overview" onclick="plSwitchMtab('overview')" style="border-bottom-width:3px">📊 بررسی قیمت‌ها</button>
       <button class="pl-tbtn" id="pl-mt-update" onclick="plSwitchMtab('update')" style="border-bottom-width:3px">🔄 بروزرسانی</button>
@@ -11982,8 +12042,8 @@ function _centerNameSimilar(a,b){
     </div>
 
   </div>
-</div>
-
+  </div><!-- /pl-mgmt-panel -->
+</div><!-- /pl-mgmt -->
 </div><!-- /pricingPanel -->
 
 <div id="centerContactPopup" class="contact-popup">
