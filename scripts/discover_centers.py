@@ -451,6 +451,165 @@ def aggregate(raw_results):
 
 # ── Output ────────────────────────────────────────────────────────────────
 
+# ── AI-powered discovery (Claude + web_search) ────────────────────────────
+
+def discover_via_ai(args):
+    """Use Claude with web_search to find all biopsy-relevant centers."""
+    try:
+        import anthropic
+    except ImportError:
+        log.error('anthropic SDK not installed. Run: pip3 install anthropic')
+        sys.exit(1)
+
+    # Get API key: arg → env → DB
+    api_key = args.api_key or os.environ.get('ANTHROPIC_API_KEY') or _get_db_api_key()
+    if not api_key:
+        log.error('No Anthropic API key found.\n'
+                  '  1. Set ANTHROPIC_API_KEY in .env, or\n'
+                  '  2. Pass --api-key sk-ant-..., or\n'
+                  '  3. Enter in CRM Settings → کلید API کلود')
+        sys.exit(1)
+
+    cities = args.cities.split(',') if args.cities else ['تهران', 'اصفهان', 'مشهد', 'شیراز', 'تبریز', 'کرج', 'قم', 'اهواز']
+    client = anthropic.Anthropic(api_key=api_key)
+    all_centers = []
+
+    for city in cities:
+        log.info(f'[AI] Searching: {city}')
+        prompt = f"""
+تو یک متخصص بازاریابی تجهیزات پزشکی ایرانی هستی.
+وظیفه: پیدا کردن بیمارستان‌ها، کلینیک‌ها و مراکز پزشکی در شهر **{city}** که بیشترین مصرف سوزن بیوپسی دارند.
+
+جستجو کن در: nobat.ir، doctorto.ir، paziresh24.com، drapp.ir، irimc.org، سایت‌های خود بیمارستان‌ها.
+
+مراکز هدف:
+- رادیولوژیست مداخله‌ای (Interventional Radiologist) → امتیاز ۱۰
+- رادیولوژیست با خدمات بیوپسی → امتیاز ۷
+- اورولوژیست → امتیاز ۶
+- ذکر بیوپسی در سایت/نظرات → امتیاز ۳+
+
+**خروجی فقط JSON array:**
+```json
+[
+  {{
+    "name": "نام مرکز",
+    "city": "{city}",
+    "address": "آدرس",
+    "doctors": [{{"name": "نام پزشک", "specialty": "رادیولوژی مداخله‌ای", "label": "اینترونشنال رادیولوژیست"}}],
+    "biopsy_mentioned": true,
+    "score": 10,
+    "reasons": ["اینترونشنال رادیولوژیست: دکتر X"],
+    "source_url": "https://..."
+  }}
+]
+```
+حداکثر ۲۰ مرکز برای این شهر.
+""".strip()
+
+        try:
+            response = client.messages.create(
+                model='claude-opus-4-5',
+                max_tokens=4000,
+                tools=[{'type': 'web_search_20250305', 'name': 'web_search'}],
+                betas=['web-search-2025-03-05'],
+                messages=[{'role': 'user', 'content': prompt}],
+            )
+        except Exception as e:
+            log.warning(f'  AI error for {city}: {e}')
+            sleep()
+            continue
+
+        # Extract text from response
+        text = ''.join(
+            b.text for b in response.content
+            if hasattr(b, 'text')
+        )
+
+        # Parse JSON from response
+        import re
+        m = re.search(r'```json\s*([\s\S]*?)```', text)
+        if m:
+            try:
+                centers = json.loads(m.group(1))
+                log.info(f'  → {len(centers)} centers found in {city}')
+                all_centers.extend(centers)
+            except Exception as e:
+                log.warning(f'  JSON parse error for {city}: {e}')
+        else:
+            log.warning(f'  No JSON found in AI response for {city}')
+
+        sleep()
+
+    # Convert to standard format
+    raw = []
+    for c in all_centers:
+        for doc in (c.get('doctors') or []):
+            sp_name = doc.get('specialty', '')
+            if 'مداخله' in sp_name or 'interventional' in sp_name.lower():
+                spec = next(s for s in SPECIALTIES if s['score'] == 10)
+            elif 'رادیولوژی' in sp_name or 'radiology' in sp_name.lower():
+                spec = next(s for s in SPECIALTIES if s['score'] == 7)
+            else:
+                spec = next(s for s in SPECIALTIES if s['score'] == 6)
+            raw.append({
+                'center_name': c.get('name', ''),
+                'city': c.get('city', ''),
+                'address': c.get('address', ''),
+                'doctor_name': doc.get('name', ''),
+                'spec': spec,
+                'source': 'AI+web_search',
+                'source_url': c.get('source_url', ''),
+                'biopsy_mentions': 1 if c.get('biopsy_mentioned') else 0,
+            })
+        if not c.get('doctors'):
+            raw.append({
+                'center_name': c.get('name', ''),
+                'city': c.get('city', ''),
+                'address': c.get('address', ''),
+                'doctor_name': '',
+                'spec': SPECIALTIES[1],  # default radiology
+                'source': 'AI+web_search',
+                'source_url': c.get('source_url', ''),
+                'biopsy_mentions': 1 if c.get('biopsy_mentioned') else 0,
+            })
+
+    centers = aggregate(raw)
+    log.info(f'Total unique centers from AI: {len(centers)}')
+
+    if args.dry_run:
+        for i, c in enumerate(centers[:10], 1):
+            print(f'{i:2d}. [{c["score"]}] {c["name"]} ({c["city"]})')
+        return
+
+    if args.output:
+        save_json(centers, args.output)
+    else:
+        save_db(centers)
+
+
+def _get_db_api_key():
+    """Try to read anthropicKey from PostgreSQL DB.settings."""
+    try:
+        import psycopg2
+        conn = psycopg2.connect(
+            host=os.environ.get('PG_HOST', 'localhost'),
+            port=int(os.environ.get('PG_PORT', '5432')),
+            database=os.environ.get('PG_DATABASE', 'atena_crm'),
+            user=os.environ.get('PG_USER', 'postgres'),
+            password=os.environ.get('PG_PASSWORD', ''),
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM app_data WHERE key='main'")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return row[0].get('settings', {}).get('anthropicKey')
+    except Exception:
+        pass
+    return None
+
+
 def save_json(centers, path):
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(centers, f, ensure_ascii=False, indent=2)
@@ -687,6 +846,9 @@ def enrich_existing_centers(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Flow CRM biopsy center discovery')
+    parser.add_argument('--ai',          action='store_true', help='Use Claude AI + web_search (searches ALL sources)')
+    parser.add_argument('--api-key',     default='',         help='Anthropic API key (or set ANTHROPIC_API_KEY in .env)')
+    parser.add_argument('--cities',      default='',         help='Comma-separated cities for AI mode (default: top 8 cities)')
     parser.add_argument('--enrich',      action='store_true', help='Enrich existing CRM centers (not discover new ones)')
     parser.add_argument('--force',       action='store_true', help='Re-scan already enriched centers')
     parser.add_argument('--dry-run',     action='store_true', help='Skip DB write, show top results')
@@ -694,6 +856,10 @@ def main():
     parser.add_argument('--no-comments', action='store_true', help='Skip comment mining (faster)')
     parser.add_argument('--output',      default='',         help='Write JSON to this file path')
     args = parser.parse_args()
+
+    if args.ai:
+        discover_via_ai(args)
+        return
 
     if args.enrich:
         enrich_existing_centers(args)

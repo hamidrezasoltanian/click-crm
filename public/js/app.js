@@ -7984,6 +7984,7 @@ function openSettings(){
   var companyName=s.companyName||'آتنا زیست درمان';
   var companyInfo=s.companyInfo||'';
   var sipDomain=s.sipDomain||'';
+  var anthropicKey=s.anthropicKey||'';
   var ckItems=s.ckItems||CK_ITEMS_DEFAULT;
 
   var membersHtml=members.map(function(m,i){
@@ -8012,6 +8013,10 @@ function openSettings(){
     +'<input id="stgSipDomain" class="ed-inp" style="width:100%" value="'+esc(sipDomain)+'" placeholder="مثلاً: pbx.company.com">'
     +'<div style="font-size:10px;color:var(--text-muted);margin-top:3px">برای تماس با Linphone — خالی = tel:</div>'
     +'</div>'
+    +'</div>'
+    +'<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">🤖 کلید API کلود (Anthropic)</label>'
+    +'<input id="stgAnthropicKey" class="ed-inp" style="width:100%" type="password" value="'+esc(anthropicKey)+'" placeholder="sk-ant-api03-...">'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-top:3px">برای جستجوی هوشمند مراکز (KPI ← مراکز کشف‌شده)</div>'
     +'</div>'
     +'<div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">'
     +'<div>'
@@ -8147,6 +8152,8 @@ function saveSettings(){
   DB.settings.companyInfo=companyInfo;
   var _sipDomRaw=(document.getElementById('stgSipDomain')||{}).value||'';
   DB.settings.sipDomain=_sipDomRaw.trim().replace(/^\/+|\/+$/g,'');
+  var _anthKey=(document.getElementById('stgAnthropicKey')||{}).value||'';
+  if(_anthKey.trim())DB.settings.anthropicKey=_anthKey.trim();
   DB.settings.members=members;
   DB.settings.ckItems=ckItems;
   // ذخیره برچسب‌های ویرایش‌شده
@@ -9867,6 +9874,30 @@ function _discIgnore(cid) {
   _renderDiscoverySection();
 }
 
+function _discAiScan() {
+  var city = (document.getElementById('discCityFilter')||{}).value || '';
+  var btn = document.querySelector('[onclick="_discAiScan()"]');
+  if(btn) { btn.disabled=true; btn.textContent='⏳ در حال جستجو...'; }
+  fetch('/api/discovery/ai-scan', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({city: city})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.error) { showToast('❌ ' + data.error, 4000); return; }
+    showToast('✅ ' + data.saved + ' مرکز از هوش مصنوعی دریافت شد', 3000);
+    _discoveredCenters = null;
+    _loadDiscoveredCenters();
+  })
+  .catch(function(e){ showToast('❌ خطا: ' + e.message, 3000); })
+  .finally(function(){
+    var b = document.querySelector('[onclick="_discAiScan()"]');
+    if(b) { b.disabled=false; b.innerHTML='&#129302; جستجوی هوشمند از همه منابع'; }
+  });
+}
+
+
 function calcCenterRecommendations() {
   var today = todayStr();
   var nowMs = nowTs();
@@ -10350,8 +10381,10 @@ function renderKPIPanel(){
         html += _buildDiscoveryHtml(_discoveredCenters);
       }
       html += '</div>';
-      html += '<div style="text-align:left;margin-top:8px">'
-        + '<button onclick="_loadDiscoveredCenters(true)" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;padding:3px 10px;cursor:pointer">&#128257; بازخوانی از سرور</button>'
+      html += '<div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">'
+        + '<button onclick="_discAiScan()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:6px;font-size:12px;padding:5px 14px;cursor:pointer;font-weight:600">&#129302; جستجوی هوشمند از همه منابع</button>'
+        + '<input id="discCityFilter" placeholder="شهر (اختیاری)" style="border:1px solid var(--border-input);border-radius:5px;padding:4px 8px;font-size:12px;width:120px;font-family:inherit">'
+        + '<button onclick="_loadDiscoveredCenters(true)" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;padding:4px 10px;cursor:pointer">&#128257; بازخوانی</button>'
         + '</div>';
     }
     html += '</div>';
