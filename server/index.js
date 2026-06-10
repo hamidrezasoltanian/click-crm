@@ -49,6 +49,7 @@ app.use('/api/events', eventsRouter);
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/contacts', require('./routes/contacts'));
 app.use('/api/pricing', require('./routes/pricing'));
+app.use('/api/files', require('./routes/files'));
 
 // Health check
 app.get('/api/health', function (req, res) {

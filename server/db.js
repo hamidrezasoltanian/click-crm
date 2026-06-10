@@ -230,6 +230,21 @@ async function initSchema() {
     )
   `);
 
+  // Product file attachments
+  await query(`
+    CREATE TABLE IF NOT EXISTS product_files (
+      id SERIAL PRIMARY KEY,
+      prod_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      file_size INTEGER DEFAULT 0,
+      data BYTEA NOT NULL,
+      uploaded_by VARCHAR(100),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_product_files_prod ON product_files(prod_id)`);
+
   // Seed products and initial price list if products table is empty
   const prodCount = await query('SELECT COUNT(*) FROM products');
   if (parseInt(prodCount.rows[0].count) === 0) {
