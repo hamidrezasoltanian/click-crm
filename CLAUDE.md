@@ -2,93 +2,185 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Name
+
+**Flow CRM** — Persian-language (RTL, Jalali calendar) CRM for a medical equipment sales team.
+
 ## Running the App
 
-This is a zero-build, single-file web app. Open the HTML file directly in a browser:
-
 ```bash
-# Recommended: serve over HTTP so IndexedDB works correctly
+# Development server (Node.js + PostgreSQL backend)
+cd /home/user/Sales-Portal && node server/index.js
+# then open http://localhost:3000
+
+# Or serve static only (no backend persistence)
 python3 -m http.server 8080
-# then open http://localhost:8080/atena_crm_v3_mtr_3.html
+# then open http://localhost:8080/public/index.html
 ```
 
-Opening `file://` directly also works for most features, but IndexedDB may be restricted in some browsers.
+## File Structure
 
-There are no package managers, build tools, test suites, or linters.
+```
+Sales-Portal/
+  public/
+    index.html          ← main app (~13 000 lines, single-file)
+    sw.js               ← service worker (CDN caching)
+    fonts/              ← Vazirmatn font files
+  server/
+    index.js            ← Express entry point (port 3000)
+    db.js               ← PostgreSQL pool (pg)
+    auth.js             ← cookie-session auth
+    routes/
+      auth.js           ← /api/auth  (login/logout)
+      data.js           ← /api/data/db  (main DB blob PUT/GET)
+      contacts.js       ← /api/contacts/:key
+      pricing.js        ← /api/pricing
+      audit.js          ← /api/audit  (field change log)
+      events.js         ← /api/events (SSE broadcast)
+      users.js          ← /api/users
+      distribution.js   ← /api/distribution
+      ai.js             ← /api/ai proxy
+  atena_crm_v3_mtr_3.html  ← kept identical to public/index.html (legacy copy)
+  CLAUDE.md
+```
+
+**Both files must always be kept in sync:**
+```bash
+cp public/index.html atena_crm_v3_mtr_3.html
+```
 
 ## Architecture
 
-The entire application is a single HTML file (`atena_crm_v3_mtr_3.html`, ~7800 lines) combining all CSS, HTML markup, and JavaScript. It is a Persian-language (RTL, Jalali calendar) CRM for a medical equipment sales team.
+The entire frontend is a **single HTML file** (`public/index.html`) combining all CSS, HTML markup, and JavaScript. There are no build tools, bundlers, or package managers on the frontend.
 
 ### Data Layer
 
-All state lives in the browser:
+| Store | Key / Table | Contents |
+|---|---|---|
+| PostgreSQL `app_data` | `'main'` | Entire `DB` object as JSON |
+| PostgreSQL `app_data` | `'mtr'` | Receivables module data |
+| PostgreSQL `center_contacts` | center_key | Legacy single-contact per center |
+| PostgreSQL `centers_master` | `'CENTERS'` / `'PC_RAW'` | Master center lists |
+| `localStorage` `atena_crm_v2` | — | Client-side cache of `DB` |
+| IndexedDB `atenaCRM_master` | — | Master center list cache |
 
-- **`localStorage` key `atena_crm_v2`** — the main `DB` object (serialized JSON) containing: `edits`, `notes`, `tags`, `rTags`, `weekTags`, `weekEntries`, `events`, `checklist`, `settings`, `kpiTargets`, `callLog`, `visitLog`, `salesLog`, `missionLog`, `provHistory`, `mtrFollower`, `mtrFollowerMap`.
-- **IndexedDB `atenaCRM_master`** — master list of medical centers (`CENTERS` array and `PC_RAW` province↔center mapping), loaded at startup via `loadMasterCenters()`.
-- **`localStorage` keys `atena_mtr_*`** — receivables module (مطالبات) stores its invoice data separately.
+**The primary store is PostgreSQL.** `localStorage` is a fallback/cache.
 
-`PROVINCES` (30 Iranian provinces) is a static JS array hardcoded in the HTML at line 841.
+The main `DB` object contains:
+```
+edits, notes, tags, rTags, weekTags, weekEntries, events, checklist,
+extra, settings, kpiTargets, callLog, visitLog, salesLog, missionLog,
+provHistory, mtrFollower, mtrFollowerMap, changeLog, mtrTrend,
+notifications, tasks
+```
 
-**Reading/writing center fields** goes through `getE(type, id)` / `setE(type, id, field, val)` — these operate on `DB.edits` which holds per-center overrides keyed as `"{type}_{id}"`. `type` is `'center'` for Tehran, `'pc'` for all other provinces.
+**Reading/writing center fields** goes through `getE(type, id)` / `setE(type, id, field, val)`.
+- `DB.edits` holds per-center overrides keyed as `"{type}_{id}"`.
+- `type` is `'center'` for Tehran centers, `'pc'` for all other provinces.
+- `setE` triggers `saveDB()` (debounced 300 ms → PUT `/api/data/db`).
 
-### Global State Variables (line 875–888)
+### Global State Variables
 
 | Variable | Meaning |
 |---|---|
-| `currentUser` | Active user ID (e.g. `'Sarah.hosseini'`) |
-| `currentTab` | Active tab: `'provinces'`, `'weekplan'`, `'calendar'`, `'checklist'`, `'activity'`, `'kpi'` |
-| `_currentProvId` | `null` = province list view; a province ID = open province's centers view |
+| `currentUser` | Active user ID e.g. `'Sarah.hosseini'` |
+| `currentTab` | Active tab: `'provinces'` \| `'weekplan'` \| `'calendar'` \| `'checklist'` \| `'activity'` \| `'kpi'` \| `'tasks'` \| `'changelog'` \| `'manager'` \| `'mtr'` \| `'pricing'` |
+| `_currentProvId` | `null` = province list; province ID = centers view |
 | `_viewMode` | Centers view: `'list'` \| `'kanban'` \| `'card'` |
-| `_provView` | Province list view: `'grid'` \| `'list'` \| `'kanban'` |
+| `_provView` | Province list: `'grid'` \| `'list'` \| `'kanban'` |
 
 ### Main Tabs / Panels
 
-1. **استان‌ها (Provinces)** — Province grid → drill into a province → centers table with list/kanban/card views, status, lead classification, follow-up dates, tags.
-2. **برنامه هفته (Week Plan)** — 7-day Jalali weekly grid with scheduled center visits; unscheduled queue at the bottom.
-3. **تقویم (Calendar)** — Month/week/list event calendar using custom Jalali logic.
-4. **چک‌لیست روزانه (Daily Checklist)** — Daily scored checklist, one entry per Jalali day.
-5. **فعالیت‌ها (Activity)** — Read-only log of calls, visits, and sales.
-6. **KPI** — Manager dashboard (hidden tab, accessible only to مدیر role) with targets vs. actuals.
-7. **مطالبات (Receivables)** — Semi-independent embedded module in `#mtrPanel` (line 6398+), with its own init, state, storage helpers, and tabs: priority, aging, by-rep, forecast, AI.
+1. **استان‌ها** — Province grid → centers with list/kanban/card views
+2. **برنامه هفته** — 7-day Jalali weekly grid for scheduled visits
+3. **تقویم** — Month/week/list Jalali event calendar
+4. **چک‌لیست روزانه** — Daily scored checklist
+5. **فعالیت‌ها** — Read-only log of calls, visits, sales
+6. **KPI** — Manager dashboard (manager-only)
+7. **📌 وظایف** — Task management (all users)
+8. **🗃 لاگ تغییرات** — Change log (manager-only)
+9. **مطالبات** — Receivables module (semi-independent)
+10. **قیمت‌گذاری** — Pricing module
 
 ### Initialization
 
-`init()` at line 4977 is called on `DOMContentLoaded`. It calls `loadDB()`, `loadMasterCenters()`, `initSettings()`, `buildUSERS()`, sets up keyboard shortcuts, and renders the first tab.
+`init()` called on `DOMContentLoaded`:
+1. `loadDB()` — fetch from `/api/data/db`, fall back to localStorage
+2. `loadMasterCenters()` — fetch from `/api/data/centers/master` → IndexedDB cache
+3. `initSettings()`, `buildUSERS()`
+4. `switchTab(currentTab)`, `_initNotif()`, `_initOnboarding()`
 
-The receivables module has its own `DOMContentLoaded` listener at line 7755.
+### Jalali Calendar
 
-### Jalali Calendar (line 891–901)
-
-All dates are Persian/Solar Hijri. Core conversion functions:
+All dates are Persian/Solar Hijri:
 - `g2j(gy, gm, gd)` → `[jy, jm, jd]`
 - `j2g(jy, jm, jd)` → `[gy, gm, gd]`
-- `todayStr()` → current date as `'YYYY/MM/DD'` string in Jalali
-- `jMs(jy, jm, jd)` → Unix ms timestamp (used for date comparisons)
-
-Date inputs throughout the UI use format `YYYY/MM/DD` in Jalali.
+- `todayStr()` → `'YYYY/MM/DD'`
+- `jMs(jy, jm, jd)` → Unix ms timestamp
 
 ### Users & Permissions
 
-Default members are defined in `_DEFAULT_MEMBERS` (line 914): `Sarah.hosseini` (مدیر), `Reyhane.kashisaz`, `Mohammad.seyedsalehi`, `Rambod.ghasemi` (all کارشناس فروش), and `guest`. After first save, members come from `DB.settings.members`.
+- `_DEFAULT_MEMBERS`: `Sarah.hosseini` (مدیر), `Reyhane.kashisaz`, `Mohammad.seyedsalehi`, `Rambod.ghasemi` (کارشناس فروش), `guest`
+- `_isManager()` — checks `'مدیر'` role
+- `_isExpert()` — checks `'کارشناس فروش'` role
 
-`_isManager()` checks if `currentUser` has the `'مدیر'` role — manager-only features (KPI tab, user management modal, bulk reassign) are gated behind this check.
+### Key Features Added (recent sessions)
 
-### AI Feature (Receivables Module)
+| Feature | Description |
+|---|---|
+| `DB.changeLog` | Array of `{at, by, rkey, field, val}` — full field-change history |
+| `DB.notifications` | In-app notification bell with ack, center links |
+| `DB.tasks` | Task management `{id, title, owner, dueDate, priority, centerKey, done}` |
+| Auto-reminders | Centers with no date or overdue dates notify experts at startup |
+| Pipeline Matrix | Manager panel: potential × status center count grid |
+| Center Timeline | `openCenterAudit()` — local timeline from changeLog + notes + weekEntries + tasks |
+| Structured logging | Done modal captures نتیجه / یادداشت / اقدام بعدی on week-plan completion |
+| Onboarding | 7-day tutorial widget, dismissible, re-enableable from Settings |
 
-The AI tab in مطالبات calls `https://api.anthropic.com/v1/messages` directly from the browser (line 7743), using model `claude-sonnet-4-20250514`. The API key must be provided by the user at runtime — it is not stored in the file.
+### Critical Edit Constraint
 
-### External Dependencies (CDN only)
+The file contains **non-breaking spaces (`\xa0`)** mixed in indented lines.
+**NEVER use the Edit tool directly on this file** — it will fail silently or corrupt the file.
 
-- **Vazirmatn font** — `cdn.jsdelivr.net/npm/vazirmatn@33.003.0`
-- **SheetJS/xlsx** — `cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js` (Excel export; gracefully degrades to TSV if unavailable)
+**Always use Python scripts:**
+```python
+with open(FILEPATH, 'r', encoding='utf-8') as f:
+    content = f.read()
+# use content.replace() or line-index insertion
+with open(FILEPATH, 'w', encoding='utf-8') as f:
+    f.write(content)
+```
+
+To inspect an exact line before replacing:
+```bash
+python3 -c "
+with open('public/index.html','r',encoding='utf-8') as f:
+    lines=f.readlines()
+print(repr(lines[LINE_IDX]))  # 0-indexed
+"
+```
 
 ### Key Helper Functions
 
 | Function | Purpose |
 |---|---|
 | `esc(s)` | HTML-escape for safe innerHTML insertion |
-| `fNorm(s)` | Normalize Persian text for search (unifies Arabic/Persian letter variants, converts Eastern Arabic numerals) |
+| `fNorm(s)` | Normalize Persian text for search |
 | `showToast(msg, dur)` | Global toast notification |
-| `openModal(id, title, body, footer, opts)` | Generic modal system |
-| `saveDB()` | Persist entire `DB` to localStorage |
+| `openModal(id, title, body, footer, opts)` | Generic modal — `opts.lg` for large |
+| `saveDB()` | Debounced 300 ms → PUT `/api/data/db` |
+| `saveDBSync()` | Immediate save |
+| `setE(type, id, field, val)` | Write center field → changeLog → saveDB |
+| `getE(type, id)` | Read center edit object |
+| `_isManager()` / `_isExpert()` | Role checks |
+| `_getCenterName(type, id)` | Get display name for a center |
+| `sendNotif(toUser, message, centerKey)` | Send in-app notification |
+
+### External Dependencies (CDN only)
+
+- **Vazirmatn font** — `cdn.jsdelivr.net/npm/vazirmatn@33.003.0`
+- **SheetJS/xlsx** — `cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js`
+
+### AI Feature
+
+The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly from the browser using model `claude-sonnet-4-20250514`. API key provided by user at runtime.
