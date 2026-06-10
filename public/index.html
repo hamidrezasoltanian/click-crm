@@ -9,6 +9,7 @@
 <!-- Vazirmatn از jsDelivr — npm package، بدون Google dependency -->
 <link rel="stylesheet" href="/css/app.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('XLSX CDN failed - only TSV format supported offline')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 </head>
 <body>
 
@@ -165,6 +166,15 @@
 
 <!-- WEEK PLAN PANEL -->
 <div id="wpPanel" class="wp-panel" style="display:none">
+  <!-- ردیف فیلتر کارشناس + جستجو -->
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-raised);border-bottom:1px solid var(--border);flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:700;color:var(--text-secondary)">🔍 فیلتر:</span>
+    <select id="wpOwnerFilter" onchange="_wpFclFilters.owner=this.value;renderWeekPlan()" style="padding:5px 10px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);min-width:140px">
+      <option value="">همه کارشناسان</option>
+    </select>
+    <input id="wpSearch" type="text" placeholder="جستجوی نام مرکز..." oninput="renderWeekPlan()" style="padding:5px 10px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);min-width:180px;flex:1;max-width:280px">
+    <button onclick="wpClearFilters()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;background:var(--bg-card);color:var(--text-secondary);cursor:pointer">✕ پاک</button>
+  </div>
   <div class="wp-toolbar" style="flex-wrap:wrap;gap:8px">
     <!-- انتخاب سال -->
     <div style="display:flex;gap:4px;align-items:center">

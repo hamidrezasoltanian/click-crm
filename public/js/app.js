@@ -2753,6 +2753,7 @@ function plSwitchMtab(t){
 
 // ── REP VIEW ──────────────────────────────────────────────────────────────────
 function plRenderRep(){
+  _plRefreshBadges();
   var pi=PL_PAY_IDX[_plPayMode],showU=_plViewMode!=='total',showT=_plViewMode!=='unit';
   var thU=document.getElementById('pl-th-unit'),thT=document.getElementById('pl-th-total');
   if(thU)thU.style.display=showU?'':'none';
@@ -2762,9 +2763,14 @@ function plRenderRep(){
   tbody.innerHTML=_plP.map(function(prod,i){
     var q=_plRepQty[i]||0,ti=plTierOf(q),t=_plTIERS[ti];
     var up=prod.repPrices.tiers[ti][pi],tp=q>0?up*q:0,dc=plPct(prod.repPrices.base,up);
+    var _catFiles=(_plCatBadge&&_plCatBadge[i])||0;
     return '<tr data-tier="'+ti+'">'
       +'<td class="pl-rnum">'+plToFa(i+1)+'</td>'
-      +'<td class="pl-pname">'+esc(prod.name)+'</td>'
+      +'<td class="pl-pname" style="display:flex;align-items:center;justify-content:space-between;gap:4px">'
+      +esc(prod.name)
+      +'<button onclick="openProductCatalogModal('+i+')" title="فایل\u2019های کاتالوگ" style="flex-shrink:0;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:var(--bg-raised);cursor:pointer;font-size:10px;font-family:inherit;white-space:nowrap">'
+      +(_catFiles?'<span style="background:#ede9fe;color:#6d28d9;border-radius:9px;padding:1px 4px;font-size:9px;font-weight:700;margin-left:2px">'+_catFiles+'</span>':'')
+      +'📎</button></td>'
       +'<td class="tc"><input class="pl-qty" type="number" min="0" value="'+(q||'')+'" placeholder="0" oninput="plSetRepQty('+i+',this.value)"></td>'
       +'<td><span class="pl-tbadge">'+esc(t.label)+'</span></td>'
       +'<td class="tr pl-price-u" '+(showU?'':'style="display:none"')+'>'+plFmt(up)+'</td>'
@@ -2813,6 +2819,154 @@ function plSetView(m){
 }
 function plClearAll(){_plRepQty=_plP.map(function(){return 0;});plRenderRep();}
 
+// ── PRODUCT CATALOG (FILE ATTACHMENTS PER PRODUCT) ────────────────────────────
+var _plCatBadge = {}; // {prodIdx: count}
+var _plCatLF = null;
+function _plGetLF(){
+  if(_plCatLF) return _plCatLF;
+  if(typeof localforage==='undefined') return null;
+  _plCatLF=localforage.createInstance({name:'atenaCRM',storeName:'productCatalogs'});
+  return _plCatLF;
+}
+function _plCatMeta(prodIdx){
+  if(!DB.settings)DB.settings={};
+  if(!DB.settings.productCatalogs)DB.settings.productCatalogs={};
+  if(!DB.settings.productCatalogs[prodIdx])DB.settings.productCatalogs[prodIdx]=[];
+  return DB.settings.productCatalogs[prodIdx];
+}
+function _plRefreshBadges(){
+  _plCatBadge={};
+  if(!DB.settings||!DB.settings.productCatalogs)return;
+  Object.keys(DB.settings.productCatalogs).forEach(function(k){
+    var n=(DB.settings.productCatalogs[k]||[]).length;
+    if(n>0)_plCatBadge[k]=n;
+  });
+}
+
+function openProductCatalogModal(prodIdx){
+  _plRefreshBadges();
+  var prod=_plP[prodIdx];if(!prod){showToast('محصول یافت نشد');return;}
+  var buildList=function(){
+    var files=_plCatMeta(prodIdx);
+    if(!files.length) return '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">هیچ فایلی پیوست نشده<br><span style="font-size:10px">PDF، تصویر و سایر فرمت\u200cها پشتیبانی می\u200cشوند</span></div>';
+    return files.map(function(f){
+      var icon=f.type==='image'?'🖼':'📄';
+      var sz=f.size?(f.size>1048576?(f.size/1048576).toFixed(1)+' MB':(f.size/1024).toFixed(0)+' KB'):'';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--bg-card)">'
+        +'<span style="font-size:20px;flex-shrink:0">'+icon+'</span>'
+        +'<div style="flex:1;overflow:hidden"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" dir="ltr">'+esc(f.name)+'</div>'
+        +(sz?'<div style="font-size:10px;color:var(--text-muted)">'+sz+'</div>':'')+'</div>'
+        +'<button onclick="plCatView('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="مشاهده">👁 مشاهده</button>'
+        +'<button onclick="plCatDl('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="دانلود">⬇</button>'
+        +'<button onclick="plCatShr('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="اشتراک\u200cگذاری">📤</button>'
+        +'<button onclick="plCatDel('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="حذف">✕</button>'
+        +'</div>';
+    }).join('');
+  };
+  var body='<div style="font-size:12px">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">فایل\u200cهای پیوست: <strong>'+esc(prod.name)+'</strong></div>'
+    +'<div id="plCatList">'+buildList()+'</div>'
+    +'<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">'
+    +'<label style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border:2px dashed var(--border);border-radius:8px;cursor:pointer;background:var(--bg-raised)">'
+    +'<span style="font-size:26px">☁️</span>'
+    +'<span style="font-weight:700;color:var(--text-primary);font-size:12px">افزودن فایل جدید</span>'
+    +'<span style="font-size:10px;color:var(--text-muted)">PDF، تصویر، Word و سایر فرمت\u200cها</span>'
+    +'<input id="plCatUpInp" type="file" multiple style="display:none" onchange="plCatUpload('+prodIdx+',this)">'
+    +'</label></div></div>';
+  openModal('plCatModal','📎 فایل\u200cهای کاتالوگ \u2014 '+esc(prod.name),body,'<button class="btn-secondary" onclick="closeModal(\'plCatModal\')">بستن</button>',{lg:true});
+}
+
+function _plCatRefreshList(prodIdx){
+  var el=document.getElementById('plCatList');
+  if(!el)return;
+  var files=_plCatMeta(prodIdx);
+  if(!files.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">هیچ فایلی پیوست نشده</div>';return;}
+  el.innerHTML=files.map(function(f){
+    var icon=f.type==='image'?'🖼':'📄';
+    var sz=f.size?(f.size>1048576?(f.size/1048576).toFixed(1)+' MB':(f.size/1024).toFixed(0)+' KB'):'';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--bg-card)">'
+      +'<span style="font-size:20px;flex-shrink:0">'+icon+'</span>'
+      +'<div style="flex:1;overflow:hidden"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" dir="ltr">'+esc(f.name)+'</div>'
+      +(sz?'<div style="font-size:10px;color:var(--text-muted)">'+sz+'</div>':'')+'</div>'
+      +'<button onclick="plCatView('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">👁 مشاهده</button>'
+      +'<button onclick="plCatDl('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">⬇</button>'
+      +'<button onclick="plCatShr('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">📤</button>'
+      +'<button onclick="plCatDel('+prodIdx+',\''+f.id+'\')" style="padding:3px 8px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">✕</button>'
+      +'</div>';
+  }).join('');
+}
+
+function plCatUpload(prodIdx, input){
+  var lf=_plGetLF();
+  if(!lf){showToast('⚠ localforage در دسترس نیست');return;}
+  var files=Array.from(input.files||[]);
+  if(!files.length)return;
+  var done=0;
+  files.forEach(function(file){
+    var fid=Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    var meta={id:fid,name:file.name,type:file.type.indexOf('image')>=0?'image':'pdf',size:file.size};
+    lf.setItem('plf_'+fid,file).then(function(){
+      _plCatMeta(prodIdx).push(meta);
+      saveDB();
+      done++;
+      if(done===files.length){
+        _plRefreshBadges();
+        _plCatRefreshList(prodIdx);
+        showToast('✅ '+done+' فایل پیوست شد');
+        plRenderRep();if(document.getElementById('pl-expert')&&document.getElementById('pl-expert').style.display!=='none')plRenderExpert();
+      }
+    }).catch(function(e){console.error(e);showToast('⚠ خطا در ذخیره فایل');});
+  });
+  input.value='';
+}
+
+function plCatView(prodIdx,fid){
+  var lf=_plGetLF();if(!lf){showToast('⚠ localforage در دسترس نیست');return;}
+  lf.getItem('plf_'+fid).then(function(blob){
+    if(!blob){showToast('⚠ فایل یافت نشد — دوباره آپلود کنید');return;}
+    window.open(URL.createObjectURL(blob),'_blank');
+  });
+}
+
+function plCatDl(prodIdx,fid){
+  var lf=_plGetLF();if(!lf){showToast('⚠ localforage در دسترس نیست');return;}
+  var meta=_plCatMeta(prodIdx).find(function(f){return f.id===fid;});
+  if(!meta)return;
+  lf.getItem('plf_'+fid).then(function(blob){
+    if(!blob){showToast('⚠ فایل یافت نشد');return;}
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');a.href=url;a.download=meta.name;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('⬇ '+meta.name);
+  });
+}
+
+function plCatShr(prodIdx,fid){
+  var lf=_plGetLF();if(!lf){plCatDl(prodIdx,fid);return;}
+  var meta=_plCatMeta(prodIdx).find(function(f){return f.id===fid;});
+  if(!meta)return;
+  lf.getItem('plf_'+fid).then(function(blob){
+    if(!blob){showToast('⚠ فایل یافت نشد');return;}
+    var mime=blob.type||(meta.name.toLowerCase().endsWith('.pdf')?'application/pdf':'application/octet-stream');
+    var sf=new File([blob],meta.name,{type:mime});
+    if(navigator.canShare&&navigator.canShare({files:[sf]})){
+      navigator.share({files:[sf],title:meta.name,text:'فایل: '+meta.name}).catch(function(){});
+    } else { plCatDl(prodIdx,fid); }
+  });
+}
+
+function plCatDel(prodIdx,fid){
+  if(!confirm('فایل حذف شود؟'))return;
+  var lf=_plGetLF();if(lf)lf.removeItem('plf_'+fid);
+  DB.settings.productCatalogs[prodIdx]=(DB.settings.productCatalogs[prodIdx]||[]).filter(function(f){return f.id!==fid;});
+  saveDB();
+  _plRefreshBadges();
+  _plCatRefreshList(prodIdx);
+  showToast('🗑 فایل حذف شد');
+  plRenderRep();if(document.getElementById('pl-expert')&&document.getElementById('pl-expert').style.display!=='none')plRenderExpert();
+}
+
 // ── EXPERT VIEW ───────────────────────────────────────────────────────────────
 function plRenderExpert(){
   var cs=document.getElementById('pl-center-sel');if(!cs)return;
@@ -2850,7 +3004,11 @@ function plRenderExpert(){
     if(q>0&&price){totSell+=price*q;totComm+=comm*q;totBuy+=prod.buyPrice*q;}
     return '<tr>'
       +'<td class="pl-rnum">'+plToFa(i+1)+'</td>'
-      +'<td class="pl-pname">'+esc(prod.name)+'</td>'
+      +'<td class="pl-pname" style="display:flex;align-items:center;justify-content:space-between;gap:4px">'
+      +esc(prod.name)
+      +'<button onclick="openProductCatalogModal('+i+')" title="فایل\u2019های کاتالوگ" style="flex-shrink:0;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:var(--bg-raised);cursor:pointer;font-size:10px;font-family:inherit;white-space:nowrap">'
+      +((_plCatBadge&&_plCatBadge[i])?'<span style="background:#ede9fe;color:#6d28d9;border-radius:9px;padding:1px 4px;font-size:9px;font-weight:700;margin-left:2px">'+_plCatBadge[i]+'</span>':'')
+      +'📎</button></td>'
       +'<td class="tc"><input class="pl-qty" type="number" min="0" value="'+(q||'')+'" placeholder="0" oninput="plSetExpQty('+i+',this.value)"></td>'
       +'<td class="tr" style="font-weight:700;color:var(--text-primary)">'+(price?plFmt(price):'<span style="color:var(--text-muted)">موجود نیست</span>')+'</td>'
       +(useComm?'<td class="tr">'+(comm>0?'<span class="pl-comm-badge pl-comm-green">'+plFmt(comm)+'</span>':'<span class="pl-comm-badge pl-comm-na">—</span>')+'</td>':'')
@@ -3828,12 +3986,21 @@ function wpExportExcel(){
 }
 function wpBuildOwnerFilter(){
   var sel=document.getElementById('wpOwnerFilter');
-  if(!sel||sel.children.length>1)return;
+  if(!sel)return;
+  sel.innerHTML='<option value="">همه کارشناسان</option>';
   Object.keys(USERS).forEach(function(uid){
     if(uid==='guest')return;
     var opt=document.createElement('option');
     opt.value=uid;opt.textContent=USERS[uid];sel.appendChild(opt);
   });
+  var filterRow=sel.closest?sel.closest('.wp-filter-row'):null;
+  if(!_isManager()){
+    sel.value=currentUser;
+    if(filterRow)filterRow.style.display='none';
+  } else {
+    if(filterRow)filterRow.style.display='';
+    if(_wpFclFilters.owner&&USERS[_wpFclFilters.owner])sel.value=_wpFclFilters.owner;
+  }
 }
 
 function renderWeekPlan(){
