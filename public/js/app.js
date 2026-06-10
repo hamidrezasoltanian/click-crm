@@ -1821,38 +1821,91 @@ function renderBanner(){
     titleEl.innerHTML='📅 پیگیری‌های امروز و معوق'+badges;
   }
   var tb=document.getElementById('tb_items');if(!tb)return;
-  function _mkItem(it){
-    var ownerBit=(!_isExpert()&&it.owner)?(' <span style="font-size:9px;color:#92400e">'+esc(USERS[it.owner]||it.owner)+'</span>'):''
-;    return'<div class="today-item'+(it.overdue?' overdue':'')+'" style="display:inline-flex">'
-      +'<span style="cursor:pointer;display:flex;gap:4px;align-items:center" onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" title="'+esc(it.provName)+'">'
-      +'<span class="ti-name">'+esc(it.name)+'</span>'+ownerBit
-      +'<span class="ti-date">'+it.date+'</span>'
-      +'<span class="ti-prov">'+esc(it.provName)+'</span>'
-      +'</span>'
-      +'<span onclick="bannerSnooze(\''+it.rtype+'\',\''+it.id+'\',event)" title="تعویق ۳ روز" style="cursor:pointer;font-size:11px;padding:0 3px;color:#92400e;opacity:.55" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.55">⏰</span>'
+
+  // Days overdue for an item
+  function _odDays(it){
+    if(!it.overdue||!it.date)return 0;
+    var tp=todayStr().split('/').map(Number),dp=it.date.split('/').map(Number);
+    return Math.max(0,Math.round((jMs(tp[0],tp[1],tp[2])-jMs(dp[0],dp[1],dp[2]))/86400000));
+  }
+
+  // Single row inside expert cards
+  function _mkRow(it){
+    var days=_odDays(it);
+    var dc=days>30?'#dc2626':days>7?'#d97706':'#2563eb';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg-raised);border-radius:6px;margin-bottom:3px;cursor:pointer;border:1px solid var(--border);transition:all .1s" onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" onmouseenter="this.style.background=\'var(--bg-hover)\'" onmouseleave="this.style.background=\'var(--bg-raised)\'">'
+      +'<span style="font-size:11px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)">'+esc(it.name)+'</span>'
+      +(it.overdue
+        ?'<span style="font-size:10px;font-weight:700;color:'+dc+';white-space:nowrap;background:'+dc+'18;border-radius:4px;padding:1px 5px">'+days+' روز</span>'
+        :'<span style="font-size:10px;color:#16a34a;font-weight:600;white-space:nowrap">امروز</span>')
+      +'<span onclick="event.stopPropagation();bannerSnooze(\''+it.rtype+'\',\''+it.id+'\',event)" title="تعویق ۳ روز" style="cursor:pointer;font-size:10px;padding:2px 5px;background:#fef3c7;border-radius:4px;color:#92400e;flex-shrink:0">⏰</span>'
       +'</div>';
   }
+
   var html='';
-  if(overdueArr.length){
-    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
-      +'<span style="font-size:10px;font-weight:700;color:#dc2626;white-space:nowrap;flex-shrink:0">🔴 معوق:</span>'
-      +overdueArr.map(_mkItem).join('')+'</div>';
-  }
-  if(todayArr.length){
-    if(overdueArr.length)html+='<div style="border-top:1px solid #fcd34d;margin:5px 0"></div>';
-    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'
-      +'<span style="font-size:10px;font-weight:700;color:#b45309;white-space:nowrap;flex-shrink:0">📅 امروز:</span>'
-      +todayArr.map(_mkItem).join('')+'</div>';
-  }
-  if(orphanArr.length){
-    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px">'
-      +orphanArr.map(function(o){
-        return'<div class="today-item overdue" style="opacity:.75;display:inline-flex">'
-          +'<span class="ti-name" style="text-decoration:line-through;color:#92400e">'+esc(o.id)+'</span>'
-          +' <span class="ti-date">'+o.date+'</span>'
-          +' <span onclick="clearOrphanFollowup(\''+o.recKey+'\');event.stopPropagation();" style="cursor:pointer;color:#dc2626;font-size:11px">✕</span>'
-          +'</div>';
-      }).join('')+'</div>';
+
+  if(!_isExpert()){
+    // ── MANAGER: grouped by expert ──
+    var byExpert={};
+    filtered.forEach(function(it){
+      if(it.isOrphan)return;
+      var uid=it.owner||'__none__';
+      if(!byExpert[uid])byExpert[uid]=[];
+      byExpert[uid].push(it);
+    });
+    var expertKeys=Object.keys(byExpert).sort(function(a,b){
+      return byExpert[b].filter(function(i){return i.overdue;}).length
+            -byExpert[a].filter(function(i){return i.overdue;}).length;
+    });
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;padding:2px 0">';
+    expertKeys.forEach(function(uid){
+      var items=byExpert[uid];
+      var ov=items.filter(function(i){return i.overdue;});
+      var td=items.filter(function(i){return !i.overdue;});
+      var uname=uid==='__none__'?'بدون مسئول':(USERS[uid]||uid);
+      var clr=typeof umGetColor==='function'?umGetColor(uid):'#6366f1';
+      var sorted=items.slice().sort(function(a,b){return _odDays(b)-_odDays(a);});
+      var top=sorted.slice(0,3),rest=sorted.length-3;
+      html+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+        +'<div style="background:'+clr+'22;border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between">'
+        +'<span style="font-weight:700;font-size:12px">'+esc(uname)+'</span>'
+        +'<div style="display:flex;gap:5px;align-items:center">'
+        +(ov.length?'<span style="background:#dc2626;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:700">'+ov.length+' معوق</span>':'')
+        +(td.length?'<span style="background:#f59e0b;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:700">'+td.length+' امروز</span>':'')
+        +(uid!=='__none__'?'<button onclick="openOverdueList(\''+uid+'\')" style="font-size:9px;padding:2px 6px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:inherit;color:var(--text-secondary)">همه</button>':'')
+        +'</div></div>'
+        +'<div style="padding:8px 10px">'
+        +top.map(_mkRow).join('')
+        +(rest>0?'<div style="font-size:10px;text-align:center;color:var(--brand);padding:5px 0;cursor:pointer;font-weight:600" onclick="openOverdueList(\''+uid+'\')">+ '+rest+' مرکز دیگر</div>':'')
+        +'</div></div>';
+    });
+    if(orphanArr.length){
+      html+='<div style="background:var(--bg-raised);border:1px dashed var(--border);border-radius:8px;padding:8px 10px;align-self:start"><div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px">⚠ مراکز حذف‌شده</div>'
+        +orphanArr.map(function(o){return'<span style="font-size:10px;text-decoration:line-through;color:#92400e">'+esc(o.id)+'</span> <span onclick="clearOrphanFollowup(\''+o.recKey+'\')" style="cursor:pointer;color:#dc2626;font-size:11px">✕</span> ';}).join('')
+        +'</div>';
+    }
+    html+='</div>';
+  } else {
+    // ── EXPERT: time-bucket view ──
+    var urgent  =overdueArr.filter(function(i){return _odDays(i)>30;});
+    var moderate=overdueArr.filter(function(i){var d=_odDays(i);return d>=7&&d<=30;});
+    var recent  =overdueArr.filter(function(i){return _odDays(i)<7;});
+    var buckets=[
+      {label:'🔴 فوری (بیش از ۳۰ روز)',items:urgent,col:'#dc2626'},
+      {label:'🟡 معوق (۷ تا ۳۰ روز)',items:moderate,col:'#d97706'},
+      {label:'🔵 اخیر (کمتر از ۷ روز)',items:recent,col:'#2563eb'},
+      {label:'📅 پیگیری امروز',items:todayArr,col:'#16a34a'}
+    ];
+    html+='<div style="display:flex;flex-direction:column;gap:10px">';
+    buckets.forEach(function(b){
+      if(!b.items.length)return;
+      html+='<div>'
+        +'<div style="font-size:10px;font-weight:700;color:'+b.col+';margin-bottom:5px">'+b.label+'</div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px">'
+        +b.items.map(_mkRow).join('')
+        +'</div></div>';
+    });
+    html+='</div>';
   }
   tb.innerHTML=html;
 }
@@ -3484,18 +3537,31 @@ function openCenterModal(rtype,id){
         +(we.done?'<span style="color:#16a34a;font-weight:bold">✓ '+we.doneDate+'</span>':'')
         +'</div>';}).join('')+'</div>':'')
     // ── یادداشت / گزارش ──
-    +'<div style="margin-top:10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">'
-    +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">'
-    +'<span>📝 یادداشت / گزارش</span>'
-    +'<span style="font-size:9px;font-weight:400;color:var(--text-muted)">Enter = ثبت &nbsp; Shift+Enter = خط جدید</span>'
-    +'</div>'
-    +'<textarea id="mnote_'+id+'" rows="3" placeholder="گزارش تماس، نتیجه ویزیت، توضیحات..." style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;resize:vertical;line-height:1.6" onkeydown="_noteKeydown(event,\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')"></textarea>'
-    +'<div style="display:flex;justify-content:flex-end;margin-top:6px">'
-    +'<button class="btn-primary" onclick="addNoteFromModal(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">✓ ثبت</button>'
-    +'</div>'
-    +'<div id="mNotesList_'+id+'" style="margin-top:10px">'
-    +_renderNotesList(notes)
-    +'</div></div>';
+    +(function(){
+      var allTags=DB.tags||[];
+      var tagChips=allTags.length
+        ?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px" id="mnoteTagRow_'+id+'">'
+          +allTags.map(function(t){
+            return '<span onclick="_noteToggleTag(\''+id+'\','+t.id+')" data-tagid="'+t.id+'" '
+              +'style="cursor:pointer;padding:2px 8px;border-radius:9px;font-size:10px;font-weight:600;border:1.5px solid var(--border);color:var(--text-secondary);background:var(--bg-raised);transition:all .15s" '
+              +'class="note-tag-chip">'+esc(t.name)+'</span>';
+          }).join('')
+          +'</div>'
+        :'';
+      return '<div style="margin-top:10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:10px 12px">'
+        +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">'
+        +'<span>📝 یادداشت / گزارش</span>'
+        +'<span style="font-size:9px;font-weight:400;color:var(--text-muted)">Enter = ثبت &nbsp; Shift+Enter = خط جدید</span>'
+        +'</div>'
+        +'<textarea id="mnote_'+id+'" rows="4" placeholder="گزارش تماس، نتیجه ویزیت، توضیحات..." style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;resize:vertical;line-height:1.6" onkeydown="_noteKeydown(event,\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')"></textarea>'
+        +tagChips
+        +'<div style="display:flex;justify-content:flex-end;margin-top:8px">'
+        +'<button class="btn-primary" onclick="addNoteFromModal(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">✓ ثبت</button>'
+        +'</div>'
+        +'<div id="mNotesList_'+id+'" style="margin-top:10px">'
+        +_renderNotesList(notes)
+        +'</div></div>';
+    })();
 
   // ── change history section ──
   var rkey=rtype+'_'+r.id;
@@ -3518,8 +3584,12 @@ function openCenterModal(rtype,id){
     +'<button class="btn-secondary" onclick="closeModal(\'cm_'+id+'\')">بستن</button>'
     +'<button class="btn-primary" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">📋 اضافه به هفته</button>';
   // ── مطالبات section ──
-  if(typeof mtrCenterSection==='function') body+=mtrCenterSection(r.id);
-  openModal('cm_'+id,'🏥 '+esc(displayName),body,foot);
+  if(typeof mtrCenterSection==='function'){
+    if(typeof DATA!=='undefined'&&DATA.length&&!Object.keys(MTR_BY_CENTER).length)matchCentersToData();
+    var mtrHtml=mtrCenterSection(r.id);
+    if(mtrHtml) body+=mtrHtml;
+  }
+  openModal('cm_'+id,'🏥 '+esc(displayName),body,foot,{lg:true});
   if(window.umGetColor){setTimeout(function(){document.querySelectorAll('.owner-dot[data-uid]').forEach(function(d){var u=decodeURIComponent(d.dataset.uid);if(u)d.style.background=umGetColor(u);});},0);}
   // ── قیمت‌گذاری ──
   (function(_rid,_rname){
@@ -3618,6 +3688,28 @@ function _cleanCenterData(rtype,id){
   saveDB();
 }
 
+// Note pending tags: {modalId: [tagId,...]}
+var _notePendingTags = {};
+
+function _noteToggleTag(modalId, tagId){
+  if(!_notePendingTags[modalId])_notePendingTags[modalId]=[];
+  var arr=_notePendingTags[modalId];
+  var idx=arr.indexOf(tagId);
+  if(idx>=0){arr.splice(idx,1);}else{arr.push(tagId);}
+  // Update chip styles
+  var row=document.getElementById('mnoteTagRow_'+modalId);
+  if(!row)return;
+  row.querySelectorAll('.note-tag-chip').forEach(function(chip){
+    var tid=parseInt(chip.dataset.tagid);
+    var sel=arr.indexOf(tid)>=0;
+    var t=(DB.tags||[]).find(function(x){return x.id===tid;});
+    var col=t?(t.color||'#6366f1'):'#6366f1';
+    chip.style.background=sel?col:'var(--bg-raised)';
+    chip.style.color=sel?'#fff':'var(--text-secondary)';
+    chip.style.borderColor=sel?col:'var(--border)';
+  });
+}
+
 function _noteKeydown(ev,type,id,name){
   if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();addNoteFromModal(type,id,name);}
 }
@@ -3627,8 +3719,20 @@ function _renderNotesList(notes){
   return notes.slice().reverse().map(function(n,i){
     var lines=esc(n.text||'').replace(/\n/g,'<br>');
     var isFirst=i===0;
+    var tagBadges='';
+    if(n.noteTags&&n.noteTags.length){
+      tagBadges='<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'
+        +n.noteTags.map(function(tid){
+          var t=(DB.tags||[]).find(function(x){return x.id===tid;});
+          if(!t)return'';
+          var col=t.color||'#6366f1';
+          return'<span style="background:'+col+'22;color:'+col+';border:1px solid '+col+'55;border-radius:8px;padding:1px 6px;font-size:9px;font-weight:700">'+esc(t.name)+'</span>';
+        }).join('')
+        +'</div>';
+    }
     return '<div class="note-item" style="'+(isFirst?'border-right:3px solid #6366f1;':'')+'padding-right:8px;margin-bottom:8px">'
       +'<div style="font-size:12px;line-height:1.6;color:var(--text-primary)">'+lines+'</div>'
+      +tagBadges
       +'<div class="note-meta" style="margin-top:3px"><span style="font-weight:600">'+esc(n.user||'')+'</span>'
       +'<span style="margin-right:6px">'+esc(n.date||'')+'</span></div></div>';
   }).join('');
@@ -3637,13 +3741,18 @@ function _renderNotesList(notes){
 function addNoteFromModal(type,id,name){
   var inp=document.getElementById('mnote_'+id);
   if(!inp||!inp.value.trim())return;
+  var tags=(_notePendingTags[id]||[]).slice();
+  // addNote stores text; we post-patch last note with tags
   addNote(type,id,inp.value.trim(),null);
-  inp.value='';
-  inp.style.height='auto';
-  var nl=document.getElementById('mNotesList_'+id);
-  if(nl) nl.innerHTML=_renderNotesList(DB.notes[recK(type,id)]||[]);
-  // refresh audit modal if open
   var k=recK(type,id);
+  if(tags.length){var arr=DB.notes[k];if(arr&&arr.length)arr[arr.length-1].noteTags=tags;}
+  // clear
+  inp.value='';inp.style.height='auto';
+  _notePendingTags[id]=[];
+  var row=document.getElementById('mnoteTagRow_'+id);
+  if(row)row.querySelectorAll('.note-tag-chip').forEach(function(c){c.style.background='var(--bg-raised)';c.style.color='var(--text-secondary)';c.style.borderColor='var(--border)';});
+  var nl=document.getElementById('mNotesList_'+id);
+  if(nl) nl.innerHTML=_renderNotesList(DB.notes[k]||[]);
   var auditNl=document.getElementById('auNotes_'+k);
   if(auditNl) auditNl.innerHTML=_renderNotesList(DB.notes[k]||[]);
 }
