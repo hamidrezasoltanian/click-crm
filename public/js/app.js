@@ -4823,6 +4823,21 @@ function wpMarkDoneKey(eKey){
     +'<select id="_mdk_result" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);margin-bottom:8px">'
     +_resultOpts.map(function(o){return'<option value="'+o+'">'+o+'</option>';}).join('')
     +'</select>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">'
+    +'<div><label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">💰 مبلغ تخمینی (میلیون تومان)</label>'
+    +'<input id="_mdk_amount" type="number" min="0" step="0.1" placeholder="مثلاً: 12.5" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></div>'
+    +'<div><label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">🚧 مانع اصلی</label>'
+    +'<select id="_mdk_obstacle" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)">'
+    +'<option value="">— ندارد —</option>'
+    +'<option>عدم بودجه / کمبود نقدینگی</option>'
+    +'<option>رقیب قیمت پایین‌تر</option>'
+    +'<option>نیاز به تأیید مدیر بالاتر</option>'
+    +'<option>عدم علاقه به محصول</option>'
+    +'<option>زمان‌بندی نامناسب</option>'
+    +'<option>عدم آشنایی با محصول</option>'
+    +'<option>دیگر</option>'
+    +'</select></div>'
+    +'</div>'
     +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">یادداشت / جزئیات</label>'
     +'<textarea id="_mdk_note" rows="2" placeholder="توضیحات..." style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl;margin-bottom:8px"></textarea>'
     +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">اقدام بعدی</label>'
@@ -4848,6 +4863,10 @@ function _wpFinishDone(eKey,setNext){
   we.doneResult=(document.getElementById('_mdk_result')||{}).value||'';
   we.doneNote=(document.getElementById('_mdk_note')||{}).value||'';
   we.doneNextAction=(document.getElementById('_mdk_nextaction')||{}).value||'';
+  var _doneAmt=parseFloat((document.getElementById('_mdk_amount')||{}).value||'');
+  if(_doneAmt>0)we.doneAmount=_doneAmt;
+  var _doneObs=(document.getElementById('_mdk_obstacle')||{}).value||'';
+  if(_doneObs)we.doneObstacle=_doneObs;
   var rtype=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');
   var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
   var cname=we.centerName||getRecLabel(rtype+'_'+rid)||'';
@@ -5187,6 +5206,58 @@ function saveWpAssign(weekId){
 
 // ════════════════════════ NOTIFICATIONS ════════════════════
 function _initNotif(){if(!DB.notifications)DB.notifications=[];}
+
+// ── Browser Push Notifications ──────────────────────────────────────────────
+var _pushGranted = false;
+
+function _initBrowserNotif(){
+  if(!('Notification' in window))return;
+  if(Notification.permission==='granted'){_pushGranted=true;return;}
+  if(Notification.permission==='denied')return;
+  // Ask on first meaningful interaction (call from init after small delay)
+  setTimeout(function(){
+    Notification.requestPermission().then(function(p){
+      _pushGranted=(p==='granted');
+      if(_pushGranted)_firePushNotif('Flow CRM','اعلان‌های مرورگر فعال شد ✅');
+    });
+  },3000);
+}
+
+function _firePushNotif(title,body,tag){
+  if(!_pushGranted||!('Notification' in window))return;
+  try{
+    var n=new Notification(title,{
+      body:body,
+      tag:tag||'flow-crm',
+      icon:'/favicon.ico',
+      dir:'rtl',
+      lang:'fa'
+    });
+    setTimeout(function(){n.close();},8000);
+    return n;
+  }catch(e){}
+}
+
+function _sendOverduePushNotifs(){
+  if(!_pushGranted)return;
+  var items=getFollowups();
+  var mine=_isExpert()?items.filter(function(i){return i.owner===currentUser;}):items;
+  var overdue=mine.filter(function(i){return i.overdue;});
+  if(!overdue.length)return;
+  // Group message
+  var msg=overdue.length+' مرکز معوق پیگیری دارند';
+  if(overdue.length<=3){
+    msg=overdue.map(function(i){return i.name;}).join('، ')+' — پیگیری نشده';
+  }
+  _firePushNotif('⚠ پیگیری‌های معوق',msg,'overdue-reminder');
+}
+
+// Periodic check: fire push if tab becomes visible after being hidden
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'&&_pushGranted){
+    setTimeout(_sendOverduePushNotifs,2000);
+  }
+});
 
 function sendNotif(toUser,message,centerKey){
   _initNotif();
@@ -6239,6 +6310,7 @@ function _runTodayReminders(today){
 
 // ── یادآوری روزانه: مراکز بدون تاریخ + سررسیدگذشته ──
 function _runOverdueAndUndatedReminders(today){
+  setTimeout(_sendOverduePushNotifs,1000);
   var byExpert = {};
   _buildPCCache();
   Object.keys(DB.weekEntries||{}).forEach(function(k){
@@ -8146,6 +8218,65 @@ function renderManagerPanel(){
       +'</div></div>';
   })();
 
+  // ── عملکرد ماه جاری vs هدف ──────────────────────────────────────────────────
+  (function(){
+    var mon=currentJMonth();
+    var activeMembers=members.filter(function(m){return m.active!==false&&m.role!=='مهمان'&&m.role!=='سوپر ادمین';});
+    if(!activeMembers.length)return;
+    html+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px">';
+    html+='<div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">';
+    html+='<span>📊 عملکرد ماه جاری vs هدف</span>';
+    html+='<span style="font-size:10px;font-weight:400;color:var(--text-muted)">'+mon+'</span>';
+    html+='</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">';
+    activeMembers.forEach(function(m){
+      var uid=m.id;
+      try{
+        var t=getKPITarget(uid,mon);
+        var calls=getCallsMonth(uid,mon);
+        var visits=getVisitsMonth(uid,mon);
+        var sales=getSalesMonth(uid,mon);
+        var totalCalls=calls.reduce(function(s,l){return s+(l.count||0);},0);
+        var totalVisits=visits.total||0;
+        var totalSales=sales.length;
+        var totalAmt=sales.reduce(function(s,l){return s+(l.amount||0);},0);
+        // monthly target from daily/weekly targets
+        var b=jMonthBounds(mon);var wd=workingDaysInJMonth(mon);
+        var tCalls=Math.round((t.callsPerDay||10)*wd);
+        var tVisits=Math.round((t.visitsPerWeek||5)*4.3);
+        var tSales=t.salesCount||5;
+        function pct(a,t2){return t2>0?Math.min(100,Math.round(a/t2*100)):0;}
+        function bar(a,t2,col){
+          var p=pct(a,t2);
+          var c=p>=100?'#16a34a':p>=60?'#f59e0b':'#dc2626';
+          return '<div style="flex:1;background:#e2e8f0;border-radius:6px;height:6px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+c+';transition:width .4s"></div></div>';
+        }
+        var clr=typeof umGetColor==='function'?umGetColor(uid):'#6366f1';
+        html+='<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">';
+        html+='<div style="font-weight:700;font-size:12px;margin-bottom:8px;display:flex;align-items:center;gap:6px">';
+        html+='<span style="width:9px;height:9px;border-radius:50%;background:'+clr+';flex-shrink:0"></span>';
+        html+=esc(m.name)+'</div>';
+        // calls row
+        html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="font-size:10px;color:var(--text-muted);width:40px">تماس</span>';
+        html+=bar(totalCalls,tCalls);
+        html+='<span style="font-size:10px;font-weight:600;min-width:50px;text-align:left">'+totalCalls+'/'+tCalls+'</span></div>';
+        // visits row
+        html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="font-size:10px;color:var(--text-muted);width:40px">ویزیت</span>';
+        html+=bar(totalVisits,tVisits);
+        html+='<span style="font-size:10px;font-weight:600;min-width:50px;text-align:left">'+totalVisits+'/'+tVisits+'</span></div>';
+        // sales row
+        html+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--text-muted);width:40px">فروش</span>';
+        html+=bar(totalSales,tSales);
+        html+='<span style="font-size:10px;font-weight:600;min-width:50px;text-align:left">'+totalSales+'/'+tSales+'</span></div>';
+        if(totalAmt>0){
+          html+='<div style="margin-top:6px;font-size:10px;color:#16a34a;font-weight:700">💰 '+fM(totalAmt*1000000)+'</div>';
+        }
+        html+='</div>';
+      }catch(e){}
+    });
+    html+='</div></div>';
+  })();
+
   // Refresh button
   html+='<div style="text-align:center;margin-top:10px">'
     +'<button onclick="renderManagerPanel()" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:6px 16px;cursor:pointer;font-size:12px;font-family:inherit">🔄 بروزرسانی</button>'
@@ -8448,6 +8579,7 @@ async function init(){
   }
   await loadDB();
   initSettings();initTags();initWeekTags();initEvents();_initNotif();
+  _initBrowserNotif();
   buildUSERS();updateNotifBadge();
   setTimeout(_setupAutoReminder,5000);
   loadMasterCenters().then(function(){
