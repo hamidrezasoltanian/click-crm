@@ -1900,8 +1900,11 @@ function renderBanner(){
         +'</div></div>';
     });
     if(orphanArr.length){
-      html+='<div style="background:var(--bg-raised);border:1px dashed var(--border);border-radius:8px;padding:8px 10px;align-self:start"><div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:4px">⚠ مراکز حذف‌شده</div>'
-        +orphanArr.map(function(o){return'<span style="font-size:10px;text-decoration:line-through;color:#92400e">'+esc(o.id)+'</span> <span onclick="clearOrphanFollowup(\''+o.recKey+'\')" style="cursor:pointer;color:#dc2626;font-size:11px">✕</span> ';}).join('')
+      html+='<div style="background:#fef3c7;border:1px dashed #d97706;border-radius:8px;padding:8px 10px;align-self:start">'
+        +'<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px">⚠ پیگیری مراکز حذف‌شده</div>'
+        +'<div style="font-size:10px;color:#78350f;margin-bottom:6px">این مراکز از سیستم حذف شده‌اند اما تاریخ پیگیری دارند. با ✕ پیگیری را پاک کنید.</div>'
+        +orphanArr.map(function(o){return'<span style="font-size:10px;text-decoration:line-through;color:#92400e" title="مرکز حذف‌شده — پیگیری باقی مانده">'+esc(o.id)+'</span>'
+          +'<span onclick="clearOrphanFollowup(\''+o.recKey+'\')" title="حذف این پیگیری" style="cursor:pointer;color:#dc2626;font-size:11px;margin-right:6px"> ✕</span> ';}).join('')
         +'</div>';
     }
     html+='</div>';
@@ -2186,7 +2189,7 @@ function renderProvTable(){
         +pinBtn
         +(isStalled(rtype,r.id)&&rowCls!=='row-contracted'?'<span class="risk-badge" title="۳۰+ روز بدون فعالیت">🔴</span>':'')
         +(isOverdue(rtype,r.id)&&rowCls!=='row-stalled'?'<span class="risk-badge" title="پیگیری معوق">🟠</span>':'')
-        +(e.biopsyScore?'<span class="biopsy-badge" title="'+(e.biopsyReasons||[]).join(' • ')+'">🔬 '+e.biopsyScore+'</span>':'')
+        +(e.biopsyScore?'<span class="biopsy-badge" title="پتانسیل بیوپسی (امتیاز ۶-۱۰+) — '+(e.biopsyReasons||[]).join(' • ')+'">🔬 '+e.biopsyScore+'</span>':'')
         +(function(){var _mi=typeof MTR_BY_CENTER!=='undefined'?MTR_BY_CENTER[r.id]:null;if(!_mi||!_mi.length)return '';var _ov=_mi.filter(function(x){return x.od>45;});var _warn=_mi.filter(function(x){return x.od>20&&x.od<=45;});var _col=_ov.length?'#dc2626':_warn.length?'#d97706':'#0ea5e9';return '<span title="مطالبات باز" style="background:'+_col+';color:var(--text-primary);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px;cursor:default">💰 '+_mi.length+'</span>';})()
         +'<button class="ctr-link" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'+esc(r.name)+'</button>'
         +phoneHtml
@@ -2336,7 +2339,7 @@ function renderKanban(){
           +'<div class="kanban-card-name">'+esc(r.name)+'</div>'
           +'<div class="kanban-card-meta">'
           +'<span class="pot-badge pot-'+(e.potential||r.potential)+'">'+(e.potential||r.potential)+'</span>'
-          +(e.biopsyScore?'<span class="biopsy-badge">🔬 '+e.biopsyScore+'</span>':'')
+          +(e.biopsyScore?'<span class="biopsy-badge" title="پتانسیل بیوپسی (امتیاز: اینترونشنال=۱۰، رادیولوژی=۷، اورولوژی=۶) — '+(e.biopsyReasons||[]).join(' • ')+'">🔬 '+e.biopsyScore+'</span>':'')
           +((e.type||r.type)?'<span class="cm-lead" style="font-size:10px">'+(e.type||r.type)+'</span>':'')
           +(fd?'<span class="kc-date">📅 '+fd+'</span>':'')
           +'</div></div>';
@@ -4195,7 +4198,7 @@ function renderWeekPlan(){
   var daysEl = document.getElementById('wpDays');
   if(!daysEl) return;
   if(!weekId || !wpGetWeeks().length){
-    daysEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:50px;color:#94a3b8"><div style="font-size:32px;margin-bottom:10px">📋</div><div style="font-weight:600">سال را انتخاب کنید</div></div>';
+    daysEl.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:50px;color:#94a3b8"><div style="font-size:32px;margin-bottom:10px">📋</div><div style="font-weight:600;margin-bottom:8px">هفته‌ای انتخاب نشده</div><div style="font-size:12px;color:#94a3b8">از منوی بالا (▾ انتخاب هفته) یک هفته را انتخاب کنید<br>یا روی «+ هفته جدید» کلیک کنید</div></div>';
     return;
   }
   var wk = wpGetWeeks().find(function(w){return w.id===weekId;});
@@ -4800,7 +4803,7 @@ function wpBulkDone(){
     if(DB.weekEntries[k]){ DB.weekEntries[k].done=true; DB.weekEntries[k].doneDate=todayStr(); }
   });
   saveDB(); wpClearSelection(); renderWeekPlan();
-  showToast('✅ '+keys.length+' مورد انجام شد',2000);
+  showToast('✅ '+keys.length+' مورد به عنوان انجام‌شده ثبت شد — در تب فعالیت‌ها قابل مشاهده است',3000);
 }
 
 function wpBulkRemove(){
@@ -4829,7 +4832,7 @@ function wpBulkMove(){
         +'<span style="font-size:11px;background:#0ea5e920;color:#0ea5e9;border:1px solid #0ea5e944;padding:2px 8px;border-radius:10px">انتقال</span>'
         +'</button>';
     }).join('')+'</div>';
-  openModal('wpBulkMoveModal','انتقال گروهی به هفته دیگر',body,'<button class="btn-secondary" onclick="closeModal(\'wpBulkMoveModal\')">انصراف</button>');
+  openModal('wpBulkMoveModal','📦 انتقال گروهی — '+keys.length+' مورد به هفته دیگر',body,'<button class="btn-secondary" onclick="closeModal(\'wpBulkMoveModal\')">انصراف</button>');
 }
 
 function wpDoBulkMove(targetWeekId){
@@ -5975,7 +5978,11 @@ function renderTasksPanel(){
       return (a.dueDate||'9999')<(b.dueDate||'9999')?-1:1;
     });
     if(!sorted.length){
-      html+='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">هیچ وظیفه‌ای یافت نشد</div>';
+      var _emptyMsg='هیچ وظیفه‌ای یافت نشد';
+      if(_taskFilter==='mine')_emptyMsg='هیچ وظیفه‌ای برای شما یافت نشد';
+      else if(_taskFilter==='overdue')_emptyMsg='هیچ وظیفه معوقی وجود ندارد 🎉';
+      if(_taskSearch)_emptyMsg+=' — جستجو: «'+_taskSearch+'»';
+      html+='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">'+ _emptyMsg +'</div>';
     } else {
       sorted.forEach(function(t){
         var st=_getTkStatuses().find(function(s){return s.id===(t.status||'todo');})||_getTkStatuses()[0];
@@ -13190,6 +13197,10 @@ function applyQuickFilter(f){
 function saveFilterPreset(){
   var name=prompt('نام پریست را وارد کنید:');
   if(!name||!name.trim())return;
+  var _existingPresets=(DB.settings&&DB.settings.filterPresets)||{};
+  if(_existingPresets[name.trim()]){
+    if(!confirm('پریست «'+name.trim()+'» از قبل وجود دارد. جایگزین شود؟'))return;
+  }
   var preset={
     q:(document.getElementById('srch')||{}).value||'',
     pot:(document.getElementById('fPot')||{}).value||'',
