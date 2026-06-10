@@ -127,6 +127,17 @@ async function loadDB(){
     if(d&&typeof d==='object'){
       Object.keys(DB).forEach(function(k){if(d[k]!==undefined)DB[k]=d[k];});
     }
+    // migrate legacy single-contact fields to contacts[] array
+    var _migrated=false;
+    Object.keys(DB.edits||{}).forEach(function(k){
+      var e=DB.edits[k];
+      if(!e.contacts&&(e.contactName||e.contactTitle||(e.phones&&e.phones.length))){
+        e.contacts=[{name:e.contactName||'',title:e.contactTitle||'',phones:(e.phones||[]).slice()}];
+        delete e.contactName;delete e.contactTitle;delete e.phones;
+        _migrated=true;
+      }
+    });
+    if(_migrated){saveDB();console.log('[migration] legacy contacts migrated');}
     _serverSynced=true;
   }catch(e){
     console.warn('Server fetch failed, using empty DB:',e.message);
@@ -4871,6 +4882,14 @@ function _wpFinishDone(eKey,setNext){
   var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
   var cname=we.centerName||getRecLabel(rtype+'_'+rid)||'';
   var actionType=we.actionType||'call';
+  // auto-mirror done note into DB.notes so manager can see it
+  if(we.doneNote&&rtype&&rid){
+    if(!DB.notes)DB.notes={};
+    var _dnKey=rtype+'_'+rid;
+    if(!DB.notes[_dnKey])DB.notes[_dnKey]=[];
+    var _dnPfx=actionType==='visit'?'🤝 نتیجه ملاقات: ':'📞 نتیجه تماس: ';
+    DB.notes[_dnKey].push({text:_dnPfx+we.doneNote,at:new Date().toISOString(),by:currentUser||''});
+  }
   var _foundWeekLabel='';
   if(setNext){
     var nextDate=(document.getElementById('_mdk_nextdate')||{}).value||'';
@@ -8039,6 +8058,11 @@ function renderManagerPanel(){
   var totalCenters=CENTERS.length+Object.values(PC_RAW).reduce(function(s,a){return s+a.length;},0)+(DB.extra||[]).length;
 
   var html='<div style="padding:14px">';
+  // quick-action bar for manager
+  html+='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<button onclick="openDailyMonitor()" style="flex:1;min-width:200px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📋 گزارش فعالیت امروز</button>'
+    +'<button onclick="openOverdueList()" style="flex:1;min-width:160px;background:#dc2626;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔴 پیگیری‌های معوق</button>'
+    +'</div>';
   // summary cards
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px">';
   [
@@ -8277,6 +8301,35 @@ function renderManagerPanel(){
     html+='</div></div>';
   })();
 
+  // ── نتایج تماس‌های اخیر ──────────────────────────────────────────────────
+  (function(){
+    var recentDone=Object.keys(DB.weekEntries||{}).map(function(k){return DB.weekEntries[k];})
+      .filter(function(we){return we.done&&(we.doneNote||we.doneResult||we.doneObstacle||we.doneAmount);})
+      .sort(function(a,b){return (b.doneDate||'')<(a.doneDate||'')?-1:1;}).slice(0,25);
+    if(!recentDone.length)return;
+    html+='<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-top:14px">'
+      +'<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">📝 نتایج تماس‌های اخیر</div>'
+      +'<div style="padding:10px;max-height:320px;overflow-y:auto">';
+    recentDone.forEach(function(we){
+      var own=_wpGetOwner(we)||'';
+      var ownName=USERS[own]||own;
+      var clr=typeof umGetColor==='function'?umGetColor(own):'#6366f1';
+      html+='<div style="border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;font-size:11px">'
+        +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">'
+        +'<span style="width:8px;height:8px;border-radius:50%;background:'+clr+'"></span>'
+        +'<span style="font-weight:600">'+esc(we.centerName||'')+'</span>'
+        +'<span style="color:var(--text-muted);font-size:10px">'+esc(ownName)+'</span>'
+        +'<span style="margin-right:auto;color:var(--text-muted);font-size:10px">'+esc(we.doneDate||'')+'</span>'
+        +'</div>';
+      if(we.doneResult)html+='<div><span style="color:#0369a1;font-weight:600">نتیجه: </span>'+esc(we.doneResult)+'</div>';
+      if(we.doneNote)html+='<div><span style="color:#7c3aed;font-weight:600">یادداشت: </span>'+esc(we.doneNote)+'</div>';
+      if(we.doneObstacle)html+='<div><span style="color:#dc2626;font-weight:600">مانع: </span>'+esc(we.doneObstacle)+'</div>';
+      if(we.doneAmount)html+='<div><span style="color:#16a34a;font-weight:600">مبلغ: </span>'+(typeof fM==='function'?fM(we.doneAmount*1000000):we.doneAmount)+'</div>';
+      html+='</div>';
+    });
+    html+='</div></div>';
+  })();
+
   // Refresh button
   html+='<div style="text-align:center;margin-top:10px">'
     +'<button onclick="renderManagerPanel()" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:6px 16px;cursor:pointer;font-size:12px;font-family:inherit">🔄 بروزرسانی</button>'
@@ -8303,7 +8356,10 @@ function openManagerDrilldown(memberId){
       var isOverdue=fd&&fd<today&&e.status!=='قرارداد بسته شد'&&e.status!=='غیرفعال';
       var noteArr=(DB.notes&&DB.notes[rkey])||[];
       var recentLog=(DB.changeLog||[]).filter(function(l){return l.rkey===rkey;}).slice(-5);
-      centers.push({rtype:rt,id:c.id,name:e.nameOverride||c.name||'?',status:e.status||'بدون تماس',followupDate:fd,isOverdue:isOverdue,potential:e.potential||c.potential||4,noteArr:noteArr,recentLog:recentLog,rkey:rkey});
+      var doneEntries=Object.keys(DB.weekEntries||{}).map(function(k){return DB.weekEntries[k];})
+        .filter(function(we){var r2=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');var i2=we.rid||(we.recKey?we.recKey.split('_')[1]:'');return r2===rt&&i2===c.id&&we.done&&(we.doneNote||we.doneResult||we.doneObstacle||we.doneAmount);})
+        .sort(function(a,b){return (b.doneDate||'')<(a.doneDate||'')?-1:1;}).slice(0,5);
+      centers.push({rtype:rt,id:c.id,name:e.nameOverride||c.name||'?',status:e.status||'بدون تماس',followupDate:fd,isOverdue:isOverdue,potential:e.potential||c.potential||4,noteArr:noteArr,recentLog:recentLog,rkey:rkey,doneEntries:doneEntries});
     });
   });
   centers.sort(function(a,b){
@@ -8360,6 +8416,18 @@ function openManagerDrilldown(memberId){
       }
       if(!noteText&&!lastAct){
         body+='<div style="font-size:11px;color:var(--text-muted)">فعالیتی ثبت نشده</div>';
+      }
+      if(c.doneEntries&&c.doneEntries.length){
+        body+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px"><div style="font-size:10px;font-weight:700;color:#7c3aed;margin-bottom:3px">📝 نتایج ثبت‌شده:</div>';
+        c.doneEntries.forEach(function(de){
+          body+='<div style="font-size:10px;color:var(--text-secondary);padding:2px 0">';
+          body+='<span style="color:var(--text-muted)">'+esc(de.doneDate||'')+'</span> ';
+          if(de.doneResult)body+='<span style="color:#0369a1">'+esc(de.doneResult)+'</span> ';
+          if(de.doneObstacle)body+='<span style="color:#dc2626">[مانع: '+esc(de.doneObstacle)+']</span> ';
+          if(de.doneAmount)body+='<span style="color:#16a34a">['+de.doneAmount+'M]</span>';
+          body+='</div>';
+        });
+        body+='</div>';
       }
       body+='</div></div>';
     });
