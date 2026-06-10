@@ -2186,6 +2186,7 @@ function renderProvTable(){
         +pinBtn
         +(isStalled(rtype,r.id)&&rowCls!=='row-contracted'?'<span class="risk-badge" title="۳۰+ روز بدون فعالیت">🔴</span>':'')
         +(isOverdue(rtype,r.id)&&rowCls!=='row-stalled'?'<span class="risk-badge" title="پیگیری معوق">🟠</span>':'')
+        +(e.biopsyScore?'<span class="biopsy-badge" title="'+(e.biopsyReasons||[]).join(' • ')+'">🔬 '+e.biopsyScore+'</span>':'')
         +(function(){var _mi=typeof MTR_BY_CENTER!=='undefined'?MTR_BY_CENTER[r.id]:null;if(!_mi||!_mi.length)return '';var _ov=_mi.filter(function(x){return x.od>45;});var _warn=_mi.filter(function(x){return x.od>20&&x.od<=45;});var _col=_ov.length?'#dc2626':_warn.length?'#d97706':'#0ea5e9';return '<span title="مطالبات باز" style="background:'+_col+';color:var(--text-primary);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px;cursor:default">💰 '+_mi.length+'</span>';})()
         +'<button class="ctr-link" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'+esc(r.name)+'</button>'
         +phoneHtml
@@ -2335,6 +2336,7 @@ function renderKanban(){
           +'<div class="kanban-card-name">'+esc(r.name)+'</div>'
           +'<div class="kanban-card-meta">'
           +'<span class="pot-badge pot-'+(e.potential||r.potential)+'">'+(e.potential||r.potential)+'</span>'
+          +(e.biopsyScore?'<span class="biopsy-badge">🔬 '+e.biopsyScore+'</span>':'')
           +((e.type||r.type)?'<span class="cm-lead" style="font-size:10px">'+(e.type||r.type)+'</span>':'')
           +(fd?'<span class="kc-date">📅 '+fd+'</span>':'')
           +'</div></div>';
@@ -2377,7 +2379,9 @@ function renderCards(){
     var stall=isStalled(rtype,r.id);var ov=isOverdue(rtype,r.id);
     return'<div class="data-card'+(stall?' danger':ov?' warn':'')+'" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'
       +'<div class="card-head"><span class="card-title">'+esc(r.name)+'</span>'
-      +'<span class="pot-badge pot-'+(e.potential||r.potential)+'">'+(e.potential||r.potential)+'</span></div>'
+      +'<span class="pot-badge pot-'+(e.potential||r.potential)+'">'+(e.potential||r.potential)+'</span>'
+      +(e.biopsyScore?'<span class="biopsy-badge" title="'+(e.biopsyReasons||[]).join(' • ')+ '">🔬 '+e.biopsyScore+'</span>':'')
+      +'</div>'
       +'<div class="card-st '+sc+'">'+st+'</div>'
       +'<div class="card-meta">'
       +((e.type||r.type)?'<span class="cm-lead" style="background:var(--bg-raised);color:var(--text-secondary)">'+(e.type||r.type)+'</span>':'')

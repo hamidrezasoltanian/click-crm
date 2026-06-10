@@ -527,22 +527,185 @@ def save_db(centers):
     log.info(f'Saved {saved} centers to PostgreSQL discovered_centers table')
 
 
+# ── Enrich existing CRM centers ────────────────────────────────────────────
+
+def _name_similarity(a, b):
+    """Returns True if center names are close enough to be the same place."""
+    def norm(s):
+        s = s.strip()
+        for pfx in ['بیمارستان', 'مرکز درمانی', 'مرکز پزشکی', 'کلینیک', 'درمانگاه',
+                    'بیمارستان تخصصی', 'مجتمع پزشکی', 'مطب']:
+            if s.startswith(pfx):
+                s = s[len(pfx):].strip()
+        return s.replace('‌', '').replace(' ', '').lower()
+    na, nb = norm(a), norm(b)
+    if not na or not nb:
+        return False
+    return na in nb or nb in na or (len(na) > 4 and na[:5] == nb[:5])
+
+
+def search_center_on_nobat(center_name, city='', no_comments=False):
+    """Search nobat.ir for doctors working at a specific center."""
+    found = []
+    query = center_name + (' ' + city if city else '')
+
+    for spec in SPECIALTIES:
+        sleep()
+        q = spec['nobat_q'] + ' ' + center_name
+        data = fetch_json('https://nobat.ir/api/v2/search',
+                          {'q': q, 'type': 'doctor', 'per_page': 20})
+        if not data:
+            continue
+        doctors = (data.get('doctors') or data.get('data') or
+                   (data if isinstance(data, list) else []))
+        for d in doctors:
+            clinics = d.get('clinics') or d.get('offices') or []
+            matched = any(_name_similarity(cl.get('name', ''), center_name)
+                          for cl in clinics)
+            if not matched and not clinics:
+                matched = _name_similarity(d.get('office_name', ''), center_name)
+            if matched:
+                r = _nobat_doctor_to_raw(d, spec)
+                if r:
+                    r['biopsy_mentions'] = mine_comments(r.get('source_url'), no_comments)
+                    found.append(r)
+
+    return found
+
+
+def enrich_existing_centers(args):
+    """Read CRM centers from PostgreSQL, score each via nobat.ir, write back to DB.edits."""
+    try:
+        import psycopg2
+    except ImportError:
+        log.error('psycopg2 not installed. Run: pip3 install psycopg2-binary')
+        sys.exit(1)
+
+    conn = psycopg2.connect(
+        host=os.environ.get('PG_HOST', 'localhost'),
+        port=int(os.environ.get('PG_PORT', '5432')),
+        database=os.environ.get('PG_DATABASE', 'atena_crm'),
+        user=os.environ.get('PG_USER', 'postgres'),
+        password=os.environ.get('PG_PASSWORD', ''),
+    )
+    cur = conn.cursor()
+
+    # Load main DB blob
+    cur.execute("SELECT value FROM app_data WHERE key='main'")
+    row = cur.fetchone()
+    if not row:
+        log.error('No main DB found in app_data')
+        conn.close()
+        return
+    db = row[0]
+    edits = db.get('edits', {})
+
+    # Collect centers from master tables
+    centers_to_enrich = []
+    cur.execute("SELECT key, data FROM centers_master")
+    for mkey, mdata in cur.fetchall():
+        if mkey == 'CENTERS' and isinstance(mdata, list):
+            for c in mdata:
+                centers_to_enrich.append({
+                    'edit_key': 'center_' + str(c['id']),
+                    'name': c.get('name', ''),
+                    'city': 'تهران',
+                })
+        elif mkey == 'PC_RAW' and isinstance(mdata, dict):
+            for prov_id, prov_list in mdata.items():
+                for c in (prov_list or []):
+                    centers_to_enrich.append({
+                        'edit_key': 'pc_' + str(c['id']),
+                        'name': c.get('name', ''),
+                        'city': c.get('province', prov_id),
+                    })
+
+    # Also include DB.extra centers
+    for c in db.get('extra', []):
+        ek = 'pc_' + str(c.get('id', ''))
+        centers_to_enrich.append({
+            'edit_key': ek,
+            'name': c.get('name', ''),
+            'city': c.get('province', ''),
+        })
+
+    # Remove duplicates and centers with no name
+    seen = set()
+    unique = []
+    for c in centers_to_enrich:
+        if c['name'] and c['edit_key'] not in seen:
+            seen.add(c['edit_key'])
+            unique.append(c)
+    centers_to_enrich = unique
+
+    log.info(f'Enriching {len(centers_to_enrich)} existing CRM centers')
+
+    # Skip already-enriched unless --force
+    if not args.force:
+        to_do = [c for c in centers_to_enrich
+                 if 'biopsyScore' not in edits.get(c['edit_key'], {})]
+        log.info(f'  Skipping {len(centers_to_enrich)-len(to_do)} already enriched. Use --force to re-scan.')
+        centers_to_enrich = to_do
+
+    limit = args.limit or len(centers_to_enrich)
+    updated = 0
+
+    for c in centers_to_enrich[:limit]:
+        log.info(f'  [{updated+1}/{min(limit,len(centers_to_enrich))}] {c["name"]} ({c["city"]})')
+        raw = search_center_on_nobat(c['name'], c['city'], args.no_comments)
+
+        if raw:
+            agg = aggregate(raw)
+            if agg:
+                best = agg[0]
+                ek = c['edit_key']
+                if ek not in edits:
+                    edits[ek] = {}
+                edits[ek]['biopsyScore'] = best['score']
+                edits[ek]['biopsyReasons'] = best['reasons']
+                edits[ek]['biopsyScanned'] = datetime.now(timezone.utc).isoformat()
+                log.info(f'    → score:{best["score"]}  {best["reasons"][:2]}')
+                updated += 1
+
+    if args.dry_run:
+        log.info(f'[dry-run] Would update {updated} centers')
+        conn.close()
+        return
+
+    db['edits'] = edits
+    cur.execute(
+        "UPDATE app_data SET value=%s, updated_at=NOW() WHERE key='main'",
+        [json.dumps(db, ensure_ascii=False)]
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    log.info(f'Done — enriched {updated} centers. Reload CRM to see 🔬 badges.')
+
+
 # ── Main ──────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description='Flow CRM biopsy center discovery')
+    parser.add_argument('--enrich',      action='store_true', help='Enrich existing CRM centers (not discover new ones)')
+    parser.add_argument('--force',       action='store_true', help='Re-scan already enriched centers')
     parser.add_argument('--dry-run',     action='store_true', help='Skip DB write, show top results')
-    parser.add_argument('--limit',       type=int, default=40, help='Max doctors per specialty/site')
+    parser.add_argument('--limit',       type=int, default=0, help='Max centers/doctors to process (0=all)')
     parser.add_argument('--no-comments', action='store_true', help='Skip comment mining (faster)')
     parser.add_argument('--output',      default='',         help='Write JSON to this file path')
     args = parser.parse_args()
 
+    if args.enrich:
+        enrich_existing_centers(args)
+        return
+
     all_raw = []
 
+    lim = args.limit or 40
     for spec in SPECIALTIES:
         # nobat.ir
         sleep()
-        nobat = scrape_nobat(spec, limit=args.limit)
+        nobat = scrape_nobat(spec, limit=lim)
         for r in nobat:
             r['biopsy_mentions'] = mine_comments(r.get('source_url'), args.no_comments)
         all_raw.extend(nobat)
@@ -550,7 +713,7 @@ def main():
 
         # doctorto.ir
         sleep()
-        dt = scrape_doctorto(spec, limit=args.limit)
+        dt = scrape_doctorto(spec, limit=lim)
         for r in dt:
             r['biopsy_mentions'] = mine_comments(r.get('source_url'), args.no_comments)
         all_raw.extend(dt)

@@ -340,6 +340,7 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
 .note-btn:hover{background:#e2e8f0}
 .note-btn.has{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
 .risk-badge{font-size:11px;cursor:help}
+.biopsy-badge{display:inline-block;background:#f3e8ff;color:#7c3aed;border:1px solid #e9d5ff;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:700;cursor:help;margin-right:3px}
 .row-count{text-align:center;padding:8px;color:var(--text-muted);font-size:11px;background:var(--bg-raised)}
 
 /* ══ KANBAN ══ */
