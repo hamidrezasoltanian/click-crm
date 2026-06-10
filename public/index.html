@@ -6598,7 +6598,7 @@ function renderTasksPanel(){
         +(t.dueDate?'<span style="color:'+(overdue?'#dc2626':'var(--text-muted)')+'">📅 '+t.dueDate+(overdue?' (سررسید گذشته)':'')+'</span>':'')
         +(owner?'<span>👤 '+esc(owner.name)+'</span>':'')
         +'<span class="task-pri '+priCls+'">'+priLabel+'</span>'
-        +(t.centerKey?'<span style="color:#0ea5e9;cursor:pointer" onclick="openCenterModal(\''+t.centerKey.split(\'_\')[0]+'\',\''+t.centerKey.split(\'_\').slice(1).join(\'_\')+'\')">🏥 '+esc(_getTaskCenterName(t.centerKey))+'</span>':'')
+        +(t.centerKey?'<span style="color:#0ea5e9;cursor:pointer" onclick="openCenterModal(\''+t.centerKey.split('_')[0]+'\',\''+t.centerKey.split('_').slice(1).join('_')+'\')">🏥 '+esc(_getTaskCenterName(t.centerKey))+'</span>':'')
         +'</div>'
         +(t.note?'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">'+esc(t.note)+'</div>':'')
         +(t.done&&t.doneAt?'<div style="font-size:10px;color:#22c55e;margin-top:2px">✅ انجام شد: '+t.doneAt+'</div>':'')
