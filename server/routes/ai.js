@@ -67,9 +67,16 @@ router.post('/analyze', async (req, res) => {
     return res.status(400).json({ error: 'پارامتر messages الزامی است' });
   }
 
+  const ALLOWED_MODELS = [
+    'claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-sonnet-4-20250514',
+    'claude-opus-4-8', 'claude-haiku-3-5-20241022',
+  ];
+  const safeModel = ALLOWED_MODELS.includes(model) ? model : 'claude-sonnet-4-20250514';
+  const safeMaxTokens = Math.min(Math.max(parseInt(max_tokens) || 4096, 1), 8192);
+
   const payload = {
-    model: model || 'claude-sonnet-4-20250514',
-    max_tokens: max_tokens || 4096,
+    model: safeModel,
+    max_tokens: safeMaxTokens,
     messages,
   };
   if (system) payload.system = system;

@@ -79,7 +79,7 @@ function renderProvList(){
     // count از DB.edits بدون iterate همه مراکز
     var contracted=0,meetings=0,overdueCount=0;
     var today2=todayStr();
-    Object.keys(DB.edits).forEach(function(k){
+    Object.keys(DB.edits||{}).forEach(function(k){
       var e=DB.edits[k];
       // بررسی کن آیا مال این استان است
       var pts=k.split('_');var ktp=pts[0];var kid=pts.slice(1).join('_');

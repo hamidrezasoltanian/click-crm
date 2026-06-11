@@ -188,13 +188,15 @@ router.post('/proposals', requireManager, async (req, res) => {
 // PUT /api/distribution/proposals/:id/approve
 router.put('/proposals/:id/approve', requireManager, async (req, res) => {
   const { id } = req.params;
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) return res.status(400).json({ error: 'شناسه نامعتبر' });
   const finalAssignments = req.body && req.body.assignments;
 
   try {
     // Load proposal
     const propResult = await query(
       'SELECT * FROM distribution_proposals WHERE id = $1',
-      [parseInt(id)]
+      [numId]
     );
     if (propResult.rows.length === 0) {
       return res.status(404).json({ error: 'پیشنهاد یافت نشد' });
@@ -230,7 +232,7 @@ router.put('/proposals/:id/approve', requireManager, async (req, res) => {
     // Mark proposal as approved
     await query(
       'UPDATE distribution_proposals SET status = $1, approved_at = NOW(), assignments = $2 WHERE id = $3',
-      ['approved', JSON.stringify(assignments), parseInt(id)]
+      ['approved', JSON.stringify(assignments), numId]
     );
 
     return res.json({ ok: true, changed });
@@ -243,11 +245,13 @@ router.put('/proposals/:id/approve', requireManager, async (req, res) => {
 // PUT /api/distribution/proposals/:id/reject
 router.put('/proposals/:id/reject', requireManager, async (req, res) => {
   const { id } = req.params;
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) return res.status(400).json({ error: 'شناسه نامعتبر' });
 
   try {
     const result = await query(
       "UPDATE distribution_proposals SET status = 'rejected' WHERE id = $1",
-      [parseInt(id)]
+      [numId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'پیشنهاد یافت نشد' });

@@ -123,6 +123,7 @@ function closeAllModals(){
 function showContactPopup(ev, rtype, id) {
   var e = getE(rtype, id);
   var popup = document.getElementById('centerContactPopup');
+  if(!popup) return;
   var nameEl = document.getElementById('ccp-name');
   var bodyEl = document.getElementById('ccp-body');
   var contacts = _getContacts(rtype, id);

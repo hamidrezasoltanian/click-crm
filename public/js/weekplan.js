@@ -646,10 +646,11 @@ function wpPickForDay(weekId, dayStr) {
       el._filtered = filtered;
     }
   };
+  window._wpPickRenderList = renderList;
   var body = '<div style="margin-bottom:10px">'
     +'<input id="wpPickSearch" type="text" placeholder="🔍 جستجو مرکز / استان..." '
     +'style="width:100%;padding:8px 10px;border:1.5px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);box-sizing:border-box" '
-    +'oninput="renderList()">'
+    +'oninput="_wpPickRenderList()">'
     +'</div>'
     +'<div id="wpPickList" style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:6px"></div>';
   openModal('wpPickModal','📅 افزودن مرکز به '+dayStr, body,
@@ -929,7 +930,7 @@ function wpMarkDoneKey(eKey){
   if(!DB.weekEntries[eKey])return;
   var we=DB.weekEntries[eKey];
   var rtype=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');
-  var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
+  var rid=we.rid||(we.recKey?we.recKey.split('_').slice(1).join('_'):'');
   var cname=we.name||'';
   if(!cname&&rtype&&rid){var c=getCenterById(rtype,rid);if(c)cname=c.name||c.hosp_name||'';}
   // Default next date: today + 7 days in Jalali
@@ -988,7 +989,7 @@ function _wpFinishDone(eKey,setNext){
   var _doneObs=(document.getElementById('_mdk_obstacle')||{}).value||'';
   if(_doneObs)we.doneObstacle=_doneObs;
   var rtype=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');
-  var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
+  var rid=we.rid||(we.recKey?we.recKey.split('_').slice(1).join('_'):'');
   var cname=we.centerName||getRecLabel(rtype+'_'+rid)||'';
   var actionType=we.actionType||'call';
   // auto-mirror done note into DB.notes so manager can see it

@@ -42,8 +42,9 @@ router.put('/db', async (req, res) => {
   }
 
   // Use a transaction + FOR UPDATE to make conflict check atomic (fixes TOCTOU race)
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const _clientTs = body._clientTs || null;
@@ -77,16 +78,24 @@ router.put('/db', async (req, res) => {
     }
 
     // Save current version to history before overwriting (keeps last 30)
-    await client.query(
-      `INSERT INTO app_data_history (key, value, saved_by)
-       SELECT 'main', value, $1 FROM app_data WHERE key = 'main'`,
-      [req.user.username]
-    ).catch(function() {});
-    await client.query(
-      `DELETE FROM app_data_history WHERE key = 'main' AND id NOT IN (
-         SELECT id FROM app_data_history WHERE key = 'main' ORDER BY saved_at DESC LIMIT 30
-       )`
-    ).catch(function() {});
+    // Use SAVEPOINT so a missing history table doesn't abort the transaction
+    await client.query('SAVEPOINT history_ops');
+    try {
+      await client.query(
+        `INSERT INTO app_data_history (key, value, saved_by)
+         SELECT 'main', value, $1 FROM app_data WHERE key = 'main'`,
+        [req.user.username]
+      );
+      await client.query(
+        `DELETE FROM app_data_history WHERE key = 'main' AND id NOT IN (
+           SELECT id FROM app_data_history WHERE key = 'main' ORDER BY saved_at DESC LIMIT 30
+         )`
+      );
+      await client.query('RELEASE SAVEPOINT history_ops');
+    } catch (histErr) {
+      await client.query('ROLLBACK TO SAVEPOINT history_ops');
+      console.warn('[data/db PUT history]', histErr.message);
+    }
 
     // Use RETURNING to get exact timestamp written — avoids post-upsert SELECT race
     const upserted = await client.query(
@@ -107,7 +116,7 @@ router.put('/db', async (req, res) => {
     console.error('[data/db PUT]', e.message);
     return res.status(500).json({ error: 'خطای سرور' });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

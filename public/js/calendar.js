@@ -1,5 +1,5 @@
 // ════════════════════════ CALENDAR ════════════════════
-function initEvents(){if(!DB.events)DB.events=[];if(DB.events.length)_nextEvId=Math.max.apply(null,DB.events.map(function(e){return e.id;}))+1;}
+function initEvents(){if(!DB.events)DB.events=[];if(DB.events.length){var _ids=DB.events.map(function(e){return typeof e.id==='number'&&!isNaN(e.id)?e.id:0;});_nextEvId=Math.max.apply(null,_ids)+1;}}
 function collectCalItems(){
   var items=[];
   (DB.events||[]).forEach(function(ev){
@@ -183,7 +183,7 @@ function calGoToday(){_calDate=todayJ().slice();renderCalendar();}
 function calSetView(v){_calView=v;renderCalendar();}
 
 function openEvModal(evId){
-  var ev=evId?(DB.events||[]).find(function(e){return e.id===evId;}):null;
+  var ev=(evId!==null&&evId!==undefined)?(DB.events||[]).find(function(e){return e.id===evId;})||null:null;
   var today2=todayStr();var dateVal=ev?msToJ(ev.startMs):today2;
   var timeVal='';
   if(ev&&!ev.allDay){var d=new Date(ev.startMs);timeVal=p2(d.getHours())+':'+p2(d.getMinutes());}

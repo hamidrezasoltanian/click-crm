@@ -360,6 +360,9 @@ function doDBImport(){
       renderDashboard();renderBanner();renderTable();checkEmptyDB();
       showToast('✅ دیتابیس مراکز با '+centers.length+' مرکز آپدیت شد',4000);
     });
+  }).catch(function(err){
+    showToast('❌ خطا در آپدیت دیتابیس: '+(err&&err.message?err.message:''));
+    if(btn){btn.disabled=false;btn.textContent='💾 جایگزین کردن دیتابیس';}
   });
 }
 

@@ -1750,10 +1750,9 @@ function openPreCallBrief(rtype,rid){
     body+='<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">'
       +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px">📝 آخرین یادداشت‌ها</div>';
     notes.forEach(function(n){
-      var d=new Date(n.at||'');var jd=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
-      var ds=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+      var ds;if(n.date){ds=n.date;}else if(n.at){var _nd=new Date(n.at);var _jd=g2j(_nd.getFullYear(),_nd.getMonth()+1,_nd.getDate());ds=_jd[0]+'/'+p2(_jd[1])+'/'+p2(_jd[2]);}else{ds='';}
       body+='<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:11px">'
-        +'<span style="color:var(--text-muted);font-size:10px">'+ds+' &middot; '+esc(n.by||'')+'</span>'
+        +'<span style="color:var(--text-muted);font-size:10px">'+ds+' &middot; '+esc(n.by||n.user||'')+'</span>'
         +'<div style="margin-top:2px">'+esc((n.text||'').substring(0,150))+'</div></div>';
     });
     body+='</div>';
@@ -2623,7 +2622,7 @@ function renderProvList(){
     // count از DB.edits بدون iterate همه مراکز
     var contracted=0,meetings=0,overdueCount=0;
     var today2=todayStr();
-    Object.keys(DB.edits).forEach(function(k){
+    Object.keys(DB.edits||{}).forEach(function(k){
       var e=DB.edits[k];
       // بررسی کن آیا مال این استان است
       var pts=k.split('_');var ktp=pts[0];var kid=pts.slice(1).join('_');
@@ -3252,6 +3251,7 @@ function closeAllModals(){
 function showContactPopup(ev, rtype, id) {
   var e = getE(rtype, id);
   var popup = document.getElementById('centerContactPopup');
+  if(!popup) return;
   var nameEl = document.getElementById('ccp-name');
   var bodyEl = document.getElementById('ccp-body');
   var contacts = _getContacts(rtype, id);
@@ -5215,10 +5215,11 @@ function wpPickForDay(weekId, dayStr) {
       el._filtered = filtered;
     }
   };
+  window._wpPickRenderList = renderList;
   var body = '<div style="margin-bottom:10px">'
     +'<input id="wpPickSearch" type="text" placeholder="🔍 جستجو مرکز / استان..." '
     +'style="width:100%;padding:8px 10px;border:1.5px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);box-sizing:border-box" '
-    +'oninput="renderList()">'
+    +'oninput="_wpPickRenderList()">'
     +'</div>'
     +'<div id="wpPickList" style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:6px"></div>';
   openModal('wpPickModal','📅 افزودن مرکز به '+dayStr, body,
@@ -5498,7 +5499,7 @@ function wpMarkDoneKey(eKey){
   if(!DB.weekEntries[eKey])return;
   var we=DB.weekEntries[eKey];
   var rtype=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');
-  var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
+  var rid=we.rid||(we.recKey?we.recKey.split('_').slice(1).join('_'):'');
   var cname=we.name||'';
   if(!cname&&rtype&&rid){var c=getCenterById(rtype,rid);if(c)cname=c.name||c.hosp_name||'';}
   // Default next date: today + 7 days in Jalali
@@ -5557,7 +5558,7 @@ function _wpFinishDone(eKey,setNext){
   var _doneObs=(document.getElementById('_mdk_obstacle')||{}).value||'';
   if(_doneObs)we.doneObstacle=_doneObs;
   var rtype=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');
-  var rid=we.rid||(we.recKey?we.recKey.split('_')[1]:'');
+  var rid=we.rid||(we.recKey?we.recKey.split('_').slice(1).join('_'):'');
   var cname=we.centerName||getRecLabel(rtype+'_'+rid)||'';
   var actionType=we.actionType||'call';
   // auto-mirror done note into DB.notes so manager can see it
@@ -7260,7 +7261,7 @@ function _getActivitiesOnDate(rtype, rid, jDateStr){
 
 /* ═══ public/js/calendar.js ═══ */
 // ════════════════════════ CALENDAR ════════════════════
-function initEvents(){if(!DB.events)DB.events=[];if(DB.events.length)_nextEvId=Math.max.apply(null,DB.events.map(function(e){return e.id;}))+1;}
+function initEvents(){if(!DB.events)DB.events=[];if(DB.events.length){var _ids=DB.events.map(function(e){return typeof e.id==='number'&&!isNaN(e.id)?e.id:0;});_nextEvId=Math.max.apply(null,_ids)+1;}}
 function collectCalItems(){
   var items=[];
   (DB.events||[]).forEach(function(ev){
@@ -7444,7 +7445,7 @@ function calGoToday(){_calDate=todayJ().slice();renderCalendar();}
 function calSetView(v){_calView=v;renderCalendar();}
 
 function openEvModal(evId){
-  var ev=evId?(DB.events||[]).find(function(e){return e.id===evId;}):null;
+  var ev=(evId!==null&&evId!==undefined)?(DB.events||[]).find(function(e){return e.id===evId;})||null:null;
   var today2=todayStr();var dateVal=ev?msToJ(ev.startMs):today2;
   var timeVal='';
   if(ev&&!ev.allDay){var d=new Date(ev.startMs);timeVal=p2(d.getHours())+':'+p2(d.getMinutes());}
@@ -8163,6 +8164,9 @@ function doDBImport(){
       renderDashboard();renderBanner();renderTable();checkEmptyDB();
       showToast('✅ دیتابیس مراکز با '+centers.length+' مرکز آپدیت شد',4000);
     });
+  }).catch(function(err){
+    showToast('❌ خطا در آپدیت دیتابیس: '+(err&&err.message?err.message:''));
+    if(btn){btn.disabled=false;btn.textContent='💾 جایگزین کردن دیتابیس';}
   });
 }
 
@@ -9478,7 +9482,7 @@ function openManagerDrilldown(memberId){
       var fmtDate=function(isoAt){if(!isoAt)return'';var dp=isoAt.slice(0,10).split('-').map(Number);if(dp.length!==3)return'';var jd=g2j(dp[0],dp[1],dp[2]);return jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);};
       body+='<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
         +'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:var(--bg-card);flex-wrap:wrap" '
-        +'onclick="var d=document.getElementById(\'mdr_\'+i+\'\');if(d){d.style.display=d.style.display===\'none\'?\'block\':\'none\';}">'
+        +'onclick="var d=document.getElementById(\'mdr_'+i+'\');if(d){d.style.display=d.style.display===\'none\'?\'block\':\'none\';}">'
         +'<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:'+stColor+'"></span>'
         +'<span style="font-weight:600;flex:1;min-width:80px">'+esc(c.name)+'</span>'
         +'<span style="font-size:10px;padding:2px 7px;border-radius:9px;background:'+stColor+'22;color:'+stColor+'">'+esc(c.status)+'</span>'
@@ -9493,7 +9497,7 @@ function openManagerDrilldown(memberId){
         _allNotes.forEach(function(n){
           var nt=typeof n==='string'?n:(n.text||n.body||'');
           if(!nt)return;
-          var nd=n&&n.at?fmtDate(n.at):'';var nb=n&&n.by?(USERS[n.by]||n.by):'';
+          var nd=n&&n.date?n.date:(n&&n.at?fmtDate(n.at):'');var nb=n&&(n.by||n.user)?(USERS[n.by||n.user]||(n.by||n.user)):'';
           body+='<div style="font-size:11px;background:var(--bg-input);border-radius:5px;padding:5px 8px">'
             +(nd||nb?'<span style="font-size:10px;color:var(--text-muted)">'+esc(nd)+(nd&&nb?' · ':'')+esc(nb)+'</span><br>':'')
             +esc(nt)+'</div>';

@@ -840,7 +840,7 @@ function openManagerDrilldown(memberId){
       var fmtDate=function(isoAt){if(!isoAt)return'';var dp=isoAt.slice(0,10).split('-').map(Number);if(dp.length!==3)return'';var jd=g2j(dp[0],dp[1],dp[2]);return jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);};
       body+='<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
         +'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:var(--bg-card);flex-wrap:wrap" '
-        +'onclick="var d=document.getElementById(\'mdr_\'+i+\'\');if(d){d.style.display=d.style.display===\'none\'?\'block\':\'none\';}">'
+        +'onclick="var d=document.getElementById(\'mdr_'+i+'\');if(d){d.style.display=d.style.display===\'none\'?\'block\':\'none\';}">'
         +'<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:'+stColor+'"></span>'
         +'<span style="font-weight:600;flex:1;min-width:80px">'+esc(c.name)+'</span>'
         +'<span style="font-size:10px;padding:2px 7px;border-radius:9px;background:'+stColor+'22;color:'+stColor+'">'+esc(c.status)+'</span>'
@@ -855,7 +855,7 @@ function openManagerDrilldown(memberId){
         _allNotes.forEach(function(n){
           var nt=typeof n==='string'?n:(n.text||n.body||'');
           if(!nt)return;
-          var nd=n&&n.at?fmtDate(n.at):'';var nb=n&&n.by?(USERS[n.by]||n.by):'';
+          var nd=n&&n.date?n.date:(n&&n.at?fmtDate(n.at):'');var nb=n&&(n.by||n.user)?(USERS[n.by||n.user]||(n.by||n.user)):'';
           body+='<div style="font-size:11px;background:var(--bg-input);border-radius:5px;padding:5px 8px">'
             +(nd||nb?'<span style="font-size:10px;color:var(--text-muted)">'+esc(nd)+(nd&&nb?' · ':'')+esc(nb)+'</span><br>':'')
             +esc(nt)+'</div>';

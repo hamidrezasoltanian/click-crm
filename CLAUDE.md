@@ -282,6 +282,8 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | 🤖 Competitor tracking: text field in center modal + orange badge in list row | center modal, list | ✅ |
 | Commission placeholder div (cmCommission_) next to competitor field | center modal | ✅ (placeholder) |
 | 9 UX confusion fixes (banner role tag, kanban empty states, etc.) | various | ✅ |
+| UI Polish v2: custom scrollbar, tab underline animation, card hover lift, pill buttons, input focus ring, modal entrance, notification pulse | css/app.css | ✅ |
+| Comprehensive bug-fix pass: 15+ bugs fixed across backend routes + frontend modules | all files | ✅ |
 
 ## Roadmap / Future Plan
 
@@ -295,6 +297,29 @@ Priorities expressed by the product owner (hamidreza.soltanian@gmail.com), rough
 5. **Data layer evolution (tech debt)** — single-blob `DB` JSON will not scale; eventual move to per-collection endpoints (tasks, notifications, changeLog) and optimistic merge instead of last-write-wins. SSE channel already exists (`/api/events`) — use it for live refresh.
 6. **app.js modularization (tech debt)** — 12k+ lines in one file; if a build step is ever accepted, split by tab/module. Until then keep the function map above accurate.
 7. **UX polish** — owner cares about "روان بودن" (flow); the app was renamed Flow for this reason. Prefer inline editing over prompt()/alert(), keep the indigo design system (`--brand:#6366f1`) consistent.
+
+### Bug-fix history (session June 2026)
+
+**Backend (server/routes/):**
+- `data.js`: History ops inside transaction used `.catch()` that silently put PG into aborted-transaction state → fixed with `SAVEPOINT history_ops`
+- `data.js`: `pool.connect()` not in try block → crash if pool throws → fixed with `let client` before try, `if(client)` in finally
+- `ai.js`: Unbounded `max_tokens`/`model` from client body → API abuse → fixed with model allowlist + `Math.min(8192, ...)`
+- `pricing.js`: XSS in `/quotes/:id/print` — DB values interpolated raw into HTML → added `he()` HTML-escape helper
+- `pricing.js`: `parseInt(limit)` NaN → 500 error → fixed with `Math.min(Math.max(parseInt||50, 1), 200)`
+- `contacts.js`: Phone search used `$1 = ANY(phones)` with `%q%` LIKE pattern (exact match = always empty) → fixed with `EXISTS (SELECT 1 FROM unnest(phones) p WHERE p ILIKE $1)`
+- `distribution.js`: `parseInt(id)` without NaN guard in approve/reject → 500 instead of 400 → added guard
+
+**Frontend (public/js/ modules):**
+- `manager.js`: `i` from `forEach(function(c,i){...})` used in onclick string as `+i+` literal text → ReferenceError at click time → fixed by breaking string to embed literal value at build time
+- `manager.js`: Note date/author fields used `n.at`/`n.by` (new format only) → fixed to `n.date||fmtDate(n.at)` and `n.by||n.user`
+- `dashboard.js`: Same note field issue in pre-call brief → same fix
+- `provinces.js`: `Object.keys(DB.edits).forEach()` without null guard → crash on fresh DB → fixed with `DB.edits||{}`
+- `calendar.js`: `Math.max.apply(null, ids)` with NaN ids → `_nextEvId = NaN` → duplicate events → fixed with isNaN filter
+- `calendar.js`: `evId?find():null` → event id=0 treated as falsy → edit becomes create → fixed with `evId!==null&&evId!==undefined`
+- `weekplan.js`: `renderList` is a local `var`, used in `oninput="renderList()"` (global scope) → ReferenceError → fixed with `window._wpPickRenderList = renderList`
+- `weekplan.js`: `recKey.split('_')[1]` truncates IDs with underscores (e.g. `pc_north_khorasan||1`) → fixed with `split('_').slice(1).join('_')`
+- `backup.js`: `doDBImport` promise chain had no `.catch()` → button stuck disabled on error → added `.catch()`
+- `center-modal.js`: `popup.style.top=...` with no null check after `getElementById` → added early return
 
 ### Product principles (learned from owner feedback)
 

@@ -507,10 +507,9 @@ function openPreCallBrief(rtype,rid){
     body+='<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">'
       +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px">📝 آخرین یادداشت‌ها</div>';
     notes.forEach(function(n){
-      var d=new Date(n.at||'');var jd=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
-      var ds=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+      var ds;if(n.date){ds=n.date;}else if(n.at){var _nd=new Date(n.at);var _jd=g2j(_nd.getFullYear(),_nd.getMonth()+1,_nd.getDate());ds=_jd[0]+'/'+p2(_jd[1])+'/'+p2(_jd[2]);}else{ds='';}
       body+='<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:11px">'
-        +'<span style="color:var(--text-muted);font-size:10px">'+ds+' &middot; '+esc(n.by||'')+'</span>'
+        +'<span style="color:var(--text-muted);font-size:10px">'+ds+' &middot; '+esc(n.by||n.user||'')+'</span>'
         +'<div style="margin-top:2px">'+esc((n.text||'').substring(0,150))+'</div></div>';
     });
     body+='</div>';
