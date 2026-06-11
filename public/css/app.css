@@ -260,6 +260,8 @@ html:not([data-theme="dark"]) body{background:linear-gradient(150deg,#eef2ff 0%,
 .tb-filter{padding:3px 9px;border:1px solid rgba(245,158,11,.3);border-radius:20px;font-size:11px;background:var(--bg-card);cursor:pointer;transition:background .15s}
 .tb-filter:hover{background:rgba(245,158,11,.1)}
 .today-items{display:flex;gap:6px;flex-wrap:wrap}
+.mgr-banner-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:2px 0;width:100%;box-sizing:border-box}
+@media(max-width:640px){.mgr-banner-grid{grid-template-columns:1fr}}
 .today-item{background:var(--bg-card);border:1px solid rgba(245,158,11,.35);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:11px;display:flex;gap:5px;align-items:center;transition:all .15s;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .today-item:hover{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.5);transform:translateY(-1px)}
 .today-item.overdue{border-color:rgba(239,68,68,.4);background:#fef2f2}
