@@ -3785,6 +3785,7 @@ function openCenterModal(rtype,id){
         if(parseFloat(cfg.discount_ceiling_pct)>0)parts.push('⬇ سقف تخفیف: <b>'+cfg.discount_ceiling_pct+'%</b>');
         if(cfg.payment_terms)parts.push('📅 شرایط پرداخت: <b>'+cfg.payment_terms+'</b>');
         el.innerHTML=parts.length?'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:5px">💰 قیمت‌گذاری</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+parts.map(function(p){return'<span style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:2px 7px;color:var(--text-primary)">'+p+'</span>';}).join('')+'</div>':'<span style="color:var(--text-muted);font-size:10px">قیمت‌گذاری تنظیم نشده</span>';
+  var elCom=document.getElementById('cmCommission_'+_rid);if(elCom){elCom.innerHTML=cfg&&cfg.commission_level?'<span style="font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;font-weight:600">💼 پورسانت: '+esc(cfg.commission_level)+'</span>':'';}
       }).catch(function(){var el=document.getElementById('cmPricingInfo_'+_rid);if(el)el.style.display='none';});
   })(r.id, r.name);
 }
@@ -8695,7 +8696,7 @@ function openManagerDrilldown(memberId){
       var fd=e.followupDate||'';
       var isOverdue=fd&&fd<today&&e.status!=='قرارداد بسته شد'&&e.status!=='غیرفعال';
       var noteArr=(DB.notes&&DB.notes[rkey])||[];
-      var recentLog=(DB.changeLog||[]).filter(function(l){return l.rkey===rkey;}).slice(-5);
+      var recentLog=(DB.changeLog||[]).filter(function(l){return l.rkey===rkey;}).slice(-10);
       var doneEntries=Object.keys(DB.weekEntries||{}).map(function(k){return DB.weekEntries[k];})
         .filter(function(we){var r2=we.rtype||(we.recKey?we.recKey.split('_')[0]:'');var i2=we.rid||(we.recKey?we.recKey.split('_')[1]:'');return r2===rt&&i2===c.id&&we.done&&(we.doneNote||we.doneResult||we.doneObstacle||we.doneAmount);})
         .sort(function(a,b){return (b.doneDate||'')<(a.doneDate||'')?-1:1;}).slice(0,5);
@@ -8726,9 +8727,7 @@ function openManagerDrilldown(memberId){
     centers.forEach(function(c,i){
       var fdStyle=c.isOverdue?'color:#dc2626;font-weight:700':'color:var(--text-secondary)';
       var stColor=stColors[c.status]||'#94a3b8';
-      var lastNote=c.noteArr.length?c.noteArr[c.noteArr.length-1]:null;
       var lastAct=c.recentLog.length?c.recentLog[c.recentLog.length-1]:null;
-      var noteText=lastNote?(typeof lastNote==='string'?lastNote:(lastNote.text||lastNote.body||JSON.stringify(lastNote))):'';
       var fmtDate=function(isoAt){if(!isoAt)return'';var dp=isoAt.slice(0,10).split('-').map(Number);if(dp.length!==3)return'';var jd=g2j(dp[0],dp[1],dp[2]);return jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);};
       body+='<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
         +'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:var(--bg-card);flex-wrap:wrap" '
@@ -8741,20 +8740,30 @@ function openManagerDrilldown(memberId){
         +'<button onclick="event.stopPropagation();closeModal(\'mgrDrilldown\');setTimeout(function(){openCenterModal(\''+c.rtype+'\',\''+c.id+'\');},100)" style="padding:2px 8px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:10px;font-family:inherit">باز کردن</button>'
         +'</div>'
         +'<div id="mdr_'+i+'" style="display:none;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg-raised)">';
-      if(noteText){
-        body+='<div style="margin-bottom:6px;font-size:11px"><span style="font-weight:700;color:#0369a1">آخرین یادداشت:</span> '+esc(noteText)+'</div>';
+      if(c.noteArr&&c.noteArr.length){
+        var _allNotes=c.noteArr.slice().reverse();
+        body+='<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:4px">📝 یادداشت‌ها ('+c.noteArr.length+'):</div><div style="max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">';
+        _allNotes.forEach(function(n){
+          var nt=typeof n==='string'?n:(n.text||n.body||'');
+          if(!nt)return;
+          var nd=n&&n.at?fmtDate(n.at):'';var nb=n&&n.by?(USERS[n.by]||n.by):'';
+          body+='<div style="font-size:11px;background:var(--bg-input);border-radius:5px;padding:5px 8px">'
+            +(nd||nb?'<span style="font-size:10px;color:var(--text-muted)">'+esc(nd)+(nd&&nb?' · ':'')+esc(nb)+'</span><br>':'')
+            +esc(nt)+'</div>';
+        });
+        body+='</div></div>';
       }
       if(lastAct){
         body+='<div style="font-size:11px"><span style="font-weight:700;color:#7c3aed">آخرین تغییر:</span> '+esc(lastAct.field||'')+' → '+esc(String(lastAct.val||''))+'<span style="color:var(--text-muted);margin-right:6px">('+fmtDate(lastAct.at)+' - '+esc(lastAct.by||'')+')</span></div>';
       }
       if(c.recentLog.length>1){
         body+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px">';
-        c.recentLog.slice(0,-1).reverse().slice(0,4).forEach(function(l){
+        c.recentLog.slice(0,-1).reverse().slice(0,8).forEach(function(l){
           body+='<div style="font-size:10px;color:var(--text-muted);padding:1px 0">'+fmtDate(l.at)+' — '+esc(l.field||'')+': '+esc(String(l.val||''))+'</div>';
         });
         body+='</div>';
       }
-      if(!noteText&&!lastAct){
+      if(!(c.noteArr&&c.noteArr.length)&&!lastAct){
         body+='<div style="font-size:11px;color:var(--text-muted)">فعالیتی ثبت نشده</div>';
       }
       if(c.doneEntries&&c.doneEntries.length){
@@ -8792,6 +8801,20 @@ function overdueSnooze(rtype,id,days,listMemberId){
   setTimeout(function(){openOverdueList(listMemberId||undefined);},150);
 }
 
+function overduePickDate(rtype,id,listMemberId){
+  var inp=document.createElement('input');
+  inp.type='text';inp.style.cssText='position:fixed;opacity:0;pointer-events:none;top:50%;left:50%;';
+  document.body.appendChild(inp);
+  openJDP(inp,function(v){
+    inp.remove();
+    if(!v)return;
+    setE(rtype,id,'followupDate',v);
+    renderBanner();
+    showToast('📅 تاریخ جدید: '+v,2000);
+    closeModal('overdueList');
+    setTimeout(function(){openOverdueList(listMemberId||undefined);},150);
+  });
+}
 function openOverdueList(memberId){
   _buildPCCache();
   var today=todayStr();
@@ -8806,33 +8829,56 @@ function openOverdueList(memberId){
       var fd=e.followupDate||'';
       if(!fd||fd>=today||e.status==='قرارداد بسته شد'||e.status==='غیرفعال')return;
       var mObj=allMem.find(function(x){return x.id===owner;});
-      items.push({rtype:rt,id:c.id,name:e.nameOverride||c.name||'?',followupDate:fd,status:e.status||'بدون تماس',ownerName:mObj?mObj.name:(owner||'بدون مسئول'),potential:e.potential||c.potential||4});
+      var daysAgo=Math.round((new Date()-new Date(fd.split('/').join('-')))/86400000);
+      items.push({rtype:rt,id:c.id,name:e.nameOverride||c.name||'?',followupDate:fd,
+        status:e.status||'بدون تماس',ownerName:mObj?mObj.name:(owner||'بدون مسئول'),
+        potential:e.potential||c.potential||4,daysAgo:daysAgo});
     });
   });
   items.sort(function(a,b){return a.followupDate<b.followupDate?-1:1;});
+
+  var _mid=memberId||'';
+  var renderRow=function(c){
+    return '<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border);border-radius:6px;margin-bottom:4px;background:var(--bg-card)">'
+      +'<span style="color:#dc2626;font-size:11px;min-width:60px;font-weight:700">'+c.followupDate+'</span>'
+      +'<span style="font-size:10px;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:9px;min-width:44px;text-align:center">'+c.daysAgo+' روز</span>'
+      +'<span style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.name)+'</span>'
+      +'<span style="font-size:10px;color:var(--text-muted);flex-shrink:0">'+esc(c.ownerName)+'</span>'
+      +'<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',3,\''+_mid+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۳ روز">+۳</button>'
+      +'<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',7,\''+_mid+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۷ روز">+۷</button>'
+      +'<button onclick="overduePickDate(\''+c.rtype+'\',\''+c.id+'\',\''+_mid+'\')" style="padding:3px 7px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تاریخ جدید">📅</button>'
+      +'<button onclick="closeModal(\'overdueList\');setTimeout(function(){openCenterModal(\''+c.rtype+'\',\''+c.id+'\');},100)" style="padding:3px 9px;background:var(--brand,#6366f1);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">پیگیری</button>'
+      +'</div>';
+  };
+  var buckets=[
+    {label:'🔴 این هفته',sub:'۱–۷ روز',min:1,max:7,clr:'#dc2626',items:[]},
+    {label:'🟠 این ماه',sub:'۸–۳۰ روز',min:8,max:30,clr:'#ea580c',items:[]},
+    {label:'⚫ قدیمی',sub:'بیش از ۳۰ روز',min:31,max:9999,clr:'#64748b',items:[]}
+  ];
+  items.forEach(function(c){
+    for(var bi=0;bi<buckets.length;bi++){
+      if(c.daysAgo>=buckets[bi].min&&c.daysAgo<=buckets[bi].max){buckets[bi].items.push(c);break;}
+    }
+  });
   var body='<div style="font-size:12px">'
     +'<div style="color:var(--text-muted);margin-bottom:10px">مراکزی که تاریخ پیگیری آن‌ها گذشته و هنوز پیگیری نشده است</div>'
     +'<div style="max-height:60vh;overflow-y:auto">';
   if(!items.length){
     body+='<div style="text-align:center;padding:30px;color:#16a34a;font-weight:700">🎉 هیچ پیگیری معوقی وجود ندارد!</div>';
   } else {
-    items.forEach(function(c){
-      var daysAgo=Math.round((new Date()-new Date(c.followupDate.split('/').join('-')))/86400000);
-      body+='<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);border-radius:6px;margin-bottom:4px;background:var(--bg-card)">'
-        +'<span style="color:#dc2626;font-size:11px;min-width:60px;font-weight:700">'+c.followupDate+'</span>'
-        +'<span style="font-size:10px;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:9px;min-width:44px;text-align:center">'+daysAgo+' روز</span>'
-        +'<span style="flex:1;font-weight:600">'+esc(c.name)+'</span>'
-        +'<span style="font-size:10px;color:var(--text-muted)">'+esc(c.ownerName)+'</span>'
-        +'<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',3,\''+(!memberId?'':memberId)+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۳ روز">+۳</button>'
-        +'<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',7,\''+(!memberId?'':memberId)+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۷ روز">+۷</button>'
-        +'<button onclick="closeModal(\'overdueList\');setTimeout(function(){openCenterModal(\''+c.rtype+'\',\''+c.id+'\');},100)" style="padding:3px 9px;background:var(--brand,#6366f1);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">پیگیری</button>'
+    buckets.forEach(function(bk){
+      if(!bk.items.length)return;
+      body+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0 4px;border-bottom:2px solid var(--border);margin-bottom:8px">'
+        +'<span style="font-size:12px;font-weight:700;color:'+bk.clr+'">'+bk.label+'</span>'
+        +'<span style="font-size:10px;color:var(--text-muted)">'+bk.sub+'</span>'
+        +'<span style="font-size:11px;background:'+bk.clr+'22;color:'+bk.clr+';border-radius:9px;padding:1px 8px;font-weight:700">'+bk.items.length+' مرکز</span>'
         +'</div>';
+      bk.items.forEach(function(c){body+=renderRow(c);});
     });
   }
   body+='</div></div>';
   openModal('overdueList','🔴 پیگیری‌های معوق ('+items.length+')',body,'<button class="btn-secondary" onclick="closeModal(\'overdueList\')">بستن</button>',{lg:true});
 }
-
 // ════════════════════════ EXPERT REPORT ════════════════════
 function openExpertReport(memberId){
   _buildPCCache();
