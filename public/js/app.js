@@ -1365,7 +1365,7 @@ function _renderManagerDash(el){
     if(validK.size&&!validK.has(k))return;
     var e=DB.edits[k];var st=e.status||'بدون تماس';
     if(st==='قرارداد بسته شد'||st==='غیرفعال')return;
-    var pot=parseInt(e.potential||1);if(pot<3)return;
+    var pot=parseInt(e.potential||1);if(pot>2)return;
     var fd=e.followupDate||'';
     if(fd&&fd>=_cutoffStr)return; // has a recent followup date — OK
     var pts=k.split('_');var tp=pts[0];var id=pts.slice(1).join('_');
@@ -1420,11 +1420,11 @@ function _renderManagerDash(el){
 
   // مراکز در خطر
   R2+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
-    +'<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">⚠ مراکز P3/P4 در خطر'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">⚠ مراکز P1/P2 در خطر'
     +(atRisk.length?' '+_dashBadge(atRisk.length,'#f59e0b','#fff'):'')
     +'</div>';
   if(!atRisk.length){
-    R2+='<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:20px 0">✅ مراکز P3/P4 وضعیت خوبی دارند</div>';
+    R2+='<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:20px 0">✅ مراکز P1/P2 وضعیت خوبی دارند</div>';
   } else {
     R2+='<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">';
     atRisk.slice(0,10).forEach(function(it){
@@ -3981,13 +3981,13 @@ function _buildContactsHTML(rtype,rid,domId){
         +'<a href="'+_phoneHref(ph)+'" style="font-size:13px;text-decoration:none;flex-shrink:0" title="'+_phoneTitle()+'" onclick="event.stopPropagation()">📞</a>'
         +'<input type="text" value="'+esc(ph)+'" style="flex:1;direction:ltr;font-size:12px;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" '
         +'onchange="updateContactPhone(\''+rtype+'\',\''+rid+'\','+ci+','+pi+',this.value)">'
-        +'<button onclick="removeContactPhone(\''+rtype+'\',\''+rid+'\','+ci+','+pi+',\''+domId+'\'" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;padding:3px 7px;font-size:11px;flex-shrink:0">✕</button>'
+        +'<button onclick="removeContactPhone(\''+rtype+'\',\''+rid+'\','+ci+','+pi+',\''+domId+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;padding:3px 7px;font-size:11px;flex-shrink:0">✕</button>'
         +'</div>';
     }).join('');
     return'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
       +'<span style="font-size:11px;font-weight:700;color:var(--text-secondary)">مخاطب '+(ci+1)+'</span>'
-      +'<button onclick="removeContact(\''+rtype+'\',\''+rid+'\','+ci+',\''+domId+'\'" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:11px;padding:0 2px" title="حذف مخاطب">🗑 حذف</button>'
+      +'<button onclick="removeContact(\''+rtype+'\',\''+rid+'\','+ci+',\''+domId+'\')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:11px;padding:0 2px" title="حذف مخاطب">🗑 حذف</button>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
       +'<div><label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:2px">نام</label>'

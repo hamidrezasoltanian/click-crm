@@ -1163,3 +1163,53 @@ tr.row-upcoming td{background:var(--warning-bg)!important}
 /* ══ COLUMN DRAG HANDLE ══ */
 .tk-col-head{cursor:grab}
 .tk-col-head:active{cursor:grabbing}
+
+/* ══ MOBILE IMPROVEMENTS ══ */
+@media(max-width:640px){
+  /* Center list rows: wrap badges so buttons don't get pushed off screen */
+  table td{padding:6px 4px;font-size:11px}
+  table td:first-child{min-width:80px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .biopsy-badge{font-size:9px;padding:1px 4px}
+
+  /* Modal footer: wrap buttons on small screens */
+  .modal-box .modal-footer,
+  div[style*="display:flex"][style*="justify-content:flex-end"]{flex-wrap:wrap!important;gap:6px!important}
+
+  /* Center modal footer: stack buttons */
+  .modal-box footer,
+  .modal-footer{flex-wrap:wrap!important;gap:5px!important}
+  .modal-footer button,.modal-footer .btn-primary,.modal-footer .btn-secondary{flex:1 1 auto;min-width:80px;font-size:11px!important;padding:8px 8px!important;text-align:center}
+
+  /* Dashboard grids: single column on mobile */
+  .prov-grid{grid-template-columns:1fr!important}
+  .dash-grid,div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+
+  /* Recommendation cards: full width */
+  .rec-card{flex-direction:column;gap:6px}
+
+  /* KPI summary cards: 2 per row */
+  .kpi-summary-grid,div[style*="grid-template-columns:repeat(4"]{grid-template-columns:repeat(2,1fr)!important}
+
+  /* Pre-call brief / quick-log modals: full readable size */
+  #pcbModal .modal-box,#qclModal .modal-box{max-height:88vh}
+
+  /* Filters bar: stack vertically */
+  .filters-bar{flex-direction:column!important;align-items:stretch!important}
+  .filters-bar select,.filters-bar input,.filters-bar button{width:100%!important;flex:none!important}
+
+  /* Week plan day cards: compact */
+  .wp-day-card{padding:6px 8px}
+  .wp-entry{padding:5px 7px;font-size:11px}
+
+  /* Tab badge numbers: smaller */
+  #mtrBadge,#notifBadge{font-size:9px;padding:0 4px}
+
+  /* Global search overlay: full width */
+  #gSearchBox{width:96vw!important}
+}
+
+@media(max-width:380px){
+  table{font-size:10px}
+  table td{padding:4px 3px}
+  .biopsy-badge{display:none}
+}
