@@ -9976,38 +9976,139 @@ function _renderDiscoverySection() {
   if(el) el.innerHTML = _buildDiscoveryHtml(_discoveredCenters || []);
 }
 
+var _discFilter='new';
 function _buildDiscoveryHtml(centers) {
-  var items = centers.filter(function(c){ return c.status === 'new'; });
-  if(items.length === 0) {
-    return '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">'
-      + 'داده‌ای یافت نشد.<br><span style="font-size:11px">اسکریپت discover_centers.py را اجرا کنید</span></div>';
+  var filtered = _discFilter === 'all'
+    ? centers
+    : centers.filter(function(c){ return c.status === _discFilter; });
+  var cntAll  = centers.length;
+  var cntNew  = centers.filter(function(c){ return c.status==='new'; }).length;
+  var cntImp  = centers.filter(function(c){ return c.status==='imported'; }).length;
+  var cntIgn  = centers.filter(function(c){ return c.status==='ignored'; }).length;
+
+  var _btn = function(label, val, cnt) {
+    var active = _discFilter === val;
+    return '<button onclick="_discFilter=\'' + val + '\';_renderDiscoverySection()" '
+      + 'style="font-size:11px;padding:3px 10px;border-radius:14px;cursor:pointer;border:1px solid '
+      + (active ? 'var(--brand,#6366f1);background:var(--brand,#6366f1);color:#fff' : 'var(--border);background:var(--bg-raised);color:var(--text-secondary)')
+      + '">' + label + (cnt ? ' <b>' + cnt + '</b>' : '') + '</button>';
+  };
+
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+    + _btn('همه', 'all', cntAll)
+    + _btn('جدید 🆕', 'new', cntNew)
+    + _btn('وارد شده ✅', 'imported', cntImp)
+    + _btn('نادیده 🚫', 'ignored', cntIgn)
+    + '</div>';
+
+  if(!filtered.length) {
+    return html + '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">'
+      + 'هیچ مرکزی در این دسته یافت نشد</div>';
   }
-  var html = '';
-  items.forEach(function(c) {
+
+  filtered.forEach(function(c) {
     var sc = parseInt(c.score) || 0;
     var scColor = sc >= 10 ? '#dc2626' : sc >= 7 ? '#ea580c' : '#ca8a04';
-    var docs = (c.doctors || []).map(function(d){ return esc(d.label) + ': ' + esc(d.name); }).join(' &nbsp;|&nbsp; ');
-    var reasons = (c.reasons || []).map(function(r){ return esc(r); }).join(' &nbsp;•&nbsp; ');
-    var srcUrl = (c.source_urls || [])[0] || '';
-    html += '<div style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:8px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+    var stBg = c.status==='imported' ? '#f0fdf4' : c.status==='ignored' ? '#f8fafc' : '#faf5ff';
+    var stBorder = c.status==='imported' ? '#86efac' : c.status==='ignored' ? '#e2e8f0' : '#d8b4fe';
+
+    // Doctors
+    var docHtml = '';
+    if(c.doctors && c.doctors.length) {
+      docHtml = '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">'
+        + (c.doctors||[]).map(function(d){
+            var lbl = esc(d.label || d.specialty || '');
+            var nm  = esc(d.name || '');
+            return '<span style="font-size:10px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:10px;padding:2px 8px">'
+              + '👨‍⚕️ ' + lbl + (nm ? ': ' + nm : '') + '</span>';
+          }).join('')
+        + '</div>';
+    }
+
+    // Reasons
+    var reasonHtml = '';
+    if(c.reasons && c.reasons.length) {
+      reasonHtml = '<div style="margin-top:5px;font-size:10px;color:#7c3aed">'
+        + '💡 ' + (c.reasons||[]).map(function(r){ return esc(r); }).join(' &nbsp;•&nbsp; ')
+        + '</div>';
+    }
+
+    // Address
+    var addrHtml = '';
+    if(c.address) {
+      addrHtml = '<div style="margin-top:4px;font-size:10px;color:var(--text-muted)">📍 ' + esc(c.address) + '</div>';
+    }
+
+    // Source URLs
+    var urlHtml = '';
+    if(c.source_urls && c.source_urls.length) {
+      urlHtml = '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">'
+        + (c.source_urls||[]).slice(0,4).map(function(u,i){
+            var domain = u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+            return '<a href="' + esc(u) + '" target="_blank" style="font-size:10px;color:#15803d;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:5px;padding:2px 7px;text-decoration:none">🔗 ' + esc(domain) + '</a>';
+          }).join('')
+        + '</div>';
+    }
+
+    // Date
+    var dateStr = '';
+    if(c.last_scraped) {
+      try {
+        var d = new Date(c.last_scraped);
+        var jd = g2j(d.getFullYear(), d.getMonth()+1, d.getDate());
+        dateStr = jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+      } catch(_) {}
+    }
+
+    // Biopsy mentions
+    var biopHtml = c.biopsy_mentions > 0
+      ? '<span style="font-size:10px;background:#faf5ff;color:#7c3aed;border:1px solid #d8b4fe;border-radius:10px;padding:2px 7px">💬 ' + c.biopsy_mentions + ' نظر بیوپسی</span>'
+      : '';
+
+    // Status badge
+    var stBadge = c.status === 'imported'
+      ? '<span style="font-size:9px;background:#dcfce7;color:#166534;border-radius:8px;padding:1px 6px;font-weight:700">✅ وارد شده</span>'
+      : c.status === 'ignored'
+      ? '<span style="font-size:9px;background:#f1f5f9;color:#64748b;border-radius:8px;padding:1px 6px;font-weight:700">🚫 نادیده</span>'
+      : '';
+
+    // Action buttons
+    var actBtns = '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
+    if(c.status !== 'imported') {
+      actBtns += '<button onclick="_discImport(\'' + c.id + '\')" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit">➕ وارد کن</button>';
+    }
+    if(c.status !== 'ignored') {
+      actBtns += '<button onclick="_discIgnore(\'' + c.id + '\')" style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit">🚫 نادیده</button>';
+    }
+    if(c.status !== 'new') {
+      actBtns += '<button onclick="fetch(\'/api/discovery/\'+\'' + c.id + '\',{method:\'PATCH\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({status:\'new\'})}).then(function(){_discoveredCenters=null;_loadDiscoveredCenters();})" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit">↩ برگردان</button>';
+    }
+    actBtns += '</div>';
+
+    html += '<div style="background:' + stBg + ';border-radius:8px;border:1px solid ' + stBorder + ';padding:10px 14px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      + '<div style="flex:1;min-width:0">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text-primary)">' + esc(c.name)
       + (c.city ? ' <span style="font-weight:400;color:var(--text-muted);font-size:11px">— ' + esc(c.city) + '</span>' : '')
+      + ' ' + stBadge + '</div>'
       + '</div>'
-      + '<span style="background:' + scColor + ';color:#fff;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap">امتیاز ' + sc + '</span>'
+      + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">'
+      + '<span style="background:' + scColor + ';color:#fff;border-radius:10px;padding:2px 10px;font-size:12px;font-weight:700">امتیاز ' + sc + '</span>'
+      + (biopHtml ? biopHtml : '')
+      + (dateStr ? '<span style="font-size:9px;color:var(--text-muted)">' + dateStr + '</span>' : '')
       + '</div>'
-      + (docs ? '<div style="font-size:11px;color:#1d4ed8;margin-top:4px">👨‍⚕️ ' + docs + '</div>' : '')
-      + (c.biopsy_mentions > 0
-          ? '<div style="font-size:11px;color:#7c3aed;margin-top:3px">💬 ' + c.biopsy_mentions + ' نظر با کلیدواژه بیوپسی</div>'
-          : '')
-      + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
-      + '<button onclick="_discImport(\'' + c.id + '\')" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;font-size:11px;padding:3px 10px;cursor:pointer">➕ افزودن به CRM</button>'
-      + '<button onclick="_discIgnore(\'' + c.id + '\')" style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;padding:3px 10px;cursor:pointer">نادیده گرفتن</button>'
-      + (srcUrl ? '<a href="' + esc(srcUrl) + '" target="_blank" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:5px;font-size:11px;padding:3px 10px;text-decoration:none">🔗 منبع</a>' : '')
-      + '</div></div>';
+      + '</div>'
+      + docHtml
+      + reasonHtml
+      + addrHtml
+      + urlHtml
+      + actBtns
+      + '</div>';
   });
+
   return html;
 }
+
 
 function _discImport(cid) {
   var c = (_discoveredCenters||[]).find(function(x){ return x.id===cid; });
@@ -10521,8 +10622,8 @@ function renderKPIPanel(){
   }
 
 
-  // ── discovered centers from web (manager only)
-  if(_isManager()) {
+  // ── discovered centers from web (manager + super admin)
+  if(_isManager()||_isSuperAdmin()) {
     var discNew = (_discoveredCenters||[]).filter(function(c){ return c.status==='new'; }).length;
     html += '<div style="background:var(--bg-card);border-radius:12px;border:1px solid var(--border);padding:14px 16px;margin-top:12px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
