@@ -18,7 +18,15 @@ router.get('/db', async (req, res) => {
     if (result.rows.length === 0) {
       return res.json({});
     }
-    return res.json(result.rows[0].value);
+    const data = result.rows[0].value;
+    // Strip server-side secrets before sending to client
+    if (data && data.settings && data.settings.anthropicKey) {
+      const safe = Object.assign({}, data, {
+        settings: Object.assign({}, data.settings, { anthropicKey: '***' }),
+      });
+      return res.json(safe);
+    }
+    return res.json(data);
   } catch (e) {
     console.error('[data/db GET]', e.message);
     return res.status(500).json({ error: 'خطای سرور' });
@@ -142,8 +150,8 @@ router.put('/centers/master', requireManager, async (req, res) => {
   }
 });
 
-// GET /api/data/backup
-router.get('/backup', async (req, res) => {
+// GET /api/data/backup — manager only (contains full DB including sensitive config)
+router.get('/backup', requireManager, async (req, res) => {
   try {
     const [mainR, mtrR, usersR, centersR] = await Promise.all([
       query("SELECT value FROM app_data WHERE key = 'main'"),
