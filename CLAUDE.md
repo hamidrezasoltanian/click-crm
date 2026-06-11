@@ -30,7 +30,7 @@ Sales-Portal/
   public/
     index.html          ← HTML shell only (~640 lines): markup, tab buttons, panel divs
     css/app.css         ← all styles (~1,150 lines), indigo design system
-    js/app.js           ← ALL application logic (~12,350 lines)
+    js/app.js           ← ALL application logic (~13,450 lines)
     sw.js               ← service worker (CDN caching)
     fonts/              ← Vazirmatn font files
   server/
@@ -47,6 +47,9 @@ Sales-Portal/
       users.js          ← /api/users
       distribution.js   ← /api/distribution
       ai.js             ← /api/ai proxy
+      discovery.js      ← /api/discovery (biopsy center discovery: list, ai-scan, import-file)
+  scripts/
+    discover_centers.py ← CLI scraper (nobat.ir, doctorto.ir, --ai, --enrich modes)
   atena_crm_v3_mtr_3.html  ← legacy snapshot of the OLD single-file app (frozen; no longer synced line-by-line, kept for history)
   CLAUDE.md
 ```
@@ -112,7 +115,7 @@ Key sub-structures:
 
 | Field | Shape | Notes |
 |---|---|---|
-| `DB.edits` | `{"{type}_{id}": {status, owner, potential, followupDate, lead, type, address, nameOverride, contacts[], _ts, ...}}` | per-center overrides; the heart of the CRM |
+| `DB.edits` | `{"{type}_{id}": {status, owner, potential, followupDate, lead, type, address, nameOverride, contacts[], competitor, biopsyScore, biopsyReasons, _ts, ...}}` | per-center overrides; the heart of the CRM |
 | `DB.weekEntries` | `{"{weekId}:::{recKey}": {rtype, rid, scheduledDate, actionType:'call'|'visit', done, doneDate, addedBy, centerName, weekTagId}}` | week-plan assignments |
 | `DB.tasks` | `[{id, title, owner, dueDate, priority(1-3), status, centerKey, note, subtasks[], done, doneAt, createdBy, createdAt}]` | kanban tasks; `subtasks` is recursive `{id,title,done,subtasks[]}` up to 3 levels |
 | `DB.changeLog` | `[{at(ISO), by, rkey, field, val}]` | full field-change history; powers audit, drill-down, activity detection |
@@ -190,11 +193,15 @@ All dates are Persian/Solar Hijri, format `'YYYY/MM/DD'` (string comparison work
 | 693 | `buildUSERS()` | build `USERS` id→name map |
 | 858/879 | `getE` / `setE` | center field read/write (+changeLog) |
 | 999 | `switchTab(tab)` | tab routing — single if/else chain; don't break it |
+| ~1646 | `openPreCallBrief(rtype,rid)` | pre-call summary modal (status, last notes, changes, competitor, address) |
+| ~1680 | `quickCallLog(rtype,rid,name)` | quick post-call log modal (result dropdown + note + next followup date) |
+| ~1690 | `_submitQCL(rtype,rid,modalId)` | submit quickCallLog form → saves note + followupDate |
+| ~1720 | `_renderExpertDash(el)` | expert dashboard; first section = ☀️ امروز من (today's week entries) |
 | 1753 | `renderDashboard()` | provinces-tab dashboard widgets |
 | 1796 | `renderBanner()` | top reminder banner (overdue/today followups) |
-| 1907 | `renderTable()` | centers list view inside a province |
+| 1907 | `renderTable()` | centers list view inside a province; each row has 🎯 pre-call button |
 | 3159 | `openCenterAudit(key,name)` | center timeline modal (changeLog+notes+weekEntries+tasks) |
-| 3231 | `openCenterModal(rtype,id)` | the big center edit modal (status, owner, followup date + «📌 وظیفه» convert-to-task button, tags, contacts, address, notes) |
+| 3231 | `openCenterModal(rtype,id)` | center edit modal: status, owner, followup date, competitor field, map button, commission div, 🎯 خلاصه footer button |
 | 3839 | `renderWeekPlan()` | 7-day grid; syncs `#wpOwnerFilter` → `_wpFclFilters.owner` |
 | 3961 | `renderWpFullCenterList()` | unscheduled queue + all-centers list below the grid |
 | 4888 | `sendNotif(to,msg,centerKey)` | push in-app notification |
@@ -265,11 +272,22 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | Receivables (مطالبات) incl. AI analysis tab | mtr tab | ✅ semi-independent |
 | Excel import/export of centers | provinces | ✅ |
 | Global search (Ctrl+K style) | header | ✅ |
+| Biopsy center discovery: Python scraper (nobat.ir, doctorto.ir) + AI web_search scan | KPI tab → کشف مراکز | ✅ |
+| biopsyScore badge on center rows (🔬 score) from online enrichment | center list rows | ✅ |
+| Claude API key config (env var or DB.settings.anthropicKey) | ⚙ Settings modal | ✅ |
+| ☀️ امروز من: today's scheduled week entries at top of expert dashboard | provinces dashboard | ✅ |
+| 📞 Quick post-call log: minimal modal (result+note+next-date) from list row or today section | center list, dashboard | ✅ |
+| 🎯 Pre-call brief: last notes, changes, competitor, address before calling | center list row (🎯), modal footer | ✅ |
+| 🗺 Navigation: map button next to address textarea → Google Maps | center modal | ✅ |
+| 🤖 Competitor tracking: text field in center modal + orange badge in list row | center modal, list | ✅ |
+| Commission placeholder div (cmCommission_) next to competitor field | center modal | ✅ (placeholder) |
+| 9 UX confusion fixes (banner role tag, kanban empty states, etc.) | various | ✅ |
 
 ## Roadmap / Future Plan
 
 Priorities expressed by the product owner (hamidreza.soltanian@gmail.com), roughly ordered:
 
+0. **Salesperson workflow polish** — `competitor` field is now tracked; commission view is a placeholder (`cmCommission_` div) — wire it to actual commission_rules table or pricing margins. Pre-call brief and quick-log are live; consider adding "call timer" or "call history" count to the brief.
 1. **Manager drill-down depth** — keep extending کلی→جزئی: from expert detail down to full written reports per center (currently shows last note + 5 changeLog entries; owner wants full report reading). Consider a dedicated per-expert report page aggregating done-modal structured logs (نتیجه/یادداشت/اقدام بعدی) by date range.
 2. **Dashboard & overdue follow-up tracking** — keep making overdue work more actionable; possible next steps: overdue aging buckets, one-click reschedule from overdue list, weekly digest notification to manager.
 3. **Task system maturity** — column reordering (drag), per-column WIP hints, task comments/activity, recurring tasks.

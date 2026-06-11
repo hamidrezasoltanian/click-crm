@@ -1644,6 +1644,96 @@ function _renderExpertUserPanel(el){
   el.innerHTML=html;
 }
 
+
+function openPreCallBrief(rtype,rid){
+  _buildPCCache();
+  var r=null;
+  if(rtype==='center'){r=(CENTERS||[]).find(function(c){return c.id===rid;});}
+  else{Object.keys(_PC_CACHE||{}).forEach(function(pv){(_PC_CACHE[pv]||[]).forEach(function(c){if(c.id===rid)r=c;});});}
+  if(!r)(DB.extra||[]).forEach(function(c){if(c.id===rid)r=c;});
+  if(!r)r={id:rid,name:rid};
+  var e=getE(rtype,rid);
+  var rkey=rtype+'_'+rid;
+  var notes=(DB.notes[rkey]||[]).slice(0,5);
+  var hist=(DB.changeLog||[]).filter(function(h){return h.rkey===rkey;}).slice(-5).reverse();
+  var td=todayStr();
+  var body='<div style="display:flex;flex-direction:column;gap:12px">'
+    +'<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px">📍 اطلاعات کلی</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">'
+    +'<div><span style="color:var(--text-muted)">وضعیت: </span><strong>'+(e.status||'بدون تماس')+'</strong></div>'
+    +'<div><span style="color:var(--text-muted)">پتانسیل: </span><strong>P'+(e.potential||r.potential||'؟')+'</strong></div>'
+    +'<div><span style="color:var(--text-muted)">پیگیری: </span><strong style="color:'+((e.followupDate&&e.followupDate<td)?'#dc2626':'#16a34a')+'">'+( e.followupDate||'—')+'</strong></div>'
+    +'<div><span style="color:var(--text-muted)">رقیب: </span><strong>'+(e.competitor||'ثبت نشده')+'</strong></div>'
+    +'</div>'+(e.address?'<div style="margin-top:6px;font-size:11px"><span style="color:var(--text-muted)">آدرس: </span>'+esc(e.address)+'</div>':'')+'</div>';
+  if(notes.length){
+    body+='<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">'
+      +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px">📝 آخرین یادداشت‌ها</div>';
+    notes.forEach(function(n){
+      var d=new Date(n.at||'');var jd=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
+      var ds=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+      body+='<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:11px">'
+        +'<span style="color:var(--text-muted);font-size:10px">'+ds+' &middot; '+esc(n.by||'')+'</span>'
+        +'<div style="margin-top:2px">'+esc((n.text||'').substring(0,150))+'</div></div>';
+    });
+    body+='</div>';
+  }
+  if(hist.length){
+    body+='<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">'
+      +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px">🔄 آخرین تغییرات</div>';
+    hist.forEach(function(h){
+      var d=new Date(h.at||'');var jd=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
+      var ds=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+      body+='<div style="font-size:10.5px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="color:var(--text-secondary)">'+esc(h.field)+'</span>'
+        +' ← '+esc(String(h.val||'—').substring(0,30))
+        +' <span style="opacity:.6">'+esc(h.by||'')+' &middot; '+ds+'</span></div>';
+    });
+    body+='</div>';
+  }
+  body+='</div>';
+  var _pcbId='pcb_'+rid;
+  var foot='<button class="btn-secondary" onclick="closeModal(\''+_pcbId+'\')">بستن</button>'
+    +'<button class="btn-primary" onclick="closeModal(\''+_pcbId+'\');quickCallLog(\''+rtype+'\',\''+rid+'\',\''+esc(r.name||rid)+'\')">📞 ثبت تماس</button>';
+  openModal(_pcbId,'🎯 پیش از تماس — '+esc(r.name||rid),body,foot,{lg:true});
+}
+
+function quickCallLog(rtype,rid,centerName){
+  var id='qcl_'+rid;
+  var e=getE(rtype,rid);
+  var body='<div style="display:flex;flex-direction:column;gap:10px">'
+    +'<div><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">📊 نتیجه تماس</label>'
+    +'<select id="qcl_result" style="width:100%;padding:6px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)">'
+    +'<option value="">-- انتخاب --</option>'
+    +'<option>تماس موفق - علاقه‌مند</option>'
+    +'<option>تماس موفق - بی‌علاقه</option>'
+    +'<option>قرار ویزیت گذاشته شد</option>'
+    +'<option>پیگیری بعدی لازم است</option>'
+    +'<option>عدم پاسخگویی</option>'
+    +'<option>مشغول / بعداً تماس</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">📝 یادداشت سریع</label>'
+    +'<textarea id="qcl_note" rows="3" placeholder="خلاصه مکالمه..." style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;resize:vertical;background:var(--bg-input);color:var(--text-primary)"></textarea></div>'
+    +'<div><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">📅 پیگیری بعدی</label>'
+    +'<input type="text" id="qcl_fd" readonly placeholder="انتخاب تاریخ..." onclick="openJDP(this,function(v){document.getElementById(\'qcl_fd\').value=v;})" style="width:100%;padding:6px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;background:var(--bg-input);color:var(--text-primary)" value="'+esc(e.followupDate||'')+'">'
+    +'</div></div>';
+  var foot='<button class="btn-secondary" onclick="closeModal(\''+id+'\')">لغو</button>'
+    +'<button class="btn-primary" onclick="_submitQCL(\''+rtype+'\',\''+rid+'\',\''+id+'\')">ثبت تماس</button>';
+  openModal(id,'📞 ثبت سریع — '+esc(centerName),body,foot);
+}
+function _submitQCL(rtype,rid,modalId){
+  var result=((document.getElementById('qcl_result')||{}).value||'');
+  var note=((document.getElementById('qcl_note')||{}).value||'').trim();
+  var fd=((document.getElementById('qcl_fd')||{}).value||'');
+  if(!result&&!note){showToast('نتیجه یا یادداشت را وارد کنید');return;}
+  var txt=(result?'نتیجه: '+result+(note?'\n'+note:''):note);
+  if(txt){
+    if(!DB.notes[rtype+'_'+rid])DB.notes[rtype+'_'+rid]=[];
+    DB.notes[rtype+'_'+rid].unshift({text:txt,by:currentUser,at:new Date().toISOString(),tags:[]});
+  }
+  if(fd)setE(rtype,rid,'followupDate',fd);
+  saveDB();closeModal(modalId);showToast('✓ تماس ثبت شد');
+}
 function _renderExpertDash(el){
   if(!el)return;
   _buildPCCache();
@@ -1651,7 +1741,7 @@ function _renderExpertDash(el){
   _dashSectionUidCounter=0;
 
   // ── جمع‌آوری مراکز کارشناس ──
-  var myOverdue=[],myNoDate=[],myUpcoming=[],myRecommended=[],myWeekNoDate=[];
+  var myOverdue=[],myNoDate=[],myUpcoming=[],myRecommended=[],myWeekNoDate=[],myTodayEntries=[];
 
   function _collectCenters(arr,rtype){
     arr.forEach(function(r){
@@ -1694,6 +1784,16 @@ function _renderExpertDash(el){
   });
   myWeekNoDate.sort(function(a,b){return a.weekId>b.weekId?-1:1;});
 
+  // امروز من - مراکز برنامه‌ریزی‌شده برای امروز
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];if(!we||we.done)return;
+    var rt=we.rtype||'';var ri=we.rid||'';if(!rt||!ri)return;
+    var ownr=typeof _wpGetOwner==='function'?_wpGetOwner(we):(getE(rt,ri).owner||'');
+    if(ownr!==currentUser)return;
+    if(we.scheduledDate!==today)return;
+    myTodayEntries.push({rtype:rt,id:ri,name:we.centerName||ri,actType:we.actionType||'call',eKey:k});
+  });
+
   // مطالبات
   var myMtr=[];
   if(typeof DATA!=='undefined'&&DATA&&DATA.length){
@@ -1707,6 +1807,23 @@ function _renderExpertDash(el){
   }
 
   var sections='';
+
+  if(myTodayEntries.length){
+    var _tHtml='<div style="grid-column:1/-1;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1.5px solid #38bdf8;border-radius:10px;padding:10px 14px">'
+      +'<div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px">☀️ امروز من ('+myTodayEntries.length+')'
+      +'</div><div style="display:flex;flex-direction:column;gap:5px">';
+    myTodayEntries.forEach(function(it){
+      var ic=it.actType==='visit'?'🤝':'📞';
+      _tHtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:#fff;border-radius:6px;border:1px solid #bae6fd">'
+        +'<button onclick="openCenterModal(\''+esc(it.rtype)+'\',\''+esc(it.id)+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:#0369a1;padding:0;text-align:right">'+esc(it.name)+'</button>'
+        +'<div style="display:flex;gap:4px;align-items:center">'
+        +'<span style="font-size:10px;background:#e0f2fe;padding:1px 6px;border-radius:5px">'+ic+'</span>'
+        +'<button onclick="quickCallLog(\''+esc(it.rtype)+'\',\''+esc(it.id)+'\',\''+esc(it.name)+'\')" style="background:#0ea5e9;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:inherit">ثبت نتیجه</button>'
+        +'</div></div>';
+    });
+    _tHtml+='</div></div>';
+    sections+=_tHtml;
+  }
 
   sections+=_dashSectionCard(
     '🔴 پیگیری معوق ('+myOverdue.length+')',myOverdue,
@@ -2190,8 +2307,10 @@ function renderProvTable(){
         +(isStalled(rtype,r.id)&&rowCls!=='row-contracted'?'<span class="risk-badge" title="۳۰+ روز بدون فعالیت">🔴</span>':'')
         +(isOverdue(rtype,r.id)&&rowCls!=='row-stalled'?'<span class="risk-badge" title="پیگیری معوق">🟠</span>':'')
         +(e.biopsyScore?'<span class="biopsy-badge" title="پتانسیل بیوپسی (امتیاز ۶-۱۰+) — '+(e.biopsyReasons||[]).join(' • ')+'">🔬 '+e.biopsyScore+'</span>':'')
+        +(e.competitor?'<span title="رقیب: '+esc(e.competitor)+'" style="display:inline-block;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:700;cursor:help;margin-right:3px">🤖 '+esc(e.competitor)+'</span>':'')
         +(function(){var _mi=typeof MTR_BY_CENTER!=='undefined'?MTR_BY_CENTER[r.id]:null;if(!_mi||!_mi.length)return '';var _ov=_mi.filter(function(x){return x.od>45;});var _warn=_mi.filter(function(x){return x.od>20&&x.od<=45;});var _col=_ov.length?'#dc2626':_warn.length?'#d97706':'#0ea5e9';return '<span title="مطالبات باز" style="background:'+_col+';color:var(--text-primary);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:5px;cursor:default">💰 '+_mi.length+'</span>';})()
         +'<button class="ctr-link" onclick="openCenterModal(\''+rtype+'\',\''+r.id+'\')">'+esc(r.name)+'</button>'
+        +'<button onclick="event.stopPropagation();openPreCallBrief(\''+rtype+'\',\''+r.id+'\')" title="خلاصه قبل تماس" style="background:none;border:none;cursor:pointer;font-size:10px;padding:0 2px;opacity:.6">🎯</button>'
         +phoneHtml
         +(e.phones&&e.phones.length||e.address||e.contactName||(e.contacts&&e.contacts.length)?'<button onclick="event.stopPropagation();showContactPopup(event,\''+rtype+'\',\''+r.id+'\')" title="اطلاعات تماس" style="background:none;border:none;cursor:pointer;font-size:10px;padding:0 2px;color:#0369a1;vertical-align:middle">📋</button>':'')
         +renderTagCell(rtype,r.id)+'</td>'
@@ -3568,7 +3687,14 @@ function openCenterModal(rtype,id){
     +'<label style="font-size:10px;margin-top:8px;display:block">آدرس</label>'
     +'<textarea id="maddr_'+id+'" placeholder="آدرس کامل مرکز..." rows="2" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl" '
     +'onchange="setE(\''+rtype+'\',\''+r.id+'\',\'address\',this.value)">'+esc(e.address||'')+'</textarea>'
+    +'<button onclick="var _v=document.getElementById(\'maddr_\'+\''+id+'\').value.trim();if(_v)window.open(\'https://www.google.com/maps/search/?api=1&query=\'+encodeURIComponent(_v),\'_blank\');else showToast(\'آدرس را وارد کنید\')" style="background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc;border-radius:5px;padding:3px 10px;font-size:11px;font-family:inherit;cursor:pointer;margin-top:4px">🗺 نقشه</button>'
     +'</div>'
+    +'<div style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border)">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">🤖 رقیب اصلی</label>'
+    +'<input type="text" value="'+esc(e.competitor||'')+'" placeholder="نام رقیب / برند..." onchange="setE(\''+rtype+'\',\''+r.id+'\',\'competitor\',this.value)" style="width:100%;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px;background:var(--bg-input);color:var(--text-primary)"></div>'
+    +'<div id="cmCommission_'+r.id+'" style="font-size:10px;color:var(--text-muted);padding:4px 0"></div>'
+    +'</div></div>'
     +'<div id="cmPricingInfo_'+r.id+'" style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);font-size:11px"><span style="color:var(--text-muted)">در حال بارگذاری قیمت‌گذاری...</span></div>'
    // برنامه هفته
     +(wkEntries.length?'<label>برنامه هفته</label><div style="background:var(--bg-raised);border-radius:5px;padding:7px;font-size:11px">'
@@ -3626,6 +3752,7 @@ function openCenterModal(rtype,id){
     +'</div>';
 
   var foot='<button style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="closeModal(\'cm_'+id+'\');confirmDeleteCenter(\''+rtype+'\',\''+id+'\',\''+esc(displayName)+'\')">🗑 حذف</button>'
+    +'<button style="background:#faf5ff;color:#7c3aed;border:1px solid #d8b4fe;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openPreCallBrief(\''+rtype+'\',' +'\''+r.id+'\')">🎯 خلاصه</button>'
     +'<button style="background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openCenterAudit(\''+recK(rtype,r.id)+'\',\''+esc(displayName)+'\')">📋 تاریخچه</button>'
     +'<button class="btn-secondary" onclick="closeModal(\'cm_'+id+'\')">بستن</button>'
     +'<button class="btn-primary" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">📋 اضافه به هفته</button>';
