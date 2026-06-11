@@ -1053,10 +1053,11 @@ function switchTab(tab){
   currentTab=tab;
   try{localStorage.setItem('_st',tab);}catch(e){}
   _navPush(tab, null);
-  ['provinces','weekplan','calendar','checklist','activity','changelog','tasks','manager','kpi','mtr','pricing'].forEach(function(t){
+  ['home','provinces','weekplan','calendar','checklist','activity','changelog','tasks','manager','kpi','mtr','pricing'].forEach(function(t){
     var b=document.getElementById('tab_'+t);if(b)b.classList.toggle('active',t===tab);
   });
   document.getElementById('dash').style.display=(tab==='provinces')?'':'none';
+  var _hp=document.getElementById('homePanel');if(_hp)_hp.style.display=(tab==='home')?'':'none';
   var _udp=document.getElementById('userDashPanel');if(_udp)_udp.style.display=(tab==='provinces')?'':'none';
   document.getElementById('banner').style.display='none';
   document.getElementById('filtersBar').style.display=(tab==='provinces')?'flex':'none';
@@ -1074,7 +1075,7 @@ function switchTab(tab){
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
   if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
   // update mobile nav
-  (function(){var tabs=['provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
+  (function(){var tabs=['home','provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
   if(tab==='provinces'){
     renderDashboard();renderBanner();
     if(!_currentProvId){
@@ -1103,6 +1104,7 @@ function switchTab(tab){
   else if(tab==='tasks')renderTasksPanel();
   else if(tab==='manager')renderManagerPanel();
   else if(tab==='kpi')renderKPIPanel();
+  else if(tab==='home')renderHome();
   var _clBtn=document.getElementById('tab_changelog');if(_clBtn)_clBtn.style.display=_isManager()?'':'none';
   var _tBtn=document.getElementById('tab_tasks');if(_tBtn)_tBtn.style.display='';
 }
@@ -1966,6 +1968,327 @@ function renderUserDashboard(){
   var el=document.getElementById('userDashPanel');if(!el)return;
   if(_isManager()){_renderManagerUserPanel(el);}
   else{_renderExpertUserPanel(el);}
+}
+
+
+// ════════════════════════ HOME PANEL ════════════════════════
+// Default widgets per role
+var _HOME_WIDGETS_EXPERT = ['today','overdue','priority','tasks','recent'];
+var _HOME_WIDGETS_MANAGER = ['today','overdue','summary','tasks','recent'];
+
+function _getHomeWidgets(){
+  var prefs=(DB.settings&&DB.settings.homeWidgets&&DB.settings.homeWidgets[currentUser]);
+  if(prefs&&prefs.length)return prefs;
+  return _isManager()?_HOME_WIDGETS_MANAGER.slice():_HOME_WIDGETS_EXPERT.slice();
+}
+
+function _saveHomeWidgets(arr){
+  if(!DB.settings)DB.settings={};
+  if(!DB.settings.homeWidgets)DB.settings.homeWidgets={};
+  DB.settings.homeWidgets[currentUser]=arr;
+  saveDB();
+}
+
+function _homeRemoveWidget(wid){
+  var arr=_getHomeWidgets().filter(function(x){return x!==wid;});
+  _saveHomeWidgets(arr);
+  renderHome();
+}
+
+function _homeAddWidget(wid){
+  var arr=_getHomeWidgets();
+  if(arr.indexOf(wid)<0){arr.push(wid);}
+  _saveHomeWidgets(arr);
+  renderHome();
+}
+
+function _homeOpenAddPanel(){
+  var all=[
+    {id:'today',label:'☀️ امروز من',desc:'کارهای امروز از برنامه هفته'},
+    {id:'overdue',label:'🔴 معوق‌ها',desc:'مراکزی که پیگیری سررسیده'},
+    {id:'priority',label:'🎯 اولویت‌های هوشمند',desc:'مراکز پیشنهادی برای تماس امروز'},
+    {id:'tasks',label:'📌 وظایف من',desc:'کارت‌های kanban من'},
+    {id:'recent',label:'🕐 مراکز اخیر',desc:'آخرین مراکزی که باز کردی'},
+    {id:'summary',label:'📊 خلاصه مدیر',desc:'کارت‌های آماری (فقط مدیر)'},
+    {id:'weekprogress',label:'📋 پیشرفت هفته',desc:'درصد انجام برنامه هفتگی'},
+    {id:'silent',label:'🔇 مراکز خاموش',desc:'P1/P2 بدون فعالیت ۳۰+ روز'},
+  ];
+  var active=_getHomeWidgets();
+  var body='<div style="display:flex;flex-direction:column;gap:8px">';
+  all.forEach(function(w){
+    var on=active.indexOf(w.id)>=0;
+    body+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-raised);border-radius:7px;border:1px solid var(--border)">'
+      +'<div><div style="font-size:13px;font-weight:600">'+w.label+'</div><div style="font-size:11px;color:var(--text-muted)">'+w.desc+'</div></div>'
+      +'<button onclick="'+( on ? "_homeRemoveWidget('"+w.id+"')" : "_homeAddWidget('"+w.id+"')" )+';closeModal(\'homeAddModal\')" style="font-size:11px;padding:4px 10px;border-radius:5px;border:none;cursor:pointer;font-family:inherit;background:'+(on?'#fecaca':'#bbf7d0')+';color:'+(on?'#b91c1c':'#15803d')+';font-weight:600">'+(on?'حذف ✕':'افزودن ✓')+'</button>'
+      +'</div>';
+  });
+  body+='</div>';
+  openModal('homeAddModal','⚙️ مدیریت ویجت‌ها',body,'<button class="btn-secondary" onclick="closeModal(\'homeAddModal\')">بستن</button>',{lg:false});
+}
+
+function renderHome(){
+  var el=document.getElementById('homePanel');
+  if(!el)return;
+  var widgets=_getHomeWidgets();
+  var today=todayStr();
+  _buildPCCache();
+  var html='<div style="max-width:900px;margin:0 auto">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<h2 style="margin:0;font-size:16px;font-weight:700;color:var(--brand)">🏠 خانه — '+( USERS[currentUser]||currentUser )+'</h2>'
+    +'<button onclick="_homeOpenAddPanel()" style="font-size:11px;padding:5px 12px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-family:inherit;color:var(--text-primary)">⚙️ مدیریت ویجت‌ها</button>'
+    +'</div>';
+
+  // ─── helper: widget wrapper ───
+  function _wBox(title,content,wid){
+    return '<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;margin-bottom:12px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border)">'
+      +'<span style="font-weight:700;font-size:13px">'+title+'</span>'
+      +'<button onclick="_homeRemoveWidget(\''+wid+'\')" title="حذف" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-muted);padding:0 2px" title="حذف ویجت">✕</button>'
+      +'</div>'
+      +'<div style="padding:10px 14px">'+content+'</div>'
+      +'</div>';
+  }
+
+  widgets.forEach(function(wid){
+    var boxContent='';
+
+    if(wid==='today'){
+      // ─── امروز من ───
+      var todayEntries=[];
+      var weekId=wpCurrentWeekId();
+      Object.keys(DB.weekEntries||{}).forEach(function(k){
+        var we=DB.weekEntries[k];
+        if(!we||we.done)return;
+        var owner=_wpGetOwner(we);
+        if(!_isManager()&&owner!==currentUser)return;
+        var wid2=k.split(':::')[0];
+        if(wid2!==weekId)return;
+        var schDate=we.scheduledDate||'';
+        if(schDate===today)todayEntries.push(we);
+      });
+      if(!todayEntries.length){
+        boxContent='<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:8px">برنامه‌ای برای امروز ندارید ✓</div>';
+      } else {
+        boxContent='<div style="display:flex;flex-direction:column;gap:5px">';
+        todayEntries.slice(0,8).forEach(function(we){
+          var nm=we.centerName||_getCenterName(we.rtype||'center',we.rid||we.recKey);
+          var act=we.actionType==='visit'?'🚶 ویزیت':'📞 تماس';
+          boxContent+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--bg-raised);border-radius:6px;font-size:12px">'
+            +'<span>'+act+' — <b>'+esc(nm)+'</b></span>'
+            +'<button onclick="quickCallLog(\''+esc(we.rtype||'center')+'\',\''+esc(we.rid||we.recKey||'')+'\',\''+esc(nm)+'\')" style="font-size:10px;padding:2px 8px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit">📞 ثبت</button>'
+            +'</div>';
+        });
+        if(todayEntries.length>8)boxContent+='<div style="font-size:11px;color:var(--text-muted);text-align:center">+ '+(todayEntries.length-8)+' مورد دیگر</div>';
+        boxContent+='</div>';
+      }
+      html+=_wBox('☀️ امروز من ('+todayEntries.length+')',boxContent,'today');
+    }
+
+    else if(wid==='overdue'){
+      // ─── معوق‌ها ───
+      var overdueItems=[];
+      function _collectOv(arr,rtype){
+        arr.forEach(function(r){
+          var e=getE(rtype,r.id);
+          if((e.owner||r.owner||'')!==currentUser&&!_isManager())return;
+          var fd=e.followupDate||'';
+          if(fd&&fd<today&&(e.status||'بدون تماس')!=='غیرفعال'&&(e.status||'')!=='قرارداد بسته شد'){
+            overdueItems.push({name:r.name,rtype:rtype,id:r.id,fd:fd,owner:e.owner||r.owner||''});
+          }
+        });
+      }
+      getAllProvinces().forEach(function(p){_collectOv(getProvCenters(p.id),getProvType(p.id));});
+      overdueItems.sort(function(a,b){return a.fd<b.fd?-1:1;});
+      if(!overdueItems.length){
+        boxContent='<div style="color:#16a34a;font-size:12px;text-align:center;padding:8px">✓ هیچ معوقی ندارید!</div>';
+      } else {
+        boxContent='<div style="display:flex;flex-direction:column;gap:4px">';
+        overdueItems.slice(0,6).forEach(function(it){
+          var daysAgo=Math.floor((new Date()-new Date(it.fd.replace(/\//g,'-')))/86400000);
+          var clr=daysAgo>30?'#dc2626':daysAgo>7?'#f59e0b':'#6366f1';
+          boxContent+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--bg-raised);border-radius:6px;font-size:12px">'
+            +'<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+esc(it.name)+'</b></span>'
+            +'<span style="color:'+clr+';font-size:11px;margin:0 8px;white-space:nowrap">'+daysAgo+' روز پیش</span>'
+            +'<button onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" style="font-size:10px;padding:2px 8px;background:var(--brand);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit">باز کن</button>'
+            +'</div>';
+        });
+        if(overdueItems.length>6)boxContent+='<div style="font-size:11px;color:var(--text-muted);text-align:center;padding-top:4px"><button onclick="openOverdueList()" style="font-size:11px;background:none;border:none;cursor:pointer;color:var(--brand);text-decoration:underline">نمایش همه '+overdueItems.length+' مورد</button></div>';
+        boxContent+='</div>';
+      }
+      html+=_wBox('🔴 معوق‌ها ('+overdueItems.length+')',boxContent,'overdue');
+    }
+
+    else if(wid==='priority'){
+      // ─── اولویت‌های هوشمند ───
+      var scored=[];
+      function _collectPri(arr,rtype){
+        arr.forEach(function(r){
+          var e=getE(rtype,r.id);
+          if(!_isManager()&&(e.owner||r.owner||'')!==currentUser)return;
+          var st=e.status||'بدون تماس';
+          if(st==='غیرفعال'||st==='قرارداد بسته شد')return;
+          var pot=parseInt(e.potential!==undefined?e.potential:r.potential||4);
+          if(pot>3)return;
+          var fd=e.followupDate||'';
+          var daysOver=fd&&fd<today?Math.floor((new Date()-new Date(fd.replace(/\//g,'-')))/86400000):0;
+          var potScore=(5-pot)*20;
+          var stScore={'بدون تماس':5,'تماس اولیه':10,'ملاقات انجام شد':15,'پیشنهاد ارسال شد':12}[st]||0;
+          var score=potScore+daysOver*0.5+stScore;
+          scored.push({name:r.name,rtype:rtype,id:r.id,score:score,pot:pot,st:st,fd:fd});
+        });
+      }
+      getAllProvinces().forEach(function(p){_collectPri(getProvCenters(p.id),getProvType(p.id));});
+      scored.sort(function(a,b){return b.score-a.score;});
+      var top=scored.slice(0,5);
+      if(!top.length){
+        boxContent='<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:8px">مرکزی برای پیشنهاد وجود ندارد</div>';
+      } else {
+        boxContent='<div style="display:flex;flex-direction:column;gap:4px">';
+        top.forEach(function(it,idx2){
+          var medal=['🥇','🥈','🥉','4️⃣','5️⃣'][idx2]||'';
+          boxContent+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg-raised);border-radius:6px;font-size:12px">'
+            +'<span style="font-size:15px">'+medal+'</span>'
+            +'<span style="flex:1;font-weight:600">'+esc(it.name)+'</span>'
+            +'<span style="font-size:10px;background:#ede9fe;color:#5b21b6;padding:2px 6px;border-radius:10px">P'+it.pot+'</span>'
+            +'<button onclick="quickCallLog(\''+it.rtype+'\',\''+it.id+'\',\''+esc(it.name)+'\')" style="font-size:10px;padding:2px 8px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit">📞</button>'
+            +'</div>';
+        });
+        boxContent+='</div>';
+      }
+      html+=_wBox('🎯 اولویت‌های هوشمند',boxContent,'priority');
+    }
+
+    else if(wid==='tasks'){
+      // ─── وظایف من ───
+      var myTasks=(DB.tasks||[]).filter(function(t){
+        return !t.done&&(t.owner===currentUser||_isManager());
+      }).sort(function(a,b){
+        if(a.priority!==b.priority)return (a.priority||3)-(b.priority||3);
+        if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:1;
+        return 0;
+      });
+      if(!myTasks.length){
+        boxContent='<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:8px">وظیفه‌ای ندارید ✓</div>';
+      } else {
+        boxContent='<div style="display:flex;flex-direction:column;gap:4px">';
+        myTasks.slice(0,5).forEach(function(t){
+          var priClr=['','#dc2626','#f59e0b','#6b7280'][t.priority||3]||'#6b7280';
+          var overdue=t.dueDate&&t.dueDate<today;
+          boxContent+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg-raised);border-radius:6px;font-size:12px">'
+            +'<span style="width:8px;height:8px;border-radius:50%;background:'+priClr+';flex-shrink:0"></span>'
+            +'<span style="flex:1;'+(overdue?'color:#dc2626':'')+'">'+esc(t.title||'')+'</span>'
+            +(t.dueDate?'<span style="font-size:10px;color:var(--text-muted)">'+t.dueDate+'</span>':'')
+            +'<button onclick="openTaskModal(\''+t.id+'\')" style="font-size:10px;padding:2px 7px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:inherit">باز</button>'
+            +'</div>';
+        });
+        if(myTasks.length>5)boxContent+='<div style="font-size:11px;color:var(--text-muted);text-align:center;padding-top:4px">+ '+(myTasks.length-5)+' وظیفه دیگر — <button onclick="switchTab(\'tasks\')" style="background:none;border:none;cursor:pointer;color:var(--brand);text-decoration:underline;font-size:11px">نمایش همه</button></div>';
+        boxContent+='</div>';
+      }
+      html+=_wBox('📌 وظایف من ('+myTasks.length+')',boxContent,'tasks');
+    }
+
+    else if(wid==='recent'){
+      // ─── مراکز اخیر ───
+      if(!_recentCenters||!_recentCenters.length){
+        boxContent='<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:8px">هنوز مرکزی باز نکرده‌اید</div>';
+      } else {
+        boxContent='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+        _recentCenters.slice(0,8).forEach(function(rc){
+          boxContent+='<button onclick="openCenterModal(\''+rc.rtype+'\',\''+rc.id+'\')" style="font-size:12px;padding:5px 10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text-primary);font-family:inherit">'+esc(rc.name||rc.id)+'</button>';
+        });
+        boxContent+='</div>';
+      }
+      html+=_wBox('🕐 مراکز اخیر',boxContent,'recent');
+    }
+
+    else if(wid==='summary'&&_isManager()){
+      // ─── خلاصه مدیر ───
+      var total=0,active=0,contracts=0,inactive=0;
+      Object.values(DB.edits||{}).forEach(function(e){
+        if(!e)return;total++;
+        var st=e.status||'بدون تماس';
+        if(st==='قرارداد بسته شد')contracts++;
+        else if(st==='غیرفعال')inactive++;
+        else active++;
+      });
+      boxContent='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+        +'<div style="text-align:center;background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:22px;font-weight:700;color:#16a34a">'+contracts+'</div><div style="font-size:11px;color:#15803d">قرارداد</div></div>'
+        +'<div style="text-align:center;background:#eff6ff;border-radius:8px;padding:10px"><div style="font-size:22px;font-weight:700;color:#2563eb">'+active+'</div><div style="font-size:11px;color:#1d4ed8">فعال</div></div>'
+        +'<div style="text-align:center;background:#fef2f2;border-radius:8px;padding:10px"><div style="font-size:22px;font-weight:700;color:#dc2626">'+inactive+'</div><div style="font-size:11px;color:#b91c1c">غیرفعال</div></div>'
+        +'</div><div style="text-align:center;margin-top:8px"><button onclick="switchTab(\'manager\')" style="font-size:11px;background:none;border:none;cursor:pointer;color:var(--brand);text-decoration:underline">جزئیات بیشتر →</button></div>';
+      html+=_wBox('📊 خلاصه مدیر',boxContent,'summary');
+    }
+
+    else if(wid==='weekprogress'){
+      // ─── پیشرفت هفته ───
+      var weekId2=wpCurrentWeekId();
+      var total2=0,done2=0;
+      Object.keys(DB.weekEntries||{}).forEach(function(k){
+        var we=DB.weekEntries[k];
+        if(!we)return;
+        if(!_isManager()&&_wpGetOwner(we)!==currentUser)return;
+        if(k.split(':::')[0]!==weekId2)return;
+        total2++;
+        if(we.done)done2++;
+      });
+      var pct=total2>0?Math.round(100*done2/total2):0;
+      boxContent='<div style="margin-bottom:6px;font-size:12px">'+done2+' از '+total2+' — '+pct+'% انجام شده</div>'
+        +'<div style="background:var(--bg-raised);border-radius:6px;height:16px;overflow:hidden">'
+        +'<div style="width:'+pct+'%;background:var(--brand);height:100%;border-radius:6px;transition:width .3s"></div>'
+        +'</div>'
+        +'<div style="text-align:center;margin-top:8px"><button onclick="switchTab(\'weekplan\')" style="font-size:11px;background:none;border:none;cursor:pointer;color:var(--brand);text-decoration:underline">رفتن به برنامه هفته →</button></div>';
+      html+=_wBox('📋 پیشرفت هفته',boxContent,'weekprogress');
+    }
+
+    else if(wid==='silent'){
+      // ─── مراکز خاموش ───
+      var silent=[];
+      var nowMs2=Date.now();
+      var thirtyMs=30*24*60*60*1000;
+      function _chkSilent(arr,rtype){
+        arr.forEach(function(r){
+          var e=getE(rtype,r.id);
+          var st=e.status||'بدون تماس';
+          if(st==='غیرفعال'||st==='قرارداد بسته شد')return;
+          var pot=parseInt(e.potential!==undefined?e.potential:r.potential||4);
+          if(pot>2)return;
+          if(!_isManager()&&(e.owner||r.owner||'')!==currentUser)return;
+          var lastTs=e._lastActivity||e._ts||0;
+          if(!lastTs||(nowMs2-lastTs)>=thirtyMs)silent.push({name:r.name,rtype:rtype,id:r.id,pot:pot,days:lastTs?Math.floor((nowMs2-lastTs)/86400000):null});
+        });
+      }
+      getAllProvinces().forEach(function(p){_chkSilent(getProvCenters(p.id),getProvType(p.id));});
+      silent.sort(function(a,b){return (b.days||999)-(a.days||999);});
+      if(!silent.length){
+        boxContent='<div style="color:#16a34a;font-size:12px;text-align:center;padding:8px">✓ همه مراکز P1/P2 فعال هستند</div>';
+      } else {
+        boxContent='<div style="display:flex;flex-direction:column;gap:4px">';
+        silent.slice(0,5).forEach(function(it){
+          boxContent+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg-raised);border-radius:6px;font-size:12px">'
+            +'<span style="font-size:10px;background:#fef2f2;color:#dc2626;padding:2px 5px;border-radius:10px">P'+it.pot+'</span>'
+            +'<span style="flex:1">'+esc(it.name)+'</span>'
+            +'<span style="font-size:10px;color:#dc2626">'+(it.days?it.days+' روز':'—')+'</span>'
+            +'<button onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\')" style="font-size:10px;padding:2px 7px;background:var(--brand);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit">باز</button>'
+            +'</div>';
+        });
+        if(silent.length>5)boxContent+='<div style="font-size:11px;color:var(--text-muted);text-align:center;padding-top:4px">+ '+(silent.length-5)+' مرکز دیگر</div>';
+        boxContent+='</div>';
+      }
+      html+=_wBox('🔇 مراکز خاموش P1/P2 ('+silent.length+')',boxContent,'silent');
+    }
+  });
+
+  // ─── Empty state ───
+  if(!widgets.length){
+    html+='<div style="text-align:center;padding:40px;color:var(--text-muted)">'
+      +'<div style="font-size:40px;margin-bottom:8px">🪟</div>'
+      +'<div style="font-size:14px;margin-bottom:12px">هیچ ویجتی انتخاب نشده</div>'
+      +'<button onclick="_homeOpenAddPanel()" style="padding:8px 16px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit">افزودن ویجت</button>'
+      +'</div>';
+  }
+
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 function renderDashboard(){
@@ -9543,9 +9866,13 @@ async function init(){
       var _spid=localStorage.getItem('_spid');
       var _svm=localStorage.getItem('_svm');
       if(_svm&&['list','card','pipeline'].indexOf(_svm)>=0)_viewMode=_svm;
-      if(_st&&['provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing'].indexOf(_st)>=0)currentTab=_st;
+      if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing'].indexOf(_st)>=0)currentTab=_st;
       if(_spid)_currentProvId=_spid;
     }catch(e){}
+    // Default new sessions to home tab
+    if(!_st) currentTab='home';
+    // On mobile, always start at home
+    if(window.innerWidth<768) currentTab='home';
     switchTab(currentTab);
     _initOnboarding();
     var _clbtn=document.getElementById('tab_changelog');if(_clbtn)_clbtn.style.display=_isManager()?'':'none';

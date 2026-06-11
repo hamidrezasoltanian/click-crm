@@ -39,6 +39,7 @@
 
 <!-- TABS -->
 <div class="tabs-bar">
+  <button class="tab-btn" id="tab_home" onclick="switchTab('home')" style="color:#6366f1;font-weight:700">🏠 خانه</button>
   <button class="tab-btn active" id="tab_provinces" onclick="switchTab('provinces')">🗺 استان‌ها</button>
   <button class="tab-btn" id="tab_weekplan" onclick="switchTab('weekplan')">📋 برنامه هفته</button>
   <button class="tab-btn" id="tab_calendar" onclick="switchTab('calendar')">📅 تقویم</button>
@@ -52,6 +53,8 @@
   <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" style="color:#16a34a;font-weight:700">🏷 قیمت‌گذاری</button>
 </div>
 
+<!-- HOME PANEL -->
+<div id="homePanel" style="display:none;padding:12px 14px"></div>
 <!-- DASHBOARD -->
 <div id="userDashPanel"></div>
       <div id="dash" style="padding:12px 14px"></div>
@@ -643,6 +646,7 @@
   </div>
 </div>
 <nav class="mobile-nav" id="mobileNav">
+  <button class="mob-tab" id="mob_home" onclick="switchTab('home')"><span class="mob-icon">🏠</span>خانه</button>
   <button class="mob-tab" onclick="switchTab('provinces')"><span class="mob-icon">🗺</span>استان‌ها</button>
   <button class="mob-tab" onclick="switchTab('weekplan')"><span class="mob-icon">📅</span>هفته</button>
   <button class="mob-tab" onclick="switchTab('calendar')"><span class="mob-icon">🗓</span>تقویم</button>
