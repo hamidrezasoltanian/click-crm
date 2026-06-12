@@ -25,9 +25,8 @@ router.get('/stream', requireAuth, (req, res) => {
 function broadcast(type, data, excludeCid) {
   const msg = `data: ${JSON.stringify({ type, ...data })}\n\n`;
   _clients.forEach(c => {
-    if (!excludeCid || c.cid !== excludeCid) {
-      try { c.res.write(msg); } catch(e) { _clients.delete(c); }
-    }
+    if (excludeCid && c.cid === excludeCid) return; // skip the sender tab
+    try { c.res.write(msg); } catch(e) { _clients.delete(c); }
   });
 }
 
