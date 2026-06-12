@@ -66,16 +66,16 @@ router.get('/files/:id', requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/missions/files/:id — only the uploader (or a manager role) can delete
+// DELETE /api/missions/files/:id — only the uploader can delete their own file
 router.delete('/files/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: 'شناسه نامعتبر' });
   try {
-    const result = await query(
-      'DELETE FROM mission_files WHERE id = $1 AND uploaded_by = $2 RETURNING id',
-      [id, req.user.username]
-    );
-    if (!result.rowCount) return res.status(403).json({ error: 'دسترسی مجاز نیست' });
+    // Check existence first so we can distinguish 404 (already gone) from 403 (wrong owner)
+    const check = await query('SELECT uploaded_by FROM mission_files WHERE id = $1', [id]);
+    if (!check.rows.length) return res.status(404).json({ error: 'فایل یافت نشد' });
+    if (check.rows[0].uploaded_by !== req.user.username) return res.status(403).json({ error: 'دسترسی مجاز نیست' });
+    await query('DELETE FROM mission_files WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: 'خطای سرور' });

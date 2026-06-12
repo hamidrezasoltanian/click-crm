@@ -950,9 +950,9 @@ function _msCtrSearch(q) {
   }
   results = results.slice(0, 12);
   if (!results.length) { el.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text-muted)">نتیجه‌ای یافت نشد</div>'; el.style.display = 'block'; return; }
+  var _qEsc = esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   el.innerHTML = results.map(function(r) {
-    var _qEsc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var nm = esc(r.name).replace(new RegExp('(' + _qEsc + ')', 'i'), '<strong>$1</strong>');
+    var nm = esc(r.name).replace(new RegExp('(' + _qEsc + ')', 'i'), '<strong>$1</strong>');
     return '<div onclick="_msAddCenter(\'' + r.rtype + '\',\'' + r.id + '\',\'' + esc(r.name).replace(/'/g, "\\'") + '\')" '
       + 'style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)" '
       + 'onmouseover="this.style.background=\'var(--bg-hover)\'" onmouseout="this.style.background=\'\'">'
@@ -1181,10 +1181,12 @@ function _msBuildReportTab() {
   // effectiveness: build active-rkey set once, then O(1) per center
   var mBounds = jMonthBounds(ms.month);
   var _activeRkeys = {};
-  (DB.changeLog || []).forEach(function(ch) {
-    var ts = new Date(ch.at).getTime();
-    if (ts >= mBounds.startTs && ts <= mBounds.endTs) _activeRkeys[ch.rkey] = true;
-  });
+  if (ctrs.length) {
+    (DB.changeLog || []).forEach(function(ch) {
+      var ts = new Date(ch.at).getTime();
+      if (ts >= mBounds.startTs && ts <= mBounds.endTs) _activeRkeys[ch.rkey] = true;
+    });
+  }
   var effectiveCtr = 0;
   ctrs.forEach(function(c) { if (_activeRkeys[c.rtype + '_' + c.id]) effectiveCtr++; });
   var costPerCenter = ctrs.length ? Math.round(total / ctrs.length) : 0;
@@ -1256,10 +1258,12 @@ function _msSave(done) {
 
 function _msDelete() {
   if (!_msCurrent) return;
-  _msCollectFormData();
-  var ms = _msCurrent.ms;
+  // Use the month/userId frozen at open-time (_msCurrent.month), not the edited
+  // form field, so the correct DB record is always targeted.
+  var userId = _msCurrent.ms.userId;
+  var month  = _msCurrent.month;
   ensureKPIDB();
-  DB.missionLog = DB.missionLog.filter(function(l) { return !(l.userId === ms.userId && l.month === ms.month); });
+  DB.missionLog = DB.missionLog.filter(function(l) { return !(l.userId === userId && l.month === month); });
   saveDB();
   showToast('ماموریت حذف شد');
   closeModal('missionDetailModal');
