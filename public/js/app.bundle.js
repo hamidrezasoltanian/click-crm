@@ -82,7 +82,7 @@ var _redoStack=[];
 var MAX_UNDO=50;
 var _undoSuppressed=false;
 var _actPage=0;
-var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[]};
+var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
 // ── Login/Auth helpers ────────────────────────────────────────
@@ -7557,6 +7557,76 @@ function deleteEv(id){
 
 
 /* ═══ public/js/checklist.js ═══ */
+
+// ── چک‌لیست: آیتم‌های قابل محاسبه اتوماتیک ──────────────────────
+function _ckAutoComputed(){
+  var today=todayStr();
+  var todayTs=jMs.apply(null,todayStr().split('/').map(Number));
+  // tomorrow
+  var tmr=jAdd.apply(null,today.split('/').map(Number).concat([1]));
+  var tmrStr=tmr[0]+'/'+p2(tmr[1])+'/'+p2(tmr[2]);
+  // week bounds (Saturday to Friday)
+  var wb=currentWeekBounds?currentWeekBounds():{startTs:todayTs-6*86400000,endTs:todayTs+86400000};
+
+  // #2: تماس با حداقل ۵ مرکز — از callLog امروز
+  var todayCalls=(DB.callLog||[]).filter(function(l){return l.userId===currentUser&&l.date===today;});
+  var callCount=todayCalls.reduce(function(s,l){return s+(l.count||1);},0);
+  // اگر callLog خالی است، از changeLog بشمار
+  if(callCount===0){
+    callCount=(DB.changeLog||[]).filter(function(c){
+      return c.by===currentUser&&c.at&&c.at.startsWith&&c.at.length>8
+        &&msToJ(new Date(c.at).getTime())===today;
+    }).map(function(c){return c.rkey;}).filter(function(r,i,a){return a.indexOf(r)===i;}).length;
+  }
+
+  // #3: ثبت نتیجه هر تماس — callLog امروز >= 1
+  var hasCallNote=todayCalls.length>0||(DB.notes?Object.keys(DB.notes).some(function(k){
+    var ns=DB.notes[k]||[];
+    return ns.some(function(n){
+      var d=n.date||(n.at?msToJ(new Date(n.at).getTime()):'');
+      return d===today&&(n.user===currentUser||n.by===currentUser);
+    });
+  }):false);
+
+  // #6: تعیین تاریخ پیگیری بعدی — changeLog امروز با field=followupDate
+  var setFuToday=(DB.changeLog||[]).some(function(c){
+    return c.by===currentUser&&c.field==='followupDate'&&c.at
+      &&msToJ(new Date(c.at).getTime())===today;
+  });
+
+  // #8: ثبت گزارش بازدید — weekEntries با done=true و doneDate=today
+  var visitToday=Object.values(DB.weekEntries||{}).some(function(we){
+    return we.actionType==='visit'&&we.done&&we.doneDate===today
+      &&(we.addedBy===currentUser||_getOwnerForRecKey(we.recKey||'')=== currentUser);
+  });
+
+  // #10: تهیه لیست بازدید فردا — weekEntries scheduledDate=tomorrow برای user
+  var planTmr=Object.values(DB.weekEntries||{}).some(function(we){
+    return !we.done&&(we.scheduledDate===tmrStr)
+      &&(we.addedBy===currentUser||_getOwnerForRecKey(we.recKey||'')=== currentUser);
+  });
+
+  // #13: بررسی آمار فروش هفته — salesLog این هفته >= 1
+  var weekSales=(DB.salesLog||[]).filter(function(l){
+    var ts=l.date?jMs.apply(null,l.date.split('/').map(Number)):0;
+    return l.userId===currentUser&&ts>=wb.startTs&&ts<=wb.endTs;
+  });
+  var hasSales=weekSales.length>0||
+    (DB.changeLog||[]).some(function(c){
+      return c.by===currentUser&&c.field==='status'&&c.val==='قرارداد بسته شد'
+        &&c.at&&new Date(c.at).getTime()>=wb.startTs&&new Date(c.at).getTime()<=wb.endTs;
+    });
+
+  return{
+    2:{done:callCount>=5,count:callCount,label:callCount+' تماس امروز',threshold:5},
+    3:{done:hasCallNote,count:todayCalls.length,label:hasCallNote?'نتیجه ثبت شده':'ثبت نشده'},
+    6:{done:setFuToday,label:setFuToday?'پیگیری تنظیم شد':'تنظیم نشده'},
+    8:{done:visitToday,label:visitToday?'ویزیت ثبت شد':'ویزیت امروز ندارید'},
+    10:{done:planTmr,label:planTmr?'برنامه فردا دارید':'برنامه‌ریزی نشده'},
+    13:{done:hasSales,count:weekSales.length,label:weekSales.length+' فروش این هفته'}
+  };
+}
+
 // ════════════════════════ CHECKLIST ══════════════════
 function renderChecklist(){
   if(!_ckDate)_ckDate=todayStr();
@@ -7565,12 +7635,20 @@ function renderChecklist(){
   if(!DB.checklist[key])DB.checklist[key]={items:[],note:''};
   var saved=DB.checklist[key];
   var doneIds=(saved.items||[]).filter(function(i){return i.done;}).map(function(i){return i.id;});
-  var sc=document.getElementById('ckSc');if(sc)sc.textContent=doneIds.length;
+  var _ckAutoSc=_ckAutoComputed();
+  var totalDone=getCKItems().filter(function(it){return doneIds.indexOf(it.id)!==-1||(_ckAutoSc[it.id]&&_ckAutoSc[it.id].done);}).length;
+  var sc=document.getElementById('ckSc');if(sc)sc.textContent=totalDone;
   var ckList=document.getElementById('ckList');if(!ckList)return;
+  var _ckAuto=_ckAutoComputed();
   ckList.innerHTML=getCKItems().map(function(item){
     var done=doneIds.indexOf(item.id)!==-1;
-    return'<div class="ck-item'+(done?' done':'')+(item.mgr?' mgr':'')+'" onclick="toggleCk('+item.id+')">'
-      +'<input type="checkbox" class="ck-cb"'+(done?' checked':'')+'> <span>'+item.t+'</span></div>';
+    var auto=_ckAuto[item.id];
+    var autoDone=auto&&auto.done;
+    var isEffDone=done||autoDone;
+    var autoBadge=auto?'<span style="font-size:10px;background:'+(autoDone?'#dcfce7':'#f1f5f9')+';color:'+(autoDone?'#15803d':'#64748b')+';border-radius:10px;padding:1px 7px;margin-right:6px;font-weight:600">🤖 '+esc(auto.label)+'</span>':'';
+    return'<div class="ck-item'+(isEffDone?' done':'')+(item.mgr?' mgr':'')+'" onclick="toggleCk('+item.id+')" title="'+(auto?'اتوماتیک از داده سیستم محاسبه می‌شود':'')+'">'
+      +'<input type="checkbox" class="ck-cb"'+(isEffDone?' checked':'')+'> <span>'+item.t+'</span>'
+      +autoBadge+'</div>';
   }).join('')
   +'<textarea class="ck-note" placeholder="یادداشت روز..." onchange="saveCkNote(this.value)">'+esc(saved.note||'')+'</textarea>';
 }
@@ -10410,6 +10488,59 @@ function checkEmptyDB(){
 // ═══════════════════════════ KPI MODULE ════════════════════════════
 // ═══════════════════════════════════════════════════════════════════
 
+// ── تاریخچه ماهانه KPI ───────────────────────────────────────
+function saveKPISnapshot(userId, month){
+  ensureKPIDB();
+  if(!DB.kpiHistory)DB.kpiHistory=[];
+  month=month||currentJMonth();
+  var data=calcKPIs(userId,month);
+  var snap={userId:userId,month:month,overall:data.overall,savedAt:new Date().toISOString(),
+    scores:{}};
+  data.kpis.forEach(function(k){snap.scores[k.id]=Math.round(k.score);});
+  // remove old entry for same user+month and replace
+  DB.kpiHistory=DB.kpiHistory.filter(function(s){return !(s.userId===userId&&s.month===month);});
+  DB.kpiHistory.push(snap);
+  // keep max 24 months × N users
+  DB.kpiHistory=DB.kpiHistory.slice(-100);
+  saveDB();
+  return snap;
+}
+function getKPIHistory(userId,nMonths){
+  var months=prevJMonths(nMonths||6);
+  return months.map(function(m){
+    var snap=(DB.kpiHistory||[]).find(function(s){return s.userId===userId&&s.month===m;});
+    return{month:m,label:jMonthLabel(m),overall:snap?snap.overall:null,scores:snap?snap.scores:{}};
+  }).reverse();
+}
+function renderKPIHistoryChart(userId){
+  var hist=getKPIHistory(userId,6);
+  var maxScore=100;
+  var bars=hist.map(function(h){
+    var hasData=h.overall!==null;
+    var val=hasData?h.overall:0;
+    var col=val>=80?'#22c55e':val>=50?'#f59e0b':'#ef4444';
+    var heightPct=Math.max(hasData?(val/maxScore*100):0,3);
+    return'<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:4px;min-width:0">'
+      +'<div style="font-size:11px;font-weight:700;color:'+(hasData?col:'var(--text-muted)')+';">'+(hasData?val+'':'—')+'</div>'
+      +'<div style="flex:1;width:100%;display:flex;align-items:flex-end">'
+        +'<div style="width:100%;border-radius:5px 5px 0 0;transition:height .4s;background:'+(hasData?col:'var(--border)')+';height:'+heightPct+'%;min-height:4px;position:relative;cursor:'+(hasData?'pointer':'default')+'" '
+        +(hasData?'onclick="saveKPISnapshot(\''+userId+'\',\''+h.month+'\')" title="ذخیره مجدد '+h.label+'"':'')+'></div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--text-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">'+h.label+'</div>'
+    +'</div>';
+  }).join('');
+  return'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text-primary)">📈 روند ۶ ماهه</div>'
+    +'<button onclick="saveKPISnapshot(\''+userId+'\',\''+currentJMonth()+'\');renderKPIPanel()" style="font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-weight:600">📸 ثبت ماه جاری</button>'
+    +'</div>'
+    +'<div style="height:100px;display:flex;gap:6px;align-items:flex-end">'+bars+'</div>'
+    +(hist.some(function(h){return h.overall!==null;})?''
+      :'<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px 0">برای ذخیره ماه جاری روی «📸 ثبت ماه جاری» کلیک کنید</div>')
+  +'</div>';
+}
+
+
 function ensureKPIDB(){
   if(!DB.kpiTargets)DB.kpiTargets={};
   if(!DB.callLog)DB.callLog=[];
@@ -12313,6 +12444,26 @@ function _normName(s){
     .replace(/\s+/g,' ').trim();
 }
 
+
+// ── اعلان خودکار پیگیری مطالبات ──────────────────────────────
+function mtrCheckFollowupNotifs(){
+  if(typeof sendNotif!=='function'||typeof DB==='undefined')return;
+  var today=TODAY_STR||todayStr();
+  DATA.forEach(function(r){
+    var m=gm(r.inv);
+    if(!m.nextFU||m.nextFU!==today)return;
+    // find the userId for this follower
+    var member=mtrFindMember(r.follower);
+    var toId=member?member.id:null;
+    // also notify manager
+    var mgId=(typeof umGetMembers==='function'?umGetMembers():DB.settings&&DB.settings.members||[]).find(function(x){return x.role==='مدیر'&&x.active;});
+    var msg='💰 پیگیری مطالبات: '+esc(r.customer)+' — '+Math.round(r.rem/1000000).toFixed(1)+'M — '+r.od+' روز تأخیر';
+    if(toId&&toId!==currentUser)sendNotif(toId,msg,'');
+    if(mgId&&mgId.id!==toId&&mgId.id!==currentUser)sendNotif(mgId.id,msg,'');
+    m._notifSent=today; // prevent duplicate on same day
+  });
+}
+
 function matchCentersToData(){
   MTR_BY_CENTER = {};
   MTR_UNMATCHED = [];
@@ -13004,7 +13155,7 @@ function processAB(ab){
       saveDB();
     }
   })();
-  updateReminder();render();
+  updateReminder();render();mtrCheckFollowupNotifs();
   // auto-map followers then open modal only for remaining unknowns
   setTimeout(function(){
     var autoSaved=mtrAutoMapFollowers();
@@ -13120,16 +13271,107 @@ function filt(){
 function folls(){var s=new Set(DATA.map(function(r){return r.follower;}));return['همه'].concat(Array.from(s));}
 function tot(rows){return rows.reduce(function(s,r){return s+r.rem;},0);}
 
+
+// ── خروجی اکسل مطالبات ──────────────────────────────────────
+function mtrExportExcel(){
+  if(typeof XLSX==='undefined'){
+    showToast('⏳ در حال بارگذاری SheetJS...', 2000);
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=function(){mtrExportExcel();};
+    document.head.appendChild(s);return;
+  }
+  var rows=filt();
+  var wsData=[['ردیف','شماره فاکتور','مشتری','استان','پیگیر','مانده (ریال)','سررسید','تأخیر (روز)','اورژانس','وضعیت پیگیری','تاریخ پیگیری بعدی','یادداشت']];
+  rows.forEach(function(r,i){
+    var m=gm(r.inv);
+    var lastNote=m.notes&&m.notes.length?m.notes[m.notes.length-1].t:'';
+    wsData.push([i+1,r.inv,r.customer,r.province||'',r.follower,r.rem,r.due||'',r.od,r.urg.l,m.status||'',m.nextFU||'',lastNote]);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(wsData);
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,'مطالبات',ws);
+  var fname='مطالبات_'+TODAY_STR+'.xlsx';
+  XLSX.writeFile(wb,fname);
+  showToast('✅ اکسل دانلود شد',2000);
+}
+
+// ── متن پیام آماده ────────────────────────────────────────────
+function mtrCopyMsg(inv){
+  var r=DATA.find(function(x){return x.inv===inv;});
+  if(!r)return;
+  var m=gm(inv);
+  var remM=(r.rem/1000000).toFixed(1);
+  var msg='با سلام،\n'
+    +'بدینوسیله به استحضار می‌رساند که فاکتور شماره '+r.inv
+    +' به مبلغ '+remM+' میلیون ریال به تاریخ سررسید '+r.due
+    +' در حساب شرکت موجود نمی‌باشد.\n'
+    +'خواهشمند است نسبت به تسویه حساب اقدام فرمایید.\n'
+    +'با تشکر';
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(function(){showToast('✅ متن کپی شد',2000);});
+  } else {
+    var ta=document.createElement('textarea');ta.value=msg;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();showToast('✅ متن کپی شد',2000);
+  }
+}
+
+// ── ثبت پرداخت جزئی ─────────────────────────────────────────
+function mtrRecordPartial(inv){
+  var r=DATA.find(function(x){return x.inv===inv;});
+  if(!r)return;
+  var body='<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px">فاکتور '+inv+' — '+esc(r.customer)+'</div>'
+    +'<div style="background:var(--bg-raised);border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:12px">'
+    +'<span style="color:var(--text-muted)">مانده فعلی: </span><strong style="color:#dc2626">'+fF(r.rem)+' ریال</strong></div>'
+    +'<label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">مبلغ پرداخت‌شده (ریال)</label>'
+    +'<input type="number" id="partialAmt" min="1" max="'+r.rem+'" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border-input);border-radius:7px;font-size:14px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" placeholder="مثال: 5000000">'
+    +'<label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin:10px 0 6px">یادداشت (اختیاری)</label>'
+    +'<input type="text" id="partialNote" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid var(--border-input);border-radius:7px;font-size:13px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)" placeholder="توضیحات پرداخت...">';
+  var foot='<button class="btn-secondary" onclick="closeModal(\'partialModal\')">لغو</button>'
+    +'<button class="btn-primary" onclick="_submitPartial(\''+inv+'\')" >💳 ثبت پرداخت</button>';
+  openModal('partialModal','💳 ثبت پرداخت جزئی',body,foot);
+  setTimeout(function(){var el=document.getElementById('partialAmt');if(el)el.focus();},100);
+}
+
+function _submitPartial(inv){
+  var amtEl=document.getElementById('partialAmt');var noteEl=document.getElementById('partialNote');
+  var amt=parseFloat((amtEl||{}).value||0);var note=(noteEl||{}).value||'';
+  if(!amt||amt<=0){showToast('⚠ مبلغ معتبر وارد کنید');return;}
+  var r=DATA.find(function(x){return x.inv===inv;});if(!r)return;
+  if(amt>r.rem){showToast('⚠ مبلغ از مانده بیشتر است');return;}
+  var m=gm(inv);
+  if(!m.payments)m.payments=[];
+  m.payments.push({d:TODAY_STR,amt:amt,by:USER.name||currentUser,note:note.trim()});
+  r.rem=Math.max(0,r.rem-amt);
+  mtrAddNote(inv,'💳 پرداخت جزئی: '+fF(amt)+' ریال'+(note?' — '+note:''));
+  saveMeta();
+  if(r.rem===0){var odx=DATA.indexOf(r);if(odx>=0)DATA.splice(odx,1);}
+  closeModal('partialModal');render();updateReminder();
+  showToast('✅ پرداخت '+fF(amt)+' ریال ثبت شد',3000);
+}
+
 function render(){
   var rows=filt(),total=tot(rows);
   var ov60=rows.filter(function(r){return r.od>60;});
   var ovAny=rows.filter(function(r){return r.od>0;});
   var avgD=ovAny.length?Math.round(ovAny.reduce(function(s,r){return s+r.od;},0)/ovAny.length):0;
-  var html=mtrSparkline()+'<div class="kpi-g">'
-    +'<div class="kpi"><div class="kpi-l">کل مطالبات</div><div class="kpi-v">'+fM(total)+'</div><div class="kpi-ss">ریال</div></div>'
-    +'<div class="kpi" style="border-color:'+(ov60.length?'#dc2626':'#334155')+'"><div class="kpi-l">تخلف ۶۰ روز</div><div class="kpi-v" style="color:#dc2626">'+ov60.length+' فاکتور</div><div class="kpi-ss" style="color:#dc2626">'+fM(tot(ov60))+'</div></div>'
-    +'<div class="kpi"><div class="kpi-l">فاکتور باز</div><div class="kpi-v">'+rows.length+'</div></div>'
-    +'<div class="kpi"><div class="kpi-l">میانگین تأخیر</div><div class="kpi-v" style="color:'+(avgD>45?'#ea580c':avgD>20?'#d97706':'#16a34a')+'">'+avgD+' روز</div><div class="kpi-ss">'+ovAny.length+' معوق</div></div>'
+  // aging buckets
+  var ag0=rows.filter(function(r){return r.od<=0;});
+  var ag30=rows.filter(function(r){return r.od>0&&r.od<=30;});
+  var ag60=rows.filter(function(r){return r.od>30&&r.od<=60;});
+  var ag90=rows.filter(function(r){return r.od>60&&r.od<=90;});
+  var ag90p=rows.filter(function(r){return r.od>90;});
+  var html=mtrSparkline()
+    +'<div class="kpi-g">'
+    +'<div class="kpi"><div class="kpi-l">کل مطالبات</div><div class="kpi-v">'+fM(total)+'</div><div class="kpi-ss">ریال · '+rows.length+' فاکتور</div></div>'
+    +'<div class="kpi" style="border-color:#16a34a"><div class="kpi-l">✅ جاری (سررسید نرسیده)</div><div class="kpi-v" style="color:#16a34a">'+ag0.length+'</div><div class="kpi-ss">'+fM(tot(ag0))+'</div></div>'
+    +'<div class="kpi" style="border-color:#2563eb"><div class="kpi-l">📞 ۱-۳۰ روز تأخیر</div><div class="kpi-v" style="color:#2563eb">'+ag30.length+'</div><div class="kpi-ss">'+fM(tot(ag30))+'</div></div>'
+    +'<div class="kpi" style="border-color:#d97706"><div class="kpi-l">⚠️ ۳۰-۶۰ روز</div><div class="kpi-v" style="color:#d97706">'+ag60.length+'</div><div class="kpi-ss">'+fM(tot(ag60))+'</div></div>'
+    +'<div class="kpi" style="border-color:#ea580c"><div class="kpi-l">🚨 ۶۰-۹۰ روز</div><div class="kpi-v" style="color:#ea580c">'+ag90.length+'</div><div class="kpi-ss">'+fM(tot(ag90))+'</div></div>'
+    +'<div class="kpi" style="border-color:#dc2626"><div class="kpi-l">⛔ ۹۰+ روز (بحرانی)</div><div class="kpi-v" style="color:#dc2626">'+ag90p.length+'</div><div class="kpi-ss">'+fM(tot(ag90p))+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">'
+    +'<button onclick="mtrExportExcel()" style="font-size:11px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600">📊 خروجی Excel</button>'
+    +'<div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;margin-right:4px">میانگین تأخیر: <strong style="margin-right:4px;color:'+(avgD>45?'#ea580c':avgD>20?'#d97706':'#16a34a')+'">'+avgD+' روز</strong></div>'
     +'</div>';
   html+='<div class="filters" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
   +folls().map(function(f){return'<button class="fchip'+(FILTER===f?' on':'')+'" onclick="setFilter(\''+f.replace(/'/g,"\\'")+'\')">'+esc(f)+'</button>';}).join('')
@@ -13837,6 +14079,8 @@ function rExp(r,m){
     +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">'
     +'<span style="font-size:11px;color:var(--text-muted);white-space:nowrap">🔔 یادآوری:</span>'
     +'<button class="date-btn" data-inv=\''+inv+'\' data-dtype=\'fu\' onclick="event.stopPropagation();openMtrDateModal(this.dataset.inv,this.dataset.dtype)">'+(m.nextFU||'📅 پیگیری')+'</button>'
+    +'<button onclick="event.stopPropagation();mtrCopyMsg(\''+inv+'\')" style="font-size:11px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:4px 9px;cursor:pointer;color:var(--text-secondary);font-family:inherit" title="کپی متن پیام">📋 متن پیام</button>'
+    +'<button onclick="event.stopPropagation();mtrRecordPartial(\''+inv+'\')" style="font-size:11px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:6px;padding:4px 9px;cursor:pointer;font-family:inherit;font-weight:600" title="ثبت پرداخت جزئی">💳 پرداخت</button>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:700">یادداشت‌ها</div>';
   if(m.notes&&m.notes.length)(m.notes||[]).slice(-3).forEach(function(n){h+='<div class="note-item">'+esc(n.t)+'<div style="font-size:10px;color:var(--text-muted);margin-top:2px">'+esc(n.d)+' · '+esc(n.by)+'</div></div>';});

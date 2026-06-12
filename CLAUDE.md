@@ -108,7 +108,7 @@ The main `DB` object contains:
 edits, notes, tags, rTags, weekTags, weekEntries, events, checklist,
 extra, settings, kpiTargets, callLog, visitLog, salesLog, missionLog,
 provHistory, mtrFollower, mtrFollowerMap, changeLog, mtrTrend,
-notifications, tasks
+notifications, tasks, kpiHistory
 ```
 
 Key sub-structures:
@@ -284,6 +284,25 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | 9 UX confusion fixes (banner role tag, kanban empty states, etc.) | various | ✅ |
 | UI Polish v2: custom scrollbar, tab underline animation, card hover lift, pill buttons, input focus ring, modal entrance, notification pulse | css/app.css | ✅ |
 | Comprehensive bug-fix pass: 15+ bugs fixed across backend routes + frontend modules | all files | ✅ |
+
+## Planned Integration: Accounting Software → Receivables (مطالبات)
+
+The product owner (hamidreza.soltanian@gmail.com) wants to connect the accounting system's database directly to the CRM so receivables (مطالبات) update in real-time without manual Excel uploads.
+
+**Planned approach:**
+- A server-side route (`/api/mtr/sync`) that pulls from the accounting DB (e.g., via ODBC/REST/PostgreSQL foreign data wrapper depending on the accounting software).
+- The MTR panel would poll this endpoint periodically (e.g., SSE push or 5-min refresh) instead of requiring file upload.
+- Matching algorithm (`matchCentersToData`) stays unchanged — it will still link accounting records to CRM centers.
+- META (notes, followup dates, forecasts) lives in Flow CRM's DB and is merged on top of live accounting data.
+- Accounting software candidates: **میزیتو**, **رافع**, **هوفار**, **سپیدار**, **دینا** — integration method depends on which is in use.
+- Until the integration is live, the existing Excel/TSV upload path remains the fallback.
+
+**What needs to be done when the accounting software is identified:**
+1. Add a `server/routes/mtr-sync.js` route that connects to accounting DB and returns normalized invoice rows.
+2. Add `DB.settings.mtrSyncEnabled` toggle in Settings modal.
+3. Add auto-refresh timer in `mtr.js` when sync is enabled.
+
+---
 
 ## Roadmap / Future Plan
 

@@ -1,6 +1,59 @@
 // ═══════════════════════════ KPI MODULE ════════════════════════════
 // ═══════════════════════════════════════════════════════════════════
 
+// ── تاریخچه ماهانه KPI ───────────────────────────────────────
+function saveKPISnapshot(userId, month){
+  ensureKPIDB();
+  if(!DB.kpiHistory)DB.kpiHistory=[];
+  month=month||currentJMonth();
+  var data=calcKPIs(userId,month);
+  var snap={userId:userId,month:month,overall:data.overall,savedAt:new Date().toISOString(),
+    scores:{}};
+  data.kpis.forEach(function(k){snap.scores[k.id]=Math.round(k.score);});
+  // remove old entry for same user+month and replace
+  DB.kpiHistory=DB.kpiHistory.filter(function(s){return !(s.userId===userId&&s.month===month);});
+  DB.kpiHistory.push(snap);
+  // keep max 24 months × N users
+  DB.kpiHistory=DB.kpiHistory.slice(-100);
+  saveDB();
+  return snap;
+}
+function getKPIHistory(userId,nMonths){
+  var months=prevJMonths(nMonths||6);
+  return months.map(function(m){
+    var snap=(DB.kpiHistory||[]).find(function(s){return s.userId===userId&&s.month===m;});
+    return{month:m,label:jMonthLabel(m),overall:snap?snap.overall:null,scores:snap?snap.scores:{}};
+  }).reverse();
+}
+function renderKPIHistoryChart(userId){
+  var hist=getKPIHistory(userId,6);
+  var maxScore=100;
+  var bars=hist.map(function(h){
+    var hasData=h.overall!==null;
+    var val=hasData?h.overall:0;
+    var col=val>=80?'#22c55e':val>=50?'#f59e0b':'#ef4444';
+    var heightPct=Math.max(hasData?(val/maxScore*100):0,3);
+    return'<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:4px;min-width:0">'
+      +'<div style="font-size:11px;font-weight:700;color:'+(hasData?col:'var(--text-muted)')+';">'+(hasData?val+'':'—')+'</div>'
+      +'<div style="flex:1;width:100%;display:flex;align-items:flex-end">'
+        +'<div style="width:100%;border-radius:5px 5px 0 0;transition:height .4s;background:'+(hasData?col:'var(--border)')+';height:'+heightPct+'%;min-height:4px;position:relative;cursor:'+(hasData?'pointer':'default')+'" '
+        +(hasData?'onclick="saveKPISnapshot(\''+userId+'\',\''+h.month+'\')" title="ذخیره مجدد '+h.label+'"':'')+'></div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--text-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">'+h.label+'</div>'
+    +'</div>';
+  }).join('');
+  return'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text-primary)">📈 روند ۶ ماهه</div>'
+    +'<button onclick="saveKPISnapshot(\''+userId+'\',\''+currentJMonth()+'\');renderKPIPanel()" style="font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;cursor:pointer;font-weight:600">📸 ثبت ماه جاری</button>'
+    +'</div>'
+    +'<div style="height:100px;display:flex;gap:6px;align-items:flex-end">'+bars+'</div>'
+    +(hist.some(function(h){return h.overall!==null;})?''
+      :'<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px 0">برای ذخیره ماه جاری روی «📸 ثبت ماه جاری» کلیک کنید</div>')
+  +'</div>';
+}
+
+
 function ensureKPIDB(){
   if(!DB.kpiTargets)DB.kpiTargets={};
   if(!DB.callLog)DB.callLog=[];
