@@ -1209,6 +1209,25 @@ tr.row-upcoming td{background:var(--warning-bg)!important}
 
   /* Global search overlay: full width */
   #gSearchBox{width:96vw!important}
+
+  /* ── Modals: slide up from bottom (m-overlay / m-box) ── */
+  .m-overlay{align-items:flex-end!important;padding:0!important}
+  .m-box,.m-box.lg,.m-box.xl{width:100%!important;max-width:100%!important;border-radius:16px 16px 0 0!important;max-height:92vh!important;margin:0!important}
+  .m-head{border-radius:16px 16px 0 0!important}
+  .m-body{padding:12px 14px!important}
+  /* Modal footer buttons: wrap & touch-friendly */
+  .m-foot{flex-wrap:wrap!important;gap:6px!important;padding:10px 14px!important}
+  .m-foot button{flex:1 1 auto;min-width:80px;font-size:12px!important;padding:9px 8px!important;text-align:center}
+
+  /* ── Calendar month: compact cells ── */
+  .cal-day{min-height:60px!important;padding:2px!important}
+  .cal-day-num{font-size:10px!important}
+  .cal-chip{font-size:9px!important;padding:1px 3px!important}
+  .cal-chip-time{display:none}
+  .cal-day{overflow:hidden!important}
+  .cal-chip-text{max-width:calc(100% - 4px)!important}
+  .cal-more{font-size:9px!important;padding:1px 4px!important}
+  .cal-day-head{font-size:9px!important;padding:4px 2px!important}
 }
 
 @media(max-width:380px){

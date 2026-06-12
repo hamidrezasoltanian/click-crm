@@ -7412,7 +7412,7 @@ function renderCalMonth(items){
       }else{
         var jd=day;var dStr=jy+'/'+p2(jm)+'/'+p2(jd);var isToday=dStr===today;
         var dayItems=(byDay[jd]||[]).slice().sort(function(a,b){return(a.sk||0)-(b.sk||0);});
-        html+='<div class="cal-day'+(isToday?' cal-today':'')+'" onclick="calDayClick(\''+dStr+'\')">'          +'<div class="cal-day-num">'+jd+'</div>'          +'<div class="cal-day-events">'          +dayItems.slice(0,4).map(calChip).join('')          +(dayItems.length>4?'<div class="cal-more" onclick="event.stopPropagation();calShowDay(\''+dStr+'\')">+'+(dayItems.length-4)+' بیشتر ▾</div>':'')          +'</div></div>';
+        html+='<div class="cal-day'+(isToday?' cal-today':'')+'" onclick="calDayClick(\''+dStr+'\')">'          +'<div class="cal-day-num">'+jd+'</div>'          +'<div class="cal-day-events">'          +(function(){var _lim=window.innerWidth<640?2:4;return dayItems.slice(0,_lim).map(calChip).join('')          +(_lim<dayItems.length?'<div class="cal-more" onclick="event.stopPropagation();calShowDay(\''+dStr+'\')">+'+(dayItems.length-_lim)+' بیشتر ▾</div>':'');})()          +'</div></div>';
         day++;
       }
     }
