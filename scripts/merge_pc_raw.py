@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Merge PC_RAW id-key arrays (e.g. PC_RAW['p1']) into name-key arrays
-(e.g. PC_RAW['فارس']), consolidating DB.edits data along the way.
+Merge all duplicate centers across all provinces AND Tehran.
 
-After this script:
-  - Each province has ONE array (under name key, e.g. PC_RAW['فارس'])
-  - No more id-key arrays (PC_RAW['p1'] removed)
-  - DB.edits merged: Mizito contacts/data merged into canonical keys
-  - No more duplicate centers
+Provinces (p1-p30):
+  Merges PC_RAW[id-key] (e.g. PC_RAW['p1']) into PC_RAW[name-key]
+  (e.g. PC_RAW['فارس']), consolidating DB.edits along the way.
+  Removes id-key arrays after merge.
+
+Tehran:
+  Finds duplicate entries inside CENTERS (where a Mizito-added mz_t_XXXX
+  entry has the same name as an existing center) and merges their edits.
 
 Usage:
     python3 scripts/merge_pc_raw.py [--dry-run]
@@ -48,7 +50,6 @@ def load_env():
 
 
 def norm(s):
-    """Normalize Persian string for comparison."""
     return (s or '').strip().replace('ي', 'ی').replace('ك', 'ک').replace('‌', ' ').replace('  ', ' ')
 
 
@@ -68,10 +69,13 @@ def get_row(r):
     return 0
 
 
-def merge_edits(target, source):
-    """Merge source edit dict into target edit dict (in-place, non-destructive)."""
+def merge_edit_data(target, source):
+    """Merge source edit dict into target edit dict. Non-destructive."""
     if not source:
-        return
+        return target
+    if not target:
+        return dict(source)
+
     # Merge contacts
     target_contacts = target.get('contacts', [])
     source_contacts = source.get('contacts', [])
@@ -82,7 +86,6 @@ def merge_edits(target, source):
             target_contacts.append(ct)
             existing_names.add(cname)
         else:
-            # Merge phones into existing contact
             existing_ct = next((x for x in target_contacts if x.get('name', '') == cname), None)
             if existing_ct:
                 ep = set(existing_ct.get('phones', []))
@@ -92,13 +95,30 @@ def merge_edits(target, source):
                         ep.add(ph)
     target['contacts'] = target_contacts
 
-    # Merge other fields: only fill empty/missing slots
+    # Fill empty fields from source
     for field in ['address', 'status', 'lead', 'potential', 'type']:
         if not target.get(field) and source.get(field):
             target[field] = source[field]
 
-    # Merge rTags
     return target
+
+
+def rekey_edit(edits, rTags, old_key, new_key):
+    """Move edits and rTags from old_key to new_key, merging if new_key already exists."""
+    if old_key == new_key:
+        return
+    src = edits.get(old_key)
+    if src:
+        existing = edits.get(new_key, {})
+        edits[new_key] = merge_edit_data(existing, src)
+        del edits[old_key]
+    if old_key in rTags:
+        existing_tags = rTags.get(new_key, [])
+        for tag in rTags[old_key]:
+            if tag not in existing_tags:
+                existing_tags.append(tag)
+        rTags[new_key] = existing_tags
+        del rTags[old_key]
 
 
 def main():
@@ -116,13 +136,12 @@ def main():
     )
     cur = conn.cursor()
 
-    # Load PC_RAW
     cur.execute("SELECT key, data FROM centers_master WHERE key IN ('CENTERS', 'PC_RAW')")
     cm_rows = cur.fetchall()
     cm_data = {r[0]: r[1] for r in cm_rows}
     PC_RAW = cm_data.get('PC_RAW', {})
+    CENTERS = cm_data.get('CENTERS', [])
 
-    # Load DB (edits)
     cur.execute("SELECT value FROM app_data WHERE key = 'main'")
     row = cur.fetchone()
     DB = row[0] if row else {}
@@ -131,102 +150,125 @@ def main():
     edits = DB.get('edits', {})
     rTags = DB.get('rTags', {})
 
-    total_merged = 0
-    total_new = 0
-    total_edits_rekey = 0
+    total_prov_merged = 0
+    total_prov_new = 0
+    total_tehran_merged = 0
 
+    # ── 1. Merge province id-key arrays into name-key arrays ──────────────────
+    print('=== Provinces ===')
     for prov_id, pname in PROV_ID_TO_NAME.items():
-        name_list = PC_RAW.get(pname)
-        id_list = PC_RAW.get(prov_id)
-
+        id_list = PC_RAW.get(prov_id, [])
         if not id_list:
-            continue  # nothing under id-key, nothing to merge
+            continue
 
+        name_list = PC_RAW.get(pname, [])
         if name_list is None:
             name_list = []
-            PC_RAW[pname] = name_list
 
-        # Build lookup of name-key centers by normalized name → index
+        # Build lookup: normalized name → (index_in_name_list, row_value)
         name_lookup = {}
         for i, r in enumerate(name_list):
             n = get_center_name(r)
             if n:
-                name_lookup[n] = i
+                name_lookup[n] = (i, get_row(r))
 
-        merged_count = 0
-        new_count = 0
+        merged = 0
+        added = 0
 
         for id_center in id_list:
             cname = get_center_name(id_center)
             id_row = get_row(id_center)
             id_edit_key = f"pc_{prov_id}||{id_row}"
-            id_edit = edits.get(id_edit_key, {})
 
-            match_idx = name_lookup.get(cname)
-
-            if match_idx is not None:
-                # Center exists in name-key array — merge edits
-                name_center = name_list[match_idx]
-                canonical_row = get_row(name_center)
-                canonical_edit_key = f"pc_{prov_id}||{canonical_row}"
-
-                if id_edit_key != canonical_edit_key:
-                    # Merge id_edit into canonical edit
-                    canonical_edit = edits.get(canonical_edit_key, {})
-                    if id_edit:
-                        merge_edits(canonical_edit, id_edit)
-                        if not dry_run:
-                            edits[canonical_edit_key] = canonical_edit
-                            if id_edit_key in edits:
-                                del edits[id_edit_key]
-                            # Move rTags if any
-                            if id_edit_key in rTags:
-                                existing_rtags = rTags.get(canonical_edit_key, [])
-                                for tag in rTags[id_edit_key]:
-                                    if tag not in existing_rtags:
-                                        existing_rtags.append(tag)
-                                rTags[canonical_edit_key] = existing_rtags
-                                del rTags[id_edit_key]
-                        total_edits_rekey += 1
-
-                merged_count += 1
-                total_merged += 1
-
-            else:
-                # Center not in name-key array — add it
-                new_row = len(name_list)
-                new_center = id_center.copy() if isinstance(id_center, dict) else {
-                    'row': new_row, 'name': cname, 'type': id_center[3] if len(id_center) > 3 else '',
-                    'lead': id_center[4] if len(id_center) > 4 else 'سرنخ',
-                }
-                new_center['row'] = new_row
-                new_canonical_key = f"pc_{prov_id}||{new_row}"
-
+            if cname in name_lookup:
+                # Duplicate — merge edits into canonical key
+                _, canonical_row = name_lookup[cname]
+                canonical_key = f"pc_{prov_id}||{canonical_row}"
                 if not dry_run:
-                    name_list.append(new_center)
-                    name_lookup[cname] = new_row
+                    rekey_edit(edits, rTags, id_edit_key, canonical_key)
+                merged += 1
+            else:
+                # Unique Mizito center — add to name-key array
+                new_row = len(name_list) + added  # account for ones added this loop
+                new_canonical_key = f"pc_{prov_id}||{new_row}"
+                new_entry = {'row': new_row, 'name': cname,
+                             'type': id_center.get('type', '') if isinstance(id_center, dict) else '',
+                             'lead': id_center.get('lead', 'سرنخ') if isinstance(id_center, dict) else 'سرنخ',
+                             'owner': id_center.get('owner', '') if isinstance(id_center, dict) else '',
+                             '_mizito': True}
+                if not dry_run:
+                    name_list.append(new_entry)
+                    rekey_edit(edits, rTags, id_edit_key, new_canonical_key)
+                added += 1
 
-                    # Re-key edits if the id_row differs from new_row
-                    if id_edit_key != new_canonical_key and id_edit:
-                        edits[new_canonical_key] = id_edit
-                        del edits[id_edit_key]
-                        if id_edit_key in rTags:
-                            rTags[new_canonical_key] = rTags.pop(id_edit_key)
+        if merged or added:
+            print(f'  [{prov_id}/{pname}]: merged {merged} duplicates, added {added} new')
 
-                new_count += 1
-                total_new += 1
+        if not dry_run:
+            PC_RAW[pname] = name_list
+            if prov_id in PC_RAW:
+                del PC_RAW[prov_id]
 
-        if merged_count or new_count:
-            print(f'  [{prov_id} / {pname}]: merged {merged_count} duplicates, added {new_count} new centers')
+        total_prov_merged += merged
+        total_prov_new += added
 
-        # Remove id-key array entirely
-        if not dry_run and prov_id in PC_RAW:
-            del PC_RAW[prov_id]
+    # ── 2. Merge Tehran duplicates inside CENTERS array ───────────────────────
+    print('\n=== Tehran ===')
+    # Find original (non-mizito) centers and mizito-added ones
+    original_centers = {}  # normalized name → index
+    mizito_centers = []    # (index, center) for mz_t_ ones
 
-    print(f'\nSummary:')
-    print(f'  Duplicates merged into canonical entries: {total_merged}')
-    print(f'  New unique centers added to name-key arrays: {total_new}')
-    print(f'  DB.edits re-keyed/merged: {total_edits_rekey}')
+    for i, c in enumerate(CENTERS):
+        cid = c.get('id', '')
+        cname = norm(c.get('name', ''))
+        if not cname:
+            continue
+        if cid.startswith('mz_t_'):
+            mizito_centers.append((i, c))
+        else:
+            original_centers[cname] = (i, cid)
+
+    # Also check mizito centers that are duplicates of OTHER mizito centers
+    seen_mz_names = {}
+    indices_to_remove = set()
+
+    for idx, c in mizito_centers:
+        cname = norm(c.get('name', ''))
+        cid = c.get('id', '')
+        mz_edit_key = f"center_{cid}"
+
+        if cname in original_centers:
+            # Duplicate of an original center
+            orig_idx, orig_id = original_centers[cname]
+            orig_edit_key = f"center_{orig_id}"
+            print(f'  Merge mz→original: {cname[:50]}')
+            if not dry_run:
+                rekey_edit(edits, rTags, mz_edit_key, orig_edit_key)
+            indices_to_remove.add(idx)
+            total_tehran_merged += 1
+        elif cname in seen_mz_names:
+            # Duplicate of another mizito center — merge into the first one seen
+            first_id = seen_mz_names[cname]
+            first_edit_key = f"center_{first_id}"
+            print(f'  Merge mz→mz: {cname[:50]}')
+            if not dry_run:
+                rekey_edit(edits, rTags, mz_edit_key, first_edit_key)
+            indices_to_remove.add(idx)
+            total_tehran_merged += 1
+        else:
+            seen_mz_names[cname] = cid
+
+    if indices_to_remove:
+        print(f'  Removing {len(indices_to_remove)} duplicate Tehran centers')
+        if not dry_run:
+            CENTERS[:] = [c for i, c in enumerate(CENTERS) if i not in indices_to_remove]
+    else:
+        print('  No Tehran duplicates found')
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    print(f'\n=== Summary ===')
+    print(f'  Provinces — merged: {total_prov_merged}, new unique: {total_prov_new}')
+    print(f'  Tehran    — merged: {total_tehran_merged}')
 
     if dry_run:
         print('\nDRY RUN — no changes saved')
@@ -234,7 +276,7 @@ def main():
         conn.close()
         return
 
-    if total_merged == 0 and total_new == 0:
+    if total_prov_merged + total_prov_new + total_tehran_merged == 0:
         print('Nothing to merge.')
         cur.close()
         conn.close()
@@ -245,15 +287,18 @@ def main():
 
     print('\nSaving to database...')
     cur.execute(
-        """INSERT INTO centers_master (key, data, updated_at)
-           VALUES ('PC_RAW', %s, NOW())
-           ON CONFLICT (key) DO UPDATE SET data = %s, updated_at = NOW()""",
+        "INSERT INTO centers_master (key, data, updated_at) VALUES ('PC_RAW', %s, NOW()) "
+        "ON CONFLICT (key) DO UPDATE SET data = %s, updated_at = NOW()",
         (json.dumps(PC_RAW, ensure_ascii=False), json.dumps(PC_RAW, ensure_ascii=False))
     )
     cur.execute(
-        """INSERT INTO app_data (key, value, updated_at, updated_by)
-           VALUES ('main', %s, NOW(), 'merge_script')
-           ON CONFLICT (key) DO UPDATE SET value = %s, updated_at = NOW(), updated_by = 'merge_script'""",
+        "INSERT INTO centers_master (key, data, updated_at) VALUES ('CENTERS', %s, NOW()) "
+        "ON CONFLICT (key) DO UPDATE SET data = %s, updated_at = NOW()",
+        (json.dumps(CENTERS, ensure_ascii=False), json.dumps(CENTERS, ensure_ascii=False))
+    )
+    cur.execute(
+        "INSERT INTO app_data (key, value, updated_at, updated_by) VALUES ('main', %s, NOW(), 'merge_script') "
+        "ON CONFLICT (key) DO UPDATE SET value = %s, updated_at = NOW(), updated_by = 'merge_script'",
         (json.dumps(DB, ensure_ascii=False), json.dumps(DB, ensure_ascii=False))
     )
     conn.commit()
