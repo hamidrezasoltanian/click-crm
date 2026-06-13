@@ -1626,7 +1626,7 @@ function rPriority(rows){
           +'<span style="font-size:10px;color:'+iDC+'">'+iDT+'</span>'
           +'<span style="font-size:10px;color:var(--text-muted)">'+(invExp?'▲':'▼')+'</span>'
           +'</div>';
-        if(invExp)h+='<div style="padding:0 12px 10px 12px">'+rExp(r,m)+'</div>';
+        if(invExp)h+='<div style="padding:0 12px 10px 12px" onclick="event.stopPropagation()">'+rExp(r,m)+'</div>';
         h+='</div>';
       });
     }
