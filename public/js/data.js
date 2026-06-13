@@ -13,7 +13,7 @@ function _buildPCCache(){
   _PC_CACHE={};
   PROVINCES.forEach(function(p){
     var pname=p.name.replace(/[ي]/g,'ی').replace(/[ك]/g,'ک');
-    var raw=PC_RAW[pname]||PC_RAW[p.id]||[];
+    var rawByName=PC_RAW[pname]||[];var rawById=PC_RAW[p.id]||[];var raw=rawByName.concat(rawById.filter(function(r){var rname=(r&&(r.name||r[1]))||'';return!rawByName.some(function(s){return((s&&(s.name||s[1]))||'')==rname;});}));
     _PC_CACHE[p.id]=raw.map(function(r){
       if(Array.isArray(r)){
         return{id:p.id+'||'+r[0],row:r[0],name:(r[1]||'').replace(/[ي]/g,'ی').replace(/[ك]/g,'ک'),potential:r[2],type:r[3]||'',lead:r[4]||'سرنخ',province_id:p.id,owner:p.owner};
