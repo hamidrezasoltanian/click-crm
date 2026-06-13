@@ -1653,7 +1653,7 @@ function rExp(r,m){
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:700">یادداشت‌ها</div>';
   if(m.notes&&m.notes.length)(m.notes||[]).slice(-3).forEach(function(n){h+='<div class="note-item">'+esc(n.t)+'<div style="font-size:10px;color:var(--text-muted);margin-top:2px">'+esc(n.d)+' · '+esc(n.by)+'</div></div>';});
   h+='<div class="note-row"><textarea class="note-ta" rows="2" placeholder="یادداشت جدید..." id="ni-'+inv+'"></textarea>'
-    +'<button class="save-btn" onclick="var t=document.getElementById(\'ni-'+inv+'\');mtrAddNote(\''+inv+'\',t.value);t.value=\'\';render();toast(\'✅ ذخیره شد\')">ثبت</button></div>'
+    +'<button type="button" class="save-btn" onclick="var t=document.getElementById(\'ni-'+inv+'\');mtrAddNote(\''+inv+'\',t.value);t.value=\'\';render();toast(\'✅ ذخیره شد\')">ثبت</button></div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:700">📅 برآورد وصول</div>'
     +'<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'
     +'<button class="date-btn" id="fb-'+inv+'" data-inv=\''+inv+'\' data-dtype=\'forecast\' onclick="event.stopPropagation();openMtrDateModal(this.dataset.inv,this.dataset.dtype)">'+(m.forecast?m.forecast.date:'📅 برآورد')+'</button>'
