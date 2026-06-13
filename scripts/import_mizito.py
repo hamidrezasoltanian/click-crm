@@ -370,7 +370,8 @@ def main():
         existing_names.add(c.get('name', '').strip())
     for prov_id, pcs in PC_RAW.items():
         for pc in (pcs if isinstance(pcs, list) else []):
-            existing_names.add(pc.get('name', '').strip())
+            if isinstance(pc, dict):
+                existing_names.add(pc.get('name', '').strip())
 
     # ── Load current DB (main) ────────────────────────────────────────────────
     cur.execute("SELECT value FROM app_data WHERE key = 'main'")
@@ -418,7 +419,7 @@ def main():
             if prov_id not in PC_RAW:
                 PC_RAW[prov_id] = []
             # Check if already exists by name
-            existing = next((x for x in PC_RAW[prov_id] if x.get('name', '').strip() == name), None)
+            existing = next((x for x in PC_RAW[prov_id] if isinstance(x, dict) and x.get('name', '').strip() == name), None)
             if existing:
                 n_idx = existing.get('n', 0)
                 edit_key = f"pc_{prov_id}||{n_idx}"
