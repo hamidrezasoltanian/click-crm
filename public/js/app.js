@@ -4493,6 +4493,11 @@ function removeContact(rtype,id,ci,domId){
 function updateContactField(rtype,id,ci,field,val){
   var contacts=_getContacts(rtype,id);
   if(!contacts[ci])return;
+  if(field==='name'&&(val||'').trim()){
+    var _trimmed=(val||'').trim();
+    var _dup=contacts.findIndex(function(c,i){return i!==ci&&(c.name||'').trim()===_trimmed;});
+    if(_dup>=0){showToast('مخاطبی با این نام قبلاً ثبت شده است');return;}
+  }
   contacts[ci][field]=val;
   _saveContacts(rtype,id,contacts);
 }
