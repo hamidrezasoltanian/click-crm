@@ -970,6 +970,7 @@ function openCenterModal(rtype,id){
   var foot='<button style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="closeModal(\'cm_'+id+'\');confirmDeleteCenter(\''+rtype+'\',\''+id+'\',\''+esc(displayName)+'\')">🗑 حذف</button>'
     +'<button style="background:#faf5ff;color:#7c3aed;border:1px solid #d8b4fe;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openPreCallBrief(\''+rtype+'\',' +'\''+r.id+'\')">🎯 خلاصه</button>'
     +'<button style="background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openCenterAudit(\''+recK(rtype,r.id)+'\',\''+esc(displayName)+'\')">📋 تاریخچه</button>'
+    +'<button style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openMergeCenterModal(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">🔀 ادغام</button>'
     +'<button class="btn-secondary" onclick="closeModal(\'cm_'+id+'\')">بستن</button>'
     +'<button class="btn-primary" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">📋 اضافه به هفته</button>';
   // ── مطالبات section ──
@@ -998,6 +999,70 @@ function openCenterModal(rtype,id){
   var elCom=document.getElementById('cmCommission_'+_rid);if(elCom){elCom.innerHTML=cfg&&cfg.commission_level?'<span style="font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;font-weight:600">💼 پورسانت: '+esc(cfg.commission_level)+'</span>':'';}
       }).catch(function(){var el=document.getElementById('cmPricingInfo_'+_rid);if(el)el.style.display='none';});
   })(r.id, r.name);
+}
+
+function _mrgSearch(){
+  var q=document.getElementById('_mrgQ');
+  var list=document.getElementById('_mrgList');
+  if(!q||!list)return;
+  var v=(q.value||'').trim();
+  var all=window._mrgAll||[];
+  var res=v?all.filter(function(c){return fNorm(c.name).indexOf(fNorm(v))>=0;}).slice(0,30):[];
+  if(!res.length){
+    list.innerHTML='<div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted)">'+(v?'نتیجه‌ای یافت نشد':'نام مرکز هدف را تایپ کنید')+'</div>';
+    return;
+  }
+  var srcType=window._mrgSrcType||'';
+  var srcId=window._mrgSrcId||'';
+  var srcName=window._mrgSrcName||'';
+  list.innerHTML=res.map(function(c){
+    return '<div style="padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px"'
+      +' onmouseenter="this.style.background=\'var(--bg-hover)\'"'
+      +' onmouseleave="this.style.background=\'\'"'
+      +' onclick="doMergeCenter(\''+srcType+'\',\''+srcId+'\',\''+srcName+'\',\''+c.rtype+'\',\''+c.id+'\',\''+esc(c.name)+'\')">'
+      +esc(c.name)+'<span style="font-size:10px;color:var(--text-muted);margin-right:6px">'+c.id+'</span></div>';
+  }).join('');
+}
+function openMergeCenterModal(rtype,id,name){
+  closeAllModals();
+  var allCenters=[];
+  (window.CENTERS||[]).forEach(function(c){if(c.id!==id)allCenters.push({rtype:'center',id:c.id,name:c.name||c.id});});
+  var provs=typeof getAllProvinces==='function'?getAllProvinces():[];
+  provs.forEach(function(p){
+    var arr=typeof getProvCenters==='function'?getProvCenters(p.id):[];
+    arr.forEach(function(c,i){
+      var row=c.row!=null?c.row:(c.n!=null?c.n:i);
+      var cid=p.id+'||'+row;
+      if(cid!==id)allCenters.push({rtype:'pc',id:cid,name:c.name||cid});
+    });
+  });
+  window._mrgAll=allCenters;
+  window._mrgSrcType=rtype;
+  window._mrgSrcId=id;
+  window._mrgSrcName=esc(name);
+  var body='<div style="margin-bottom:10px;font-size:13px;background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:8px 12px">'
+    +'<strong>'+esc(name)+'</strong> حذف می‌شود — مخاطبین و یادداشت‌ها به مرکز هدف منتقل می‌شود.</div>'
+    +'<input id="_mrgQ" type="text" placeholder="جستجوی مرکز هدف..." oninput="_mrgSearch()" '
+    +'style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;font-family:inherit;background:var(--bg-input);color:var(--text-primary);margin-bottom:6px">'
+    +'<div id="_mrgList" style="border:1px solid var(--border);border-radius:6px;max-height:300px;overflow-y:auto">'
+    +'<div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted)">نام مرکز هدف را تایپ کنید</div></div>';
+  openModal('_mrgModal','🔀 ادغام مرکز',body,'<button class="btn-secondary" onclick="closeModal(\'_mrgModal\')">لغو</button>',{lg:false});
+  setTimeout(function(){var q=document.getElementById('_mrgQ');if(q)q.focus();},100);
+}
+function doMergeCenter(srcType,srcId,srcName,tgtType,tgtId,tgtName){
+  if(!confirm('ادغام «'+srcName+'» به داخل «'+tgtName+'»?\nاین مرکز حذف خواهد شد.'))return;
+  closeModal('_mrgModal');
+  showToast('در حال ادغام...');
+  fetch('/api/data/centers/merge',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({sourceType:srcType,sourceId:srcId,targetType:tgtType,targetId:tgtId})
+  }).then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){showToast('\u2705 ادغام انجام شد');loadDB().then(function(){switchTab(currentTab);});}
+    else showToast('\u274C خطا: '+(d.error||'نامشخص'));
+  })
+  .catch(function(){showToast('\u274C خطای ارتباط');});
 }
 
 function confirmDeleteCenter(rtype,id,name){
