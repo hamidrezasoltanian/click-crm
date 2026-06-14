@@ -53,7 +53,7 @@ else
   # ── app_data only (every 10 min) ───────────────────────────────────────────
   FILE="$BACKUP_DIR/appdata_${TIMESTAMP}.sql"
   pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" \
-    --table=app_data --table=app_data_history \
+    --table=app_data \
     --data-only --column-inserts \
     > "$FILE"
   gzip "$FILE"
