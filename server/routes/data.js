@@ -48,15 +48,17 @@ router.put('/db', async (req, res) => {
     await client.query('BEGIN');
 
     const _clientTs = body._clientTs || null;
-    if (_clientTs) {
-      // Lock the row so no concurrent write can slip between check and upsert
-      const cur = await client.query("SELECT updated_at FROM app_data WHERE key = 'main' FOR UPDATE");
-      if (cur.rows.length > 0 && cur.rows[0].updated_at) {
-        const serverTs = cur.rows[0].updated_at.toISOString();
-        if (serverTs !== _clientTs) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'تغییرات توسط کاربر دیگری ذخیره شده — صفحه بارگذاری می‌شود' });
-        }
+
+    // Lock the current row for the conflict check and weekEntries guard
+    const cur = await client.query("SELECT value, updated_at FROM app_data WHERE key = 'main' FOR UPDATE");
+    const existingRow = cur.rows[0] || null;
+
+    if (_clientTs && existingRow && existingRow.updated_at) {
+      // Timestamp conflict check: reject if server has newer data
+      const serverTs = existingRow.updated_at.toISOString();
+      if (serverTs !== _clientTs) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'تغییرات توسط کاربر دیگری ذخیره شده — صفحه بارگذاری می‌شود' });
       }
     }
 
@@ -77,7 +79,22 @@ router.put('/db', async (req, res) => {
       delete mainData._mtr;
     }
 
-    // Save current version to history before overwriting (keeps last 30)
+    // weekEntries guard: never allow incoming data to reduce weekEntries count
+    // (protects against a stale session overwriting with fewer planned entries)
+    if (existingRow && existingRow.value) {
+      const serverWE = existingRow.value.weekEntries || {};
+      const incomingWE = mainData.weekEntries || {};
+      const serverCount = Object.keys(serverWE).length;
+      const incomingCount = Object.keys(incomingWE).length;
+      if (serverCount > incomingCount) {
+        // Merge: keep server entries not present in incoming (incoming entries take priority)
+        const merged = Object.assign({}, serverWE, incomingWE);
+        mainData.weekEntries = merged;
+        console.warn(`[data/db PUT] weekEntries guard: merged server(${serverCount}) + incoming(${incomingCount}) → ${Object.keys(merged).length}`);
+      }
+    }
+
+    // Save current version to history before overwriting (keeps 30 days)
     // Use SAVEPOINT so a missing history table doesn't abort the transaction
     await client.query('SAVEPOINT history_ops');
     try {
@@ -86,10 +103,9 @@ router.put('/db', async (req, res) => {
          SELECT 'main', value, $1 FROM app_data WHERE key = 'main'`,
         [req.user.username]
       );
+      // Keep last 30 days of history (not just 30 records)
       await client.query(
-        `DELETE FROM app_data_history WHERE key = 'main' AND id NOT IN (
-           SELECT id FROM app_data_history WHERE key = 'main' ORDER BY saved_at DESC LIMIT 30
-         )`
+        `DELETE FROM app_data_history WHERE key = 'main' AND saved_at < NOW() - INTERVAL '30 days'`
       );
       await client.query('RELEASE SAVEPOINT history_ops');
     } catch (histErr) {
