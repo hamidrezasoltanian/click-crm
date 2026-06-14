@@ -2,6 +2,7 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { query } = require('../db');
 const { requireAuth, requireManager } = require('../auth');
 
@@ -34,8 +35,8 @@ router.post('/', requireManager, async (req, res) => {
       return res.status(409).json({ error: 'نام کاربری قبلاً وجود دارد' });
     }
 
-    // Set temp password = username + '123'
-    const tempPassword = username + '123';
+    // Generate a random 10-char temp password (returned once to manager)
+    const tempPassword = crypto.randomBytes(5).toString('hex'); // e.g. "a3f9c12b4e"
     const hash = await bcrypt.hash(tempPassword, 10);
 
     await query(
@@ -59,6 +60,7 @@ router.post('/', requireManager, async (req, res) => {
       color: color || '#0ea5e9',
       phone: phone || '',
       active: true,
+      tempPassword, // returned once — manager must share this securely with the user
     });
   } catch (e) {
     console.error('[users POST /]', e.message);

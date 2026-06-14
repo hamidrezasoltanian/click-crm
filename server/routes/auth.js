@@ -14,8 +14,64 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
 };
 
+// ── In-memory rate limiter for login (no external dependency) ──────────────
+// Tracks failed attempts per IP. Resets on successful login.
+const _loginAttempts = new Map(); // ip -> { count, firstAt, blockedUntil }
+const RATE_LIMIT_MAX = 10;         // max failed attempts
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_BLOCK  = 15 * 60 * 1000; // block for 15 minutes
+
+function _getIp(req) {
+  return (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+}
+
+function _checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = _loginAttempts.get(ip);
+  if (!entry) return { blocked: false };
+  if (entry.blockedUntil && now < entry.blockedUntil) {
+    const remaining = Math.ceil((entry.blockedUntil - now) / 60000);
+    return { blocked: true, remaining };
+  }
+  // Reset window if expired
+  if (now - entry.firstAt > RATE_LIMIT_WINDOW) {
+    _loginAttempts.delete(ip);
+    return { blocked: false };
+  }
+  if (entry.count >= RATE_LIMIT_MAX) {
+    entry.blockedUntil = now + RATE_LIMIT_BLOCK;
+    return { blocked: true, remaining: Math.ceil(RATE_LIMIT_BLOCK / 60000) };
+  }
+  return { blocked: false };
+}
+
+function _recordFailedAttempt(ip) {
+  const now = Date.now();
+  const entry = _loginAttempts.get(ip) || { count: 0, firstAt: now };
+  entry.count++;
+  _loginAttempts.set(ip, entry);
+}
+
+function _clearAttempts(ip) {
+  _loginAttempts.delete(ip);
+}
+
+// Clean up old entries every 30 minutes
+setInterval(function () {
+  const now = Date.now();
+  for (const [ip, entry] of _loginAttempts.entries()) {
+    if (now - entry.firstAt > RATE_LIMIT_WINDOW * 2) _loginAttempts.delete(ip);
+  }
+}, 30 * 60 * 1000);
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
+  const ip = _getIp(req);
+  const rl = _checkRateLimit(ip);
+  if (rl.blocked) {
+    return res.status(429).json({ error: `تعداد تلاش‌های ناموفق بیش از حد مجاز. لطفاً ${rl.remaining} دقیقه صبر کنید.` });
+  }
+
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'نام کاربری و رمز عبور الزامی است' });
@@ -28,6 +84,7 @@ router.post('/login', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      _recordFailedAttempt(ip);
       return res.status(401).json({ error: 'اطلاعات ورود نادرست است' });
     }
 
@@ -43,8 +100,12 @@ router.post('/login', async (req, res) => {
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
+      _recordFailedAttempt(ip);
       return res.status(401).json({ error: 'اطلاعات ورود نادرست است' });
     }
+
+    // Success — clear failed attempts
+    _clearAttempts(ip);
 
     const token = jwt.sign(
       { username: user.username, role: user.role, name: user.display_name },
@@ -104,8 +165,8 @@ router.post('/change-password', requireAuth, async (req, res) => {
   if (!oldPassword || !newPassword) {
     return res.status(400).json({ error: 'رمز قدیم و جدید الزامی است' });
   }
-  if (newPassword.length < 4) {
-    return res.status(400).json({ error: 'رمز جدید باید حداقل ۴ کاراکتر باشد' });
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'رمز جدید باید حداقل ۶ کاراکتر باشد' });
   }
 
   try {

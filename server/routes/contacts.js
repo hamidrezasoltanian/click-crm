@@ -49,7 +49,8 @@ router.get('/', async (req, res) => {
   try {
     const r = await query(
       `SELECT * FROM center_contacts
-       WHERE contact_name ILIKE $1 OR address ILIKE $1 OR $1 = ANY(phones)
+       WHERE contact_name ILIKE $1 OR address ILIKE $1
+          OR EXISTS (SELECT 1 FROM unnest(phones) p WHERE p ILIKE $1)
        ORDER BY updated_at DESC LIMIT 30`,
       ['%' + q + '%']
     );

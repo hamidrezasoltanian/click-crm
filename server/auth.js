@@ -3,7 +3,13 @@
 const jwt = require('jsonwebtoken');
 const { query } = require('./db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'change-this-to-a-random-secret-string';
+const _DEFAULT_SECRET = 'change-this-to-a-random-secret-string';
+const JWT_SECRET = process.env.JWT_SECRET || _DEFAULT_SECRET;
+
+if (JWT_SECRET === _DEFAULT_SECRET) {
+  console.warn('[SECURITY WARNING] JWT_SECRET is using the default insecure value.');
+  console.warn('[SECURITY WARNING] Set a strong JWT_SECRET in your .env file before deploying.');
+}
 
 // In-memory cache for active status (5-minute TTL)
 const _activeCache = new Map(); // username -> {active, ts}

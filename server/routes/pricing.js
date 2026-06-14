@@ -342,7 +342,8 @@ router.get('/quotes', async (req, res) => {
     }
     if (status) { sql += ` AND status=$${params.length+1}`; params.push(status); }
     if (center_key) { sql += ` AND center_key=$${params.length+1}`; params.push(center_key); }
-    sql += ` ORDER BY created_at DESC LIMIT $${params.length+1}`; params.push(parseInt(limit));
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+    sql += ` ORDER BY created_at DESC LIMIT $${params.length+1}`; params.push(safeLimit);
     const r = await query(sql, params);
     res.json(r.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -427,18 +428,19 @@ router.get('/quotes/:id/print', async (req, res) => {
     const BUYER_FA = { hospital:'مرکز درمانی', colleague:'همکار', doctor:'پزشک', patient:'بیمار' };
     const PAY_FA   = { d30:'تسویه ۳۰ روزه', d60:'تسویه ۶۰ روزه', cash:'نقدی' };
     const fmt = n => n ? Number(n).toLocaleString() : '—';
+    const he = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 
     const rows = items.map((it,i) => `
       <tr>
         <td style="text-align:center">${i+1}</td>
-        <td>${it.product_name||''}</td>
-        <td style="text-align:center">${it.qty}</td>
+        <td>${he(it.product_name)}</td>
+        <td style="text-align:center">${he(it.qty)}</td>
         <td style="text-align:left;direction:ltr">${fmt(it.unit_final_price)}</td>
         <td style="text-align:left;direction:ltr;font-weight:800">${fmt(it.line_total)}</td>
       </tr>`).join('');
 
     const html = `<!DOCTYPE html><html dir="rtl" lang="fa"><head><meta charset="utf-8">
-<title>پیشنهاد قیمت ${quote.quote_number}</title>
+<title>پیشنهاد قیمت ${he(quote.quote_number)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
 body{font-family:'Vazirmatn',Tahoma,sans-serif;padding:24px;direction:rtl;color:#1a2e48;background:#fff}
@@ -463,22 +465,22 @@ tr:hover td{background:#f8fafc}
 </style></head><body>
 <div class="hdr">
   <h1>🏷 پیشنهاد قیمت — آتنا زیست درمان</h1>
-  <p>شماره: ${quote.quote_number} &nbsp;|&nbsp; تاریخ: ${quote.jalali_date||new Date().toLocaleDateString('fa-IR')}</p>
+  <p>شماره: ${he(quote.quote_number)} &nbsp;|&nbsp; تاریخ: ${he(quote.jalali_date||new Date().toLocaleDateString('fa-IR'))}</p>
 </div>
 <div class="meta">
-  <div class="meta-item"><div class="meta-label">مرکز / خریدار</div><div class="meta-val">${quote.center_name||'—'}</div></div>
-  <div class="meta-item"><div class="meta-label">نوع خریدار</div><div class="meta-val">${BUYER_FA[quote.buyer_type]||quote.buyer_type}</div></div>
-  <div class="meta-item"><div class="meta-label">نوع تسویه</div><div class="meta-val">${PAY_FA[quote.pay_type]||quote.pay_type}</div></div>
-  <div class="meta-item"><div class="meta-label">وضعیت</div><div class="meta-val"><span class="status-${quote.status}">${
+  <div class="meta-item"><div class="meta-label">مرکز / خریدار</div><div class="meta-val">${he(quote.center_name)||'—'}</div></div>
+  <div class="meta-item"><div class="meta-label">نوع خریدار</div><div class="meta-val">${he(BUYER_FA[quote.buyer_type]||quote.buyer_type)}</div></div>
+  <div class="meta-item"><div class="meta-label">نوع تسویه</div><div class="meta-val">${he(PAY_FA[quote.pay_type]||quote.pay_type)}</div></div>
+  <div class="meta-item"><div class="meta-label">وضعیت</div><div class="meta-val"><span class="status-${he(quote.status)}">${
     quote.status==='approved'?'✅ تأیید شده':quote.status==='pending'?'⏳ در انتظار تأیید':
     quote.status==='rejected'?'❌ رد شده':'پیش‌نویس'}</span></div></div>
-  <div class="meta-item"><div class="meta-label">تهیه‌کننده</div><div class="meta-val">${quote.created_by||'—'}</div></div>
-  ${quote.approved_by?`<div class="meta-item"><div class="meta-label">تأیید‌کننده</div><div class="meta-val">${quote.approved_by}</div></div>`:''}
+  <div class="meta-item"><div class="meta-label">تهیه‌کننده</div><div class="meta-val">${he(quote.created_by)||'—'}</div></div>
+  ${quote.approved_by?`<div class="meta-item"><div class="meta-label">تأیید‌کننده</div><div class="meta-val">${he(quote.approved_by)}</div></div>`:''}
 </div>
 <table><thead><tr><th>#</th><th>محصول</th><th style="text-align:center">تعداد</th><th>قیمت واحد (ریال)</th><th>جمع (ریال)</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <div class="total"><div class="lbl">جمع کل سفارش</div><div class="val">${fmt(quote.total_final)} ریال</div></div>
-${quote.manager_notes?`<p style="margin-top:16px;font-size:12px;color:#64748b">📝 یادداشت مدیر: ${quote.manager_notes}</p>`:''}
+${quote.manager_notes?`<p style="margin-top:16px;font-size:12px;color:#64748b">📝 یادداشت مدیر: ${he(quote.manager_notes)}</p>`:''}
 </body></html>`;
     res.send(html);
   } catch (e) { res.status(500).send(e.message); }
