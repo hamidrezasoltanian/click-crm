@@ -49,7 +49,7 @@ def main():
     for week_id in sorted(by_week.keys(), reverse=True):
         entries = by_week[week_id]
         print(f"\n📅 Week: {week_id}  ({len(entries)} entries)")
-        for k, v in sorted(entries, key=lambda x: x[1].get('scheduledDate','')):
+        for k, v in sorted(entries, key=lambda x: x[1].get('scheduledDate') or ''):
             name = v.get('centerName', '?')
             owner = v.get('addedBy', '?')
             date = v.get('scheduledDate', '?')
