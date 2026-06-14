@@ -284,6 +284,10 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | 9 UX confusion fixes (banner role tag, kanban empty states, etc.) | various | ✅ |
 | UI Polish v2: custom scrollbar, tab underline animation, card hover lift, pill buttons, input focus ring, modal entrance, notification pulse | css/app.css | ✅ |
 | Comprehensive bug-fix pass: 15+ bugs fixed across backend routes + frontend modules | all files | ✅ |
+| Tehran duplicate center merge: 219 mz_t_ pairs merged into c_ entries | scripts/merge_tehran_confirmed.py | ✅ |
+| Automated DB backup: appdata every 10min + full daily, 30-day retention | scripts/backup_db.sh + crontab | ✅ |
+| weekEntries guard: server merges instead of overwriting when incoming has fewer entries | server/routes/data.js | ✅ |
+| DB history retention: extended from 30 snapshots to 30 days | server/routes/data.js | ✅ |
 
 ## Planned Integration: Accounting Software → Receivables (مطالبات)
 
@@ -316,6 +320,45 @@ Priorities expressed by the product owner (hamidreza.soltanian@gmail.com), rough
 5. **Data layer evolution (tech debt)** — single-blob `DB` JSON will not scale; eventual move to per-collection endpoints (tasks, notifications, changeLog) and optimistic merge instead of last-write-wins. SSE channel already exists (`/api/events`) — use it for live refresh.
 6. **app.js modularization (tech debt)** — 12k+ lines in one file; if a build step is ever accepted, split by tab/module. Until then keep the function map above accurate.
 7. **UX polish** — owner cares about "روان بودن" (flow); the app was renamed Flow for this reason. Prefer inline editing over prompt()/alert(), keep the indigo design system (`--brand:#6366f1`) consistent.
+
+### Dev vs Prod environment
+
+- **Prod**: `/home/hamidreza/Sales-Portal` — port 3000, auto-starts via crontab `@reboot sleep 50`
+- **Dev**: `/home/hamidreza/Sales-Portal-dev` — port 4000, manual start
+- **CRITICAL**: Both use the same PostgreSQL DB (`atena_crm`). Running dev with backend changes that write to DB can corrupt prod data.
+- **Safe for dev**: frontend-only changes (HTML/CSS/JS) — the dev server just serves files, DB writes go to same place but are protected by weekEntries guard.
+- **Unsafe for dev**: testing backend route changes (data.js, auth.js, etc.) — use a separate DB for that (see below).
+
+#### Setting up a truly isolated dev DB:
+```bash
+# Create dev DB as a copy of prod (run once)
+createdb -U postgres atena_crm_dev
+pg_dump -U postgres atena_crm | psql -U postgres atena_crm_dev
+
+# Set PG_DATABASE=atena_crm_dev in ~/Sales-Portal-dev/.env
+# Then dev server writes to atena_crm_dev, prod stays clean
+```
+
+### Backup system
+
+- **app_data every 10 min**: `scripts/backup_db.sh appdata` → `~/db_backups/appdata_*.sql.gz` (~456KB each, 30 days)
+- **Full pg_dump daily at 3 AM**: `scripts/backup_db.sh full` → `~/db_backups/full_*.sql.gz` (~35MB each, 30 days)
+- **Restore app_data**: `gunzip -c ~/db_backups/appdata_TIMESTAMP.sql.gz | psql -U postgres atena_crm`
+- **Restore full**: `gunzip -c ~/db_backups/full_TIMESTAMP.sql.gz | psql -U postgres atena_crm`
+- In-DB history: `app_data_history` table keeps 30 days of snapshots (previously was only 30 records)
+- Use `scripts/restore_weekentries.py` to find and restore from DB snapshots
+
+### weekEntries guard (data.js — PUT /api/data/db)
+
+If an incoming save has FEWER weekEntries than what's currently in the DB, the server merges them (server entries + incoming entries) instead of overwriting. This prevents a stale browser session from wiping the team's week plan.
+Logged as: `[data/db PUT] weekEntries guard: merged server(N) + incoming(M) → K`
+
+### Tehran duplicate center merge
+
+- 219 confirmed duplicate pairs (mz_t_ → c_) merged via `scripts/merge_tehran_confirmed.py`
+- Analysis script: `scripts/analyze_export_dupes.py` (works on exported TXT, no DB needed)
+- After merge, `scripts/check_weekentries.py` migrates orphaned weekEntries from mz_t_ keys to c_ keys
+- Diagnostic tools: `scripts/inspect_weekentries.py`, `scripts/inspect_new_centers.py`
 
 ### Bug-fix history (session June 2026)
 
