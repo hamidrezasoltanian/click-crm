@@ -6,7 +6,7 @@ It is the single source of truth for an AI to understand the entire app and its 
 ## Project Name
 
 **Flow CRM** — Persian-language (RTL, Jalali calendar) CRM for a medical equipment sales team (~5 users).
-No framework, no build step: vanilla JS frontend + Express/PostgreSQL backend.
+Vanilla JS frontend + Express/PostgreSQL backend. Vite + TypeScript + Vue 3 scaffold added in `src/` for incremental migration (no build step yet — new components will be compiled to `public/dist/` and loaded alongside existing vanilla JS).
 
 ## Running the App
 
@@ -31,12 +31,18 @@ Sales-Portal/
     index.html          ← HTML shell only (~640 lines): markup, tab buttons, panel divs
     css/app.css         ← all styles (~1,150 lines), indigo design system
     js/app.js           ← ALL application logic (~13,450 lines)
+    js/proforma.js      ← proforma invoice module (~550 lines)
+    wms.html            ← WMS warehouse app (served at /wms, backed by /api/wms)
     sw.js               ← service worker (CDN caching)
     fonts/              ← Vazirmatn font files
+  src/                  ← future Vue 3 + TypeScript frontend (Vite builds → public/dist/)
+    main.ts             ← placeholder entry point
   server/
-    index.js            ← Express entry point (port 3000)
-    db.js               ← PostgreSQL pool (pg)
+    index.js            ← Express entry point (port 3000); helmet + compression
+    db.js               ← PostgreSQL pool (pg) + initSchema() for all tables
     auth.js             ← cookie-session auth
+    bot/
+      telegram.js       ← Telegram long-polling bot (proforma approve/reject, inventory, QR scan)
     routes/
       auth.js           ← /api/auth  (login/logout)
       data.js           ← /api/data/db  (main DB blob PUT/GET)
@@ -48,9 +54,13 @@ Sales-Portal/
       distribution.js   ← /api/distribution
       ai.js             ← /api/ai proxy
       discovery.js      ← /api/discovery (biopsy center discovery: list, ai-scan, import-file)
+      wms.js            ← /api/wms  (blob compat + REST: /inventory, /lots/scan/:code, /transactions)
+      proforma.js       ← /api/proforma  (CRUD + workflow actions, SQL-backed, zod validated)
   scripts/
     discover_centers.py ← CLI scraper (nobat.ir, doctorto.ir, --ai, --enrich modes)
-  atena_crm_v3_mtr_3.html  ← legacy snapshot of the OLD single-file app (frozen; no longer synced line-by-line, kept for history)
+  vite.config.ts        ← Vite 6 config: Vue plugin, src/ → public/dist/, dev proxy → :3000
+  tsconfig.json         ← strict ES2022 TypeScript config
+  atena_crm_v3_mtr_3.html  ← legacy snapshot of the OLD single-file app (frozen; kept for history)
   CLAUDE.md
 ```
 
@@ -97,6 +107,16 @@ sessions introduced 6+ syntax errors from getting this wrong.
 | PostgreSQL `app_data` | `'mtr'` | Receivables module data |
 | PostgreSQL `center_contacts` | center_key | Legacy single-contact per center |
 | PostgreSQL `centers_master` | `'CENTERS'` / `'PC_RAW'` | Master center lists |
+| PostgreSQL `proformas` | — | Proforma invoices (proper table, zod validated) |
+| PostgreSQL `wms_products` | — | WMS product catalog |
+| PostgreSQL `wms_warehouses` | — | WMS warehouses |
+| PostgreSQL `wms_counterparties` | — | WMS suppliers / customers |
+| PostgreSQL `wms_lots` | — | WMS lot/batch records |
+| PostgreSQL `wms_transactions` | — | WMS entry/exit transactions |
+| PostgreSQL `wms_purchase_orders` | — | WMS purchase orders (JSONB items) |
+| PostgreSQL `wms_recalls` | — | WMS product recalls |
+| PostgreSQL `wms_audit_log` | — | WMS immutable audit trail |
+| PostgreSQL `wms_settings` | key | WMS key-value config |
 | `localStorage` `atena_crm_v2` | — | Client-side cache of `DB` |
 | IndexedDB `atenaCRM_master` | — | Master center list cache |
 
@@ -288,6 +308,15 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | Automated DB backup: appdata every 10min + full daily, 30-day retention | scripts/backup_db.sh + crontab | ✅ |
 | weekEntries guard: server merges instead of overwriting when incoming has fewer entries | server/routes/data.js | ✅ |
 | DB history retention: extended from 30 snapshots to 30 days | server/routes/data.js | ✅ |
+| WMS warehouse module: served at /wms, backed by PostgreSQL (9 tables), REST API at /api/wms | public/wms.html + server/routes/wms.js | ✅ |
+| WMS REST endpoints: /api/wms/inventory (aggregate), /api/wms/lots/scan/:code (QR), /api/wms/transactions (paginated) | server/routes/wms.js | ✅ |
+| WMS auto-migration: blob data migrated to SQL tables on first startup | server/db.js _migrateWMSFromBlob() | ✅ |
+| Proforma invoice module: draft→sent→approved/rejected→reopen workflow, auto-number PF-YYYY-NNNN | proforma tab + /api/proforma | ✅ |
+| Proforma SQL: zod validation, rowToObj mapper, manager-only approve/reject | server/routes/proforma.js | ✅ |
+| Proforma auto-migration: blob migrated to SQL on first startup | server/db.js _migrateProformasFromBlob() | ✅ |
+| Telegram bot: long-polling, CRM auth, proforma approve/reject inline keyboard, inventory check, QR scan | server/bot/telegram.js | ✅ |
+| Security middleware: helmet (CSP off) + compression (graceful fallback) | server/index.js | ✅ |
+| Vite + TypeScript + Vue 3 scaffold for incremental frontend migration | src/ + vite.config.ts + tsconfig.json | ✅ (placeholder) |
 
 ## Planned Integration: Accounting Software → Receivables (مطالبات)
 
