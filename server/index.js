@@ -19,7 +19,15 @@ const path = require('path');
 const fs = require('fs');
 const { initSchema } = require('./db');
 
+let helmet, compression;
+try { helmet = require('helmet'); } catch(e) {}
+try { compression = require('compression'); } catch(e) {}
+
 const app = express();
+
+// Security & perf middleware
+if (helmet) app.use(helmet({ contentSecurityPolicy: false }));
+if (compression) app.use(compression());
 
 // Middleware
 app.use(cookieParser());

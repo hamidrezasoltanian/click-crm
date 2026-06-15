@@ -1,39 +1,96 @@
 'use strict';
 
-const express = require('express');
-const { query } = require('../db');
+const express    = require('express');
+const { z }      = require('zod');
+const { query }  = require('../db');
 const { requireAuth } = require('../auth');
 
 const router = express.Router();
 
-// ── Helper: get proformas list from app_data ────────────────────────────────
-async function _load() {
-  const r = await query(`SELECT value FROM app_data WHERE key = 'proformas'`);
-  return r.rows.length ? r.rows[0].value : [];
+// ── Zod schemas ────────────────────────────────────────────────────────────
+const ItemSchema = z.object({
+  prodId:    z.string().default(''),
+  name:      z.string().min(1, 'نام کالا الزامی است'),
+  unit:      z.string().default('عدد'),
+  qty:       z.coerce.number().min(1),
+  unitPrice: z.coerce.number().min(0),
+});
+
+const CreateSchema = z.object({
+  centerKey:   z.string().default(''),
+  centerName:  z.string().default(''),
+  items:       z.array(ItemSchema).min(1, 'حداقل یک ردیف لازم است'),
+  note:        z.string().default(''),
+  taxPct:      z.coerce.number().min(0).max(100).default(9),
+  discountPct: z.coerce.number().min(0).max(100).default(0),
+  jalaliDate:  z.string().default(''),
+  validDays:   z.coerce.number().min(1).max(365).default(30),
+});
+
+const ActionSchema = z.object({
+  action: z.enum(['send','approve','reject','cancel','reopen']),
+  note:   z.string().default(''),
+});
+
+// ── Helper: validate with zod, return 400 on error ─────────────────────────
+function validate(schema, data, res) {
+  const r = schema.safeParse(data);
+  if (!r.success) {
+    res.status(400).json({ error: r.error.errors[0].message });
+    return null;
+  }
+  return r.data;
 }
 
-async function _save(list, username) {
-  await query(
-    `INSERT INTO app_data (key, value, updated_at, updated_by)
-     VALUES ('proformas', $1, NOW(), $2)
-     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
-    [JSON.stringify(list), username]
-  );
+// ── Helper: build row object from DB row ───────────────────────────────────
+function rowToObj(r) {
+  return {
+    id:          r.id,
+    no:          r.no,
+    jalaliDate:  r.jalali_date,
+    validDays:   r.valid_days,
+    centerKey:   r.center_key,
+    centerName:  r.center_name,
+    items:       r.items,
+    subtotal:    Number(r.subtotal),
+    discountPct: Number(r.discount_pct),
+    discAmt:     Number(r.disc_amt),
+    taxPct:      Number(r.tax_pct),
+    taxAmt:      Number(r.tax_amt),
+    total:       Number(r.total),
+    note:        r.note,
+    status:      r.status,
+    createdBy:   r.created_by,
+    createdAt:   r.created_at,
+    updatedAt:   r.updated_at,
+    sentAt:      r.sent_at,
+    respondedAt: r.responded_at,
+    respondedBy: r.responded_by,
+    managerNote: r.manager_note,
+  };
 }
 
-// ── GET /api/proforma — list (with optional status filter) ──────────────────
+// ── GET /api/proforma ───────────────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const list = await _load();
     const { status, center } = req.query;
-    let result = list;
-    if (status) result = result.filter(p => p.status === status);
-    if (center) result = result.filter(p => p.centerKey === center);
-    // Non-managers only see their own
     const isManager = ['مدیر', 'سوپر ادمین'].includes(req.user.role);
-    if (!isManager) result = result.filter(p => p.createdBy === req.user.username);
-    res.json(result.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
-  } catch (e) {
+
+    const conditions = [];
+    const params     = [];
+    let   idx        = 1;
+
+    if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
+    if (center) { conditions.push(`center_key = $${idx++}`); params.push(center); }
+    if (!isManager) { conditions.push(`created_by = $${idx++}`); params.push(req.user.username); }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const rows  = await query(
+      `SELECT * FROM proformas ${where} ORDER BY created_at DESC LIMIT 200`,
+      params
+    );
+    res.json(rows.rows.map(rowToObj));
+  } catch(e) {
     console.error('[proforma GET]', e.message);
     res.status(500).json({ error: 'خطای سرور' });
   }
@@ -42,58 +99,39 @@ router.get('/', requireAuth, async (req, res) => {
 // ── POST /api/proforma — create ─────────────────────────────────────────────
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const list = await _load();
-    const { centerKey, centerName, items, note, taxPct, discountPct, jalaliDate, validDays } = req.body || {};
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'حداقل یک ردیف کالا لازم است' });
-    }
+    const d = validate(CreateSchema, req.body, res);
+    if (!d) return;
 
-    // Auto-number: PF-1404-0001
-    const year = (jalaliDate || '').split('/')[0] || new Date().getFullYear().toString();
-    const existing = list.filter(p => (p.no || '').startsWith(`PF-${year}-`));
-    const seq = String(existing.length + 1).padStart(4, '0');
-    const no = `PF-${year}-${seq}`;
+    // Auto-number PF-1404-0001
+    const year = (d.jalaliDate || '').split('/')[0] || String(new Date().getFullYear());
+    const countRes = await query(
+      `SELECT COUNT(*) FROM proformas WHERE no LIKE $1`,
+      [`PF-${year}-%`]
+    );
+    const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(4, '0');
+    const no  = `PF-${year}-${seq}`;
 
-    const subtotal = items.reduce((s, i) => s + (Number(i.unitPrice) * Number(i.qty) || 0), 0);
-    const discAmt  = Math.round(subtotal * (Number(discountPct) || 0) / 100);
-    const taxAmt   = Math.round((subtotal - discAmt) * (Number(taxPct) || 9) / 100);
-    const total    = subtotal - discAmt + taxAmt;
+    const subtotal  = d.items.reduce(function(s, i){ return s + i.qty * i.unitPrice; }, 0);
+    const discAmt   = Math.round(subtotal * d.discountPct / 100);
+    const taxAmt    = Math.round((subtotal - discAmt) * d.taxPct / 100);
+    const total     = subtotal - discAmt + taxAmt;
+    const itemsFull = d.items.map(function(i){ return Object.assign({}, i, { lineTotal: i.qty * i.unitPrice }); });
 
-    const pf = {
-      id: 'pf_' + Date.now().toString(36),
-      no,
-      jalaliDate: jalaliDate || '',
-      validDays: Number(validDays) || 30,
-      centerKey: centerKey || '',
-      centerName: centerName || '',
-      items: items.map(i => ({
-        prodId:    i.prodId    || '',
-        name:      i.name      || '',
-        unit:      i.unit      || 'عدد',
-        qty:       Number(i.qty) || 1,
-        unitPrice: Number(i.unitPrice) || 0,
-        lineTotal: (Number(i.qty) || 1) * (Number(i.unitPrice) || 0),
-      })),
-      subtotal,
-      discountPct: Number(discountPct) || 0,
-      discAmt,
-      taxPct:  Number(taxPct) !== undefined ? Number(taxPct) : 9,
-      taxAmt,
-      total,
-      note: note || '',
-      status: 'draft',
-      createdBy: req.user.username,
-      createdAt: new Date().toISOString(),
-      sentAt: null,
-      respondedAt: null,
-      respondedBy: null,
-      managerNote: '',
-    };
+    const id = 'pf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-    list.push(pf);
-    await _save(list, req.user.username);
-    res.status(201).json(pf);
-  } catch (e) {
+    const r = await query(
+      `INSERT INTO proformas
+         (id,no,jalali_date,valid_days,center_key,center_name,items,
+          subtotal,discount_pct,disc_amt,tax_pct,tax_amt,total,
+          note,status,created_by,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'draft',$15,NOW(),NOW())
+       RETURNING *`,
+      [id, no, d.jalaliDate||null, d.validDays, d.centerKey, d.centerName,
+       JSON.stringify(itemsFull), subtotal, d.discountPct, discAmt,
+       d.taxPct, taxAmt, total, d.note, req.user.username]
+    );
+    res.status(201).json(rowToObj(r.rows[0]));
+  } catch(e) {
     console.error('[proforma POST]', e.message);
     res.status(500).json({ error: 'خطای سرور' });
   }
@@ -102,128 +140,120 @@ router.post('/', requireAuth, async (req, res) => {
 // ── GET /api/proforma/:id ───────────────────────────────────────────────────
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const list = await _load();
-    const pf = list.find(p => p.id === req.params.id);
-    if (!pf) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
-    res.json(pf);
-  } catch (e) {
-    res.status(500).json({ error: 'خطای سرور' });
-  }
+    const r = await query('SELECT * FROM proformas WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    res.json(rowToObj(r.rows[0]));
+  } catch(e) { res.status(500).json({ error: 'خطای سرور' }); }
 });
 
 // ── PUT /api/proforma/:id — update draft ────────────────────────────────────
 router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const list = await _load();
-    const idx = list.findIndex(p => p.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
-    const pf = list[idx];
-    if (pf.status !== 'draft') {
+    const existing = await query('SELECT * FROM proformas WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    if (existing.rows[0].status !== 'draft') {
       return res.status(400).json({ error: 'فقط پیش‌نویس قابل ویرایش است' });
     }
-    const { items, note, taxPct, discountPct, jalaliDate, validDays, centerKey, centerName } = req.body || {};
-    if (items) {
-      pf.items = items.map(i => ({
-        prodId: i.prodId || '', name: i.name || '', unit: i.unit || 'عدد',
-        qty: Number(i.qty) || 1, unitPrice: Number(i.unitPrice) || 0,
-        lineTotal: (Number(i.qty) || 1) * (Number(i.unitPrice) || 0),
-      }));
-      pf.subtotal  = pf.items.reduce((s, i) => s + i.lineTotal, 0);
-      pf.discountPct = Number(discountPct) || pf.discountPct;
-      pf.taxPct      = taxPct !== undefined ? Number(taxPct) : pf.taxPct;
-      pf.discAmt  = Math.round(pf.subtotal * pf.discountPct / 100);
-      pf.taxAmt   = Math.round((pf.subtotal - pf.discAmt) * pf.taxPct / 100);
-      pf.total    = pf.subtotal - pf.discAmt + pf.taxAmt;
-    }
-    if (note !== undefined)       pf.note       = note;
-    if (jalaliDate !== undefined) pf.jalaliDate = jalaliDate;
-    if (validDays  !== undefined) pf.validDays  = Number(validDays);
-    if (centerKey  !== undefined) pf.centerKey  = centerKey;
-    if (centerName !== undefined) pf.centerName = centerName;
-    pf.updatedAt = new Date().toISOString();
-    list[idx] = pf;
-    await _save(list, req.user.username);
-    res.json(pf);
-  } catch (e) {
+
+    const d = validate(CreateSchema.partial(), req.body, res);
+    if (!d) return;
+
+    const pf = rowToObj(existing.rows[0]);
+    const items     = d.items ? d.items.map(function(i){ return Object.assign({}, i, { lineTotal: i.qty * i.unitPrice }); }) : pf.items;
+    const taxPct    = d.taxPct      !== undefined ? d.taxPct      : pf.taxPct;
+    const discPct   = d.discountPct !== undefined ? d.discountPct : pf.discountPct;
+    const subtotal  = items.reduce(function(s, i){ return s + (i.lineTotal || i.qty * i.unitPrice); }, 0);
+    const discAmt   = Math.round(subtotal * discPct / 100);
+    const taxAmt    = Math.round((subtotal - discAmt) * taxPct / 100);
+    const total     = subtotal - discAmt + taxAmt;
+
+    const r = await query(
+      `UPDATE proformas SET
+         jalali_date=$1, valid_days=$2, center_key=$3, center_name=$4,
+         items=$5, subtotal=$6, discount_pct=$7, disc_amt=$8,
+         tax_pct=$9, tax_amt=$10, total=$11, note=$12, updated_at=NOW()
+       WHERE id=$13 RETURNING *`,
+      [d.jalaliDate||pf.jalaliDate, d.validDays||pf.validDays,
+       d.centerKey||pf.centerKey, d.centerName||pf.centerName,
+       JSON.stringify(items), subtotal, discPct, discAmt,
+       taxPct, taxAmt, total, d.note!==undefined?d.note:pf.note,
+       req.params.id]
+    );
+    res.json(rowToObj(r.rows[0]));
+  } catch(e) {
     console.error('[proforma PUT]', e.message);
     res.status(500).json({ error: 'خطای سرور' });
   }
 });
 
-// ── POST /api/proforma/:id/action — workflow transitions ───────────────────
-// body: { action: 'send'|'approve'|'reject'|'cancel'|'reopen', note }
+// ── POST /api/proforma/:id/action — workflow ────────────────────────────────
 const TRANSITIONS = {
-  draft:    ['send', 'cancel'],
-  sent:     ['approve', 'reject', 'cancel'],
-  approved: ['cancel'],
-  rejected: ['reopen'],
+  draft:     ['send','cancel'],
+  sent:      ['approve','reject','cancel'],
+  approved:  ['cancel'],
+  rejected:  ['reopen'],
   cancelled: ['reopen'],
 };
 
 router.post('/:id/action', requireAuth, async (req, res) => {
   try {
-    const { action, note } = req.body || {};
-    const list = await _load();
-    const idx  = list.findIndex(p => p.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
-    const pf = list[idx];
+    const d = validate(ActionSchema, req.body, res);
+    if (!d) return;
+
+    const existing = await query('SELECT * FROM proformas WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    const pf = existing.rows[0];
 
     const allowed = TRANSITIONS[pf.status] || [];
-    if (!allowed.includes(action)) {
-      return res.status(400).json({ error: `عملیات '${action}' در وضعیت '${pf.status}' مجاز نیست` });
+    if (!allowed.includes(d.action)) {
+      return res.status(400).json({
+        error: `عملیات '${d.action}' در وضعیت '${pf.status}' مجاز نیست`,
+      });
     }
 
     const isManager = ['مدیر', 'سوپر ادمین'].includes(req.user.role);
 
-    if (action === 'send') {
-      pf.status = 'sent';
-      pf.sentAt = new Date().toISOString();
-    } else if (action === 'approve') {
+    let updateSQL = '';
+    let params    = [];
+
+    if (d.action === 'send') {
+      updateSQL = `SET status='sent', sent_at=NOW(), updated_at=NOW() WHERE id=$1`;
+      params    = [req.params.id];
+    } else if (d.action === 'approve') {
       if (!isManager) return res.status(403).json({ error: 'فقط مدیر می‌تواند تأیید کند' });
-      pf.status = 'approved';
-      pf.respondedAt  = new Date().toISOString();
-      pf.respondedBy  = req.user.username;
-      pf.managerNote  = note || '';
-    } else if (action === 'reject') {
+      updateSQL = `SET status='approved', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW() WHERE id=$1`;
+      params    = [req.params.id, req.user.username, d.note];
+    } else if (d.action === 'reject') {
       if (!isManager) return res.status(403).json({ error: 'فقط مدیر می‌تواند رد کند' });
-      pf.status = 'rejected';
-      pf.respondedAt  = new Date().toISOString();
-      pf.respondedBy  = req.user.username;
-      pf.managerNote  = note || '';
-    } else if (action === 'cancel') {
-      pf.status = 'cancelled';
-    } else if (action === 'reopen') {
-      pf.status = 'draft';
-      pf.respondedAt = null;
-      pf.respondedBy = null;
-      pf.managerNote = '';
+      updateSQL = `SET status='rejected', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW() WHERE id=$1`;
+      params    = [req.params.id, req.user.username, d.note];
+    } else if (d.action === 'cancel') {
+      updateSQL = `SET status='cancelled', updated_at=NOW() WHERE id=$1`;
+      params    = [req.params.id];
+    } else if (d.action === 'reopen') {
+      updateSQL = `SET status='draft', responded_at=NULL, responded_by=NULL, manager_note='', updated_at=NOW() WHERE id=$1`;
+      params    = [req.params.id];
     }
 
-    pf.updatedAt = new Date().toISOString();
-    list[idx] = pf;
-    await _save(list, req.user.username);
-    res.json(pf);
-  } catch (e) {
+    const r = await query(`UPDATE proformas ${updateSQL} RETURNING *`, params);
+    res.json(rowToObj(r.rows[0]));
+  } catch(e) {
     console.error('[proforma action]', e.message);
     res.status(500).json({ error: 'خطای سرور' });
   }
 });
 
-// ── DELETE /api/proforma/:id — only draft/cancelled ─────────────────────────
+// ── DELETE /api/proforma/:id ─────────────────────────────────────────────────
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
-    const list = await _load();
-    const idx = list.findIndex(p => p.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
-    if (!['draft', 'cancelled'].includes(list[idx].status)) {
+    const existing = await query('SELECT status FROM proformas WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    if (!['draft','cancelled'].includes(existing.rows[0].status)) {
       return res.status(400).json({ error: 'فقط پیش‌نویس یا لغو شده را می‌توان حذف کرد' });
     }
-    list.splice(idx, 1);
-    await _save(list, req.user.username);
+    await query('DELETE FROM proformas WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: 'خطای سرور' });
-  }
+  } catch(e) { res.status(500).json({ error: 'خطای سرور' }); }
 });
 
 module.exports = router;

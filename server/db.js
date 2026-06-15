@@ -272,6 +272,215 @@ async function initSchema() {
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_adh_key_at ON app_data_history(key, saved_at DESC)`);
 
+  // ════════════════════════════════════════
+  // WMS — proper normalized tables
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_products (
+      id          VARCHAR(50) PRIMARY KEY,
+      name        VARCHAR(300) NOT NULL,
+      full_name   VARCHAR(500),
+      brand       VARCHAR(200),
+      size        VARCHAR(100),
+      catalog_code VARCHAR(100),
+      irc_code    VARCHAR(100),
+      unit        VARCHAR(50) DEFAULT 'عدد',
+      category    VARCHAR(100),
+      reorder_point INTEGER DEFAULT 10,
+      note        TEXT DEFAULT '',
+      active      BOOLEAN DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_prod_active ON wms_products(active)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_prod_code ON wms_products(catalog_code)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_warehouses (
+      id          VARCHAR(50) PRIMARY KEY,
+      name        VARCHAR(200) NOT NULL,
+      location    TEXT,
+      manager_id  VARCHAR(100),
+      note        TEXT DEFAULT '',
+      active      BOOLEAN DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_counterparties (
+      id          VARCHAR(50) PRIMARY KEY,
+      name        VARCHAR(300) NOT NULL,
+      type        VARCHAR(20) CHECK(type IN ('supplier','customer','both')),
+      phone       VARCHAR(50),
+      address     TEXT,
+      tax_code    VARCHAR(50),
+      email       VARCHAR(200),
+      note        TEXT DEFAULT '',
+      active      BOOLEAN DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_cp_type ON wms_counterparties(type)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_lots (
+      id              VARCHAR(50) PRIMARY KEY,
+      product_id      VARCHAR(50) REFERENCES wms_products(id) ON DELETE RESTRICT,
+      warehouse_id    VARCHAR(50) REFERENCES wms_warehouses(id) ON DELETE RESTRICT,
+      lot_no          VARCHAR(200) NOT NULL,
+      qty             INTEGER NOT NULL DEFAULT 0,
+      expiry          DATE,
+      purchase_price  BIGINT DEFAULT 0,
+      counterparty_id VARCHAR(50),
+      txn_id          VARCHAR(50),
+      lot_date        TIMESTAMPTZ,
+      entered_by      VARCHAR(100),
+      approved_by     VARCHAR(100),
+      ttac_no         VARCHAR(100) DEFAULT '',
+      imed_status     VARCHAR(50) DEFAULT 'not_registered',
+      imed_ref_no     VARCHAR(100) DEFAULT '',
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_lots_product ON wms_lots(product_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_lots_warehouse ON wms_lots(warehouse_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_lots_expiry ON wms_lots(expiry)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_lots_lotno ON wms_lots(lot_no)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_transactions (
+      id                 VARCHAR(50) PRIMARY KEY,
+      txn_no             VARCHAR(50) UNIQUE,
+      type               VARCHAR(20) CHECK(type IN ('entry','exit')),
+      txn_type           VARCHAR(50),
+      product_id         VARCHAR(50) REFERENCES wms_products(id),
+      lot_id             VARCHAR(50) REFERENCES wms_lots(id),
+      warehouse_id       VARCHAR(50) REFERENCES wms_warehouses(id),
+      qty                INTEGER NOT NULL DEFAULT 0,
+      unit_price         BIGINT DEFAULT 0,
+      sale_price         BIGINT DEFAULT 0,
+      counterparty_id    VARCHAR(50),
+      from_warehouse_id  VARCHAR(50),
+      to_warehouse_id    VARCHAR(50),
+      by_user            VARCHAR(100),
+      txn_date           TIMESTAMPTZ DEFAULT NOW(),
+      status             VARCHAR(20) DEFAULT 'pending',
+      note               TEXT DEFAULT '',
+      ref_no             VARCHAR(100),
+      imed_status        VARCHAR(50) DEFAULT 'not_registered',
+      imed_ref_no        VARCHAR(100) DEFAULT '',
+      imed_date          VARCHAR(50) DEFAULT '',
+      ttac_no            VARCHAR(100) DEFAULT '',
+      created_at         TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_txn_type ON wms_transactions(type)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_txn_product ON wms_transactions(product_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_txn_date ON wms_transactions(txn_date DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_txn_status ON wms_transactions(status)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_purchase_orders (
+      id                VARCHAR(50) PRIMARY KEY,
+      po_no             VARCHAR(50) UNIQUE,
+      supplier_id       VARCHAR(50),
+      warehouse_id      VARCHAR(50),
+      requested_by      VARCHAR(100),
+      approved_by       VARCHAR(100),
+      approved_at       TIMESTAMPTZ,
+      status            VARCHAR(20) DEFAULT 'draft',
+      items             JSONB DEFAULT '[]',
+      po_date           DATE,
+      expected_delivery DATE,
+      note              TEXT DEFAULT '',
+      imed_status       VARCHAR(50) DEFAULT 'not_registered',
+      created_at        TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_po_status ON wms_purchase_orders(status)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_recalls (
+      id           VARCHAR(50) PRIMARY KEY,
+      lot_id       VARCHAR(50),
+      product_id   VARCHAR(50),
+      severity     VARCHAR(20),
+      status       VARCHAR(20) DEFAULT 'open',
+      description  TEXT,
+      affected_qty INTEGER,
+      action       TEXT,
+      resolved_at  TIMESTAMPTZ,
+      created_by   VARCHAR(100),
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_audit_log (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     VARCHAR(100),
+      user_name   VARCHAR(200),
+      action      VARCHAR(100),
+      entity      VARCHAR(50),
+      entity_id   VARCHAR(50),
+      detail      TEXT,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_audit_entity ON wms_audit_log(entity, entity_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wms_audit_at ON wms_audit_log(created_at DESC)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_settings (
+      key   VARCHAR(100) PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // ════════════════════════════════════════
+  // PROFORMAS — proper normalized table
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS proformas (
+      id             VARCHAR(50) PRIMARY KEY,
+      no             VARCHAR(50) UNIQUE,
+      jalali_date    VARCHAR(20),
+      valid_days     INTEGER DEFAULT 30,
+      center_key     VARCHAR(200),
+      center_name    VARCHAR(300),
+      items          JSONB DEFAULT '[]',
+      subtotal       BIGINT DEFAULT 0,
+      discount_pct   DECIMAL(5,2) DEFAULT 0,
+      disc_amt       BIGINT DEFAULT 0,
+      tax_pct        DECIMAL(5,2) DEFAULT 9,
+      tax_amt        BIGINT DEFAULT 0,
+      total          BIGINT DEFAULT 0,
+      note           TEXT DEFAULT '',
+      status         VARCHAR(20) DEFAULT 'draft'
+                     CHECK(status IN ('draft','sent','approved','rejected','cancelled')),
+      created_by     VARCHAR(100),
+      created_at     TIMESTAMPTZ DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ DEFAULT NOW(),
+      sent_at        TIMESTAMPTZ,
+      responded_at   TIMESTAMPTZ,
+      responded_by   VARCHAR(100),
+      manager_note   TEXT DEFAULT ''
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pf_status ON proformas(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pf_center ON proformas(center_key)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pf_created_by ON proformas(created_by)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_pf_created_at ON proformas(created_at DESC)`);
+
+  // Auto-migrate proformas from blob → table (run once)
+  await _migrateProformasFromBlob();
+
+  // Auto-migrate WMS from blob → tables (run once)
+  await _migrateWMSFromBlob();
+
   // Seed products and initial price list if products table is empty
   const prodCount = await query('SELECT COUNT(*) FROM products');
   if (parseInt(prodCount.rows[0].count) === 0) {
@@ -370,6 +579,146 @@ async function initSchema() {
   }
 
   console.log('[DB] Schema initialized');
+}
+
+// ── Migrate proformas from app_data blob → proformas table ─────────────────
+async function _migrateProformasFromBlob() {
+  try {
+    const existing = await query('SELECT COUNT(*) FROM proformas');
+    if (parseInt(existing.rows[0].count) > 0) return;
+    const blob = await query(`SELECT value FROM app_data WHERE key = 'proformas'`);
+    if (!blob.rows.length || !blob.rows[0].value) return;
+    const list = blob.rows[0].value;
+    if (!Array.isArray(list) || !list.length) return;
+    for (const pf of list) {
+      await query(
+        `INSERT INTO proformas
+           (id,no,jalali_date,valid_days,center_key,center_name,items,
+            subtotal,discount_pct,disc_amt,tax_pct,tax_amt,total,note,
+            status,created_by,created_at,updated_at,sent_at,
+            responded_at,responded_by,manager_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+                 $15,$16,$17,$18,$19,$20,$21,$22)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          pf.id, pf.no, pf.jalaliDate||null, pf.validDays||30,
+          pf.centerKey||'', pf.centerName||'',
+          JSON.stringify(pf.items||[]),
+          pf.subtotal||0, pf.discountPct||0, pf.discAmt||0,
+          pf.taxPct||9, pf.taxAmt||0, pf.total||0,
+          pf.note||'', pf.status||'draft', pf.createdBy||'',
+          pf.createdAt||new Date().toISOString(),
+          pf.updatedAt||new Date().toISOString(),
+          pf.sentAt||null, pf.respondedAt||null,
+          pf.respondedBy||null, pf.managerNote||'',
+        ]
+      );
+    }
+    console.log('[DB] Migrated', list.length, 'proformas from blob → table');
+  } catch(e) {
+    console.error('[DB] proforma migration error:', e.message);
+  }
+}
+
+// ── Migrate WMS from app_data blob → wms_* tables ──────────────────────────
+async function _migrateWMSFromBlob() {
+  try {
+    const existing = await query('SELECT COUNT(*) FROM wms_products');
+    if (parseInt(existing.rows[0].count) > 0) return;
+    const blob = await query(`SELECT value FROM app_data WHERE key = 'wms'`);
+    if (!blob.rows.length || !blob.rows[0].value) return;
+    const S = blob.rows[0].value;
+
+    // products
+    for (const p of (S.products||[])) {
+      await query(
+        `INSERT INTO wms_products (id,name,full_name,brand,size,catalog_code,irc_code,unit,category,reorder_point,note,active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
+        [p.id,p.name||'',p.fullName||'',p.brand||'',p.size||'',
+         p.catalogCode||'',p.ircCode||'',p.unit||'عدد',p.category||'',
+         p.reorderPoint||10,p.note||'',p.active!==false]
+      );
+    }
+    // warehouses
+    for (const w of (S.warehouses||[])) {
+      await query(
+        `INSERT INTO wms_warehouses (id,name,location,manager_id,note,active)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
+        [w.id,w.name||'',w.location||'',w.managerId||'',w.note||'',w.active!==false]
+      );
+    }
+    // counterparties
+    for (const c of (S.counterparties||[])) {
+      const t = ['supplier','customer','both'].includes(c.type) ? c.type : 'both';
+      await query(
+        `INSERT INTO wms_counterparties (id,name,type,phone,address,tax_code,email,note,active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
+        [c.id,c.name||'',t,c.phone||'',c.address||'',c.taxCode||'',c.email||'',c.note||'',c.active!==false]
+      );
+    }
+    // lots
+    for (const l of (S.lots||[])) {
+      await query(
+        `INSERT INTO wms_lots (id,product_id,warehouse_id,lot_no,qty,expiry,purchase_price,
+          counterparty_id,txn_id,lot_date,entered_by,approved_by,ttac_no,imed_status,imed_ref_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (id) DO NOTHING`,
+        [l.id,l.productId||null,l.warehouseId||null,l.lotNo||'',l.qty||0,
+         l.expiry||null,l.purchasePrice||0,l.counterpartyId||null,
+         l.txnId||null,l.date||null,l.enteredBy||null,l.approvedBy||null,
+         l.ttacNo||'',l.imedStatus||'not_registered',l.imedRefNo||'']
+      );
+    }
+    // transactions
+    for (const t of (S.transactions||[])) {
+      await query(
+        `INSERT INTO wms_transactions
+           (id,txn_no,type,txn_type,product_id,lot_id,warehouse_id,qty,unit_price,sale_price,
+            counterparty_id,from_warehouse_id,to_warehouse_id,by_user,txn_date,status,note,
+            ref_no,imed_status,imed_ref_no,imed_date,ttac_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+         ON CONFLICT (id) DO NOTHING`,
+        [t.id,t.txnNo||null,t.type||'entry',t.txnType||'',
+         t.productId||null,t.lotId||null,t.warehouseId||null,
+         t.qty||0,t.unitPrice||0,t.salePrice||0,t.counterpartyId||null,
+         t.fromWarehouseId||null,t.toWarehouseId||null,t.by||null,
+         t.date||new Date().toISOString(),t.status||'pending',
+         t.note||'',t.refNo||'',t.imedStatus||'not_registered',
+         t.imedRefNo||'',t.imedDate||'',t.ttacNo||'']
+      );
+    }
+    // purchase orders
+    for (const po of (S.purchaseOrders||[])) {
+      await query(
+        `INSERT INTO wms_purchase_orders (id,po_no,supplier_id,warehouse_id,requested_by,
+          approved_by,approved_at,status,items,po_date,expected_delivery,note,imed_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (id) DO NOTHING`,
+        [po.id,po.poNo||null,po.supplierId||null,po.warehouseId||null,
+         po.requestedBy||null,po.approvedBy||null,po.approvedAt||null,
+         po.status||'draft',JSON.stringify(po.items||[]),
+         po.date||null,po.expectedDelivery||null,po.note||'',
+         po.imedStatus||'not_registered']
+      );
+    }
+    // settings (printConfig, priceLists, priceItems, seq)
+    const settingsKeys = ['printConfig','priceLists','priceItems','priceHistory','seq'];
+    for (const k of settingsKeys) {
+      if (S[k]) {
+        await query(
+          `INSERT INTO wms_settings (key,value,updated_at) VALUES ($1,$2,NOW())
+           ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()`,
+          [k, JSON.stringify(S[k])]
+        );
+      }
+    }
+
+    console.log('[DB] WMS migrated from blob → tables ✓');
+    console.log('[DB]   products:', (S.products||[]).length,
+                'warehouses:', (S.warehouses||[]).length,
+                'lots:', (S.lots||[]).length,
+                'transactions:', (S.transactions||[]).length);
+  } catch(e) {
+    console.error('[DB] WMS migration error:', e.message);
+  }
 }
 
 module.exports = { pool, query, initSchema };
