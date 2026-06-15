@@ -9,6 +9,7 @@ var _pfList = [];
 var _pfFilter = 'all';   // all | draft | sent | approved | rejected | cancelled
 var _pfEditId = null;    // currently open modal id (null = new)
 var _pfItems  = [];      // rows in open modal
+var _pfWmsProds = [];    // WMS product list (fetched once per session)
 
 // ── Status labels & colors ───────────────────────────────────────────────
 var PF_STATUS = {
@@ -142,7 +143,29 @@ function _pfActions(pf) {
     btns.push('<button onclick="pfAction(\'' + pf.id + '\',\'reopen\')" style="padding:3px 8px;font-size:11px;border:1px solid #e2e8f0;border-radius:5px;background:white;cursor:pointer">بازگشایی</button>');
   }
 
-  return btns.join(' ');
+  // Delete (draft or cancelled only)
+  if (['draft','cancelled'].includes(pf.status) && (isManager || pf.createdBy === currentUser)) {
+    btns.push('<button onclick="pfDelete(\'' + pf.id + '\')" style="padding:3px 8px;font-size:11px;border:1px solid #fecaca;border-radius:5px;background:#fef2f2;color:#b91c1c;cursor:pointer" title="حذف">🗑️</button>');
+  }
+
+  return '<span class="row-acts">' + btns.join(' ') + '</span>';
+}
+
+async function pfDelete(id) {
+  var pf = _pfList.find(function(p){ return p.id === id; });
+  if (!pf) return;
+  if (!confirm('پیشفاکتور ' + pf.no + ' حذف شود؟')) return;
+  try {
+    var r = await fetch('/api/proforma/' + id, { method: 'DELETE' });
+    var data = await r.json();
+    if (!r.ok) { showToast('❌ ' + (data.error || 'خطا')); return; }
+    showToast('🗑️ پیشفاکتور حذف شد');
+    await pfLoad();
+    var el = document.getElementById('proformaPanel');
+    if (el) _renderPfPanel(el);
+  } catch(e) {
+    showToast('❌ خطا: ' + e.message);
+  }
 }
 
 // ── Workflow action call ──────────────────────────────────────────────────
@@ -186,10 +209,23 @@ async function _pfDoReject(id) {
   await pfAction(id, 'reject', note);
 }
 
+// ── Fetch WMS products once (for item autocomplete) ──────────────────────
+async function _pfLoadWmsProds() {
+  if (_pfWmsProds.length) return;
+  try {
+    var r = await fetch('/api/wms/inventory');
+    if (r.ok) {
+      var data = await r.json();
+      _pfWmsProds = data || [];
+    }
+  } catch(e) {}
+}
+
 // ── Open new proforma modal ───────────────────────────────────────────────
-function pfOpenNew() {
+async function pfOpenNew() {
   _pfEditId = null;
   _pfItems = [{ prodId:'', name:'', unit:'عدد', qty:1, unitPrice:0, lineTotal:0 }];
+  await _pfLoadWmsProds();
   _pfShowModal(null);
 }
 
@@ -199,6 +235,7 @@ async function pfOpenEdit(id) {
   _pfEditId = id;
   _pfItems  = (pf.items || []).map(function(i){ return Object.assign({}, i); });
   if (!_pfItems.length) _pfItems = [{ prodId:'', name:'', unit:'عدد', qty:1, unitPrice:0, lineTotal:0 }];
+  await _pfLoadWmsProds();
   _pfShowModal(pf);
 }
 
@@ -261,11 +298,18 @@ function _pfShowModal(pf) {
 }
 
 function _pfItemRow(i, item, readOnly) {
+  var wmsOpts = _pfWmsProds.length
+    ? '<datalist id="pfWmsList_' + i + '">' +
+        _pfWmsProds.map(function(p){ return '<option value="' + esc(p.full_name || p.name) + '" data-unit="' + esc(p.unit||'عدد') + '">'; }).join('') +
+      '</datalist>'
+    : '';
+  var listAttr = _pfWmsProds.length ? ' list="pfWmsList_' + i + '"' : '';
   return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0" id="pfRow_' + i + '">' +
+    wmsOpts +
     '<div><label style="font-size:10px;color:#64748b;display:block">کالا</label>' +
       (readOnly
         ? '<span style="font-size:13px">' + esc(item.name || '') + '</span>'
-        : '<input class="form-input pf-item-name" data-idx="' + i + '" style="font-size:13px" value="' + esc(item.name||'') + '" placeholder="نام کالا" oninput="_pfRowChange(' + i + ',\'name\',this.value)">') +
+        : '<input class="form-input pf-item-name" data-idx="' + i + '"' + listAttr + ' style="font-size:13px" value="' + esc(item.name||'') + '" placeholder="نام کالا" oninput="_pfRowChange(' + i + ',\'name\',this.value);_pfRowAutofill(' + i + ',this.value)">') +
     '</div>' +
     '<div><label style="font-size:10px;color:#64748b;display:block">تعداد</label>' +
       (readOnly
@@ -289,6 +333,15 @@ function _pfProdOptions(selId) {
     // items from WMS inventory would come here in future
   } catch(e) {}
   return '';
+}
+
+function _pfRowAutofill(i, val) {
+  var match = _pfWmsProds.find(function(p){ return (p.full_name || p.name) === val; });
+  if (!match) return;
+  if (!_pfItems[i]) return;
+  _pfItems[i].unit = match.unit || 'عدد';
+  var unitEl = document.querySelector('.pf-item-qty[data-idx="' + i + '"]');
+  if (unitEl) unitEl.placeholder = match.unit || 'عدد';
 }
 
 function _pfRowChange(i, field, val) {

@@ -236,7 +236,23 @@ router.post('/:id/action', requireAuth, async (req, res) => {
     }
 
     const r = await query(`UPDATE proformas ${updateSQL} RETURNING *`, params);
-    res.json(rowToObj(r.rows[0]));
+    const updated = rowToObj(r.rows[0]);
+    res.json(updated);
+
+    // Push Telegram notifications (non-blocking)
+    try {
+      const bot = require('../bot/telegram');
+      if (d.action === 'send') {
+        const msg = '📄 پیشفاکتور ' + updated.no + ' از ' + req.user.username +
+          ' در انتظار تأیید است.\n💰 مبلغ: ' + Number(updated.total).toLocaleString('fa-IR') + ' ﷼\n👤 مشتری: ' + (updated.centerName || '—');
+        bot.notifyManagers(msg).catch(function(){});
+      } else if (d.action === 'approve' || d.action === 'reject') {
+        const label = d.action === 'approve' ? '✅ تأیید شد' : '❌ رد شد';
+        const msg   = '📄 پیشفاکتور ' + updated.no + ' ' + label + ' توسط ' + req.user.username +
+          (d.note ? '\n📝 ' + d.note : '');
+        bot.notifyAll(msg).catch(function(){});
+      }
+    } catch(e) {}
   } catch(e) {
     console.error('[proforma action]', e.message);
     res.status(500).json({ error: 'خطای سرور' });

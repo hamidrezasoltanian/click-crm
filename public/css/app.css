@@ -1578,3 +1578,66 @@ button:active:not(:disabled){transform:scale(.97)}
   .table-wrap>table{display:none!important}
   #mobCtrList{display:block!important}
 }
+
+/* ══ SIDEBAR NAVIGATION ══ */
+.sidebar{
+  position:fixed;right:0;top:0;
+  width:200px;height:100vh;
+  background:var(--bg-card);
+  border-left:1px solid var(--border);
+  z-index:110;
+  display:flex;flex-direction:column;
+  overflow-y:auto;overflow-x:hidden;
+  box-shadow:-2px 0 12px rgba(0,0,0,.06)
+}
+[data-theme="dark"] .sidebar{box-shadow:-2px 0 16px rgba(0,0,0,.3)}
+.content-area{margin-right:200px}
+.sb-logo{
+  padding:14px 16px;font-size:15px;font-weight:800;
+  color:var(--brand);border-bottom:1px solid var(--border);
+  letter-spacing:-.3px;flex-shrink:0;user-select:none
+}
+.sb-nav{
+  padding:8px;display:flex;flex-direction:column;gap:2px;
+  flex:1;overflow-y:auto;overflow-x:hidden
+}
+/* Override horizontal .tab-btn for sidebar */
+.sidebar .tab-btn{
+  display:flex!important;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:8px;
+  width:100%;text-align:right;
+  font-size:12px;font-weight:500;
+  border:none!important;border-bottom:none!important;
+  margin-bottom:0!important;background:transparent;
+  color:var(--text-secondary);cursor:pointer;font-family:inherit;
+  transition:background .15s,color .15s;white-space:nowrap
+}
+.sidebar .tab-btn:hover{background:var(--bg-hover);color:var(--text-primary)}
+.sidebar .tab-btn.active{
+  background:var(--brand-bg)!important;color:var(--brand)!important;
+  font-weight:700!important;border-bottom:none!important
+}
+.sidebar .tab-btn::after,.sidebar .tab-btn:hover::after,.sidebar .tab-btn.active::after{
+  display:none!important
+}
+.sb-icon{font-size:15px;flex-shrink:0;line-height:1;min-width:18px;text-align:center}
+.sb-label{flex:1;overflow:hidden;text-overflow:ellipsis}
+.sb-divider{height:1px;background:var(--border);margin:6px 8px;flex-shrink:0}
+.sb-section-label{
+  font-size:10px;font-weight:700;color:var(--text-muted);
+  padding:4px 12px 2px;letter-spacing:.4px;flex-shrink:0
+}
+/* Hide old horizontal tabs-bar */
+.tabs-bar{display:none!important}
+/* Expert: hide manager section */
+body.is-expert .sb-manager,
+body.is-expert .sb-divider,
+body.is-expert .sb-section-label{display:none!important}
+/* Row action hover — de-emphasize until hover */
+.row-acts{opacity:.25;transition:opacity .15s;white-space:nowrap;display:inline-flex;gap:3px}
+tr:hover .row-acts,.row-acts:focus-within{opacity:1}
+/* Mobile: hide sidebar, restore full width */
+@media(max-width:768px){
+  .sidebar{display:none!important}
+  .content-area{margin-right:0!important}
+}

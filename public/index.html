@@ -44,25 +44,31 @@
   </div><!-- /top-area-right -->
 </div><!-- /top-bar -->
 
-<!-- TABS -->
-<div class="tabs-bar">
-  <button class="tab-btn" id="tab_home" onclick="switchTab('home')" style="color:#6366f1;font-weight:700">🏠 خانه</button>
-  <button class="tab-btn active" id="tab_provinces" onclick="switchTab('provinces')">🗺 استان‌ها</button>
-  <button class="tab-btn" id="tab_weekplan" onclick="switchTab('weekplan')">📋 برنامه هفته</button>
-  <button class="tab-btn" id="tab_calendar" onclick="switchTab('calendar')">📅 تقویم</button>
-  <button class="tab-btn" id="tab_checklist" onclick="switchTab('checklist')">✅ چک‌لیست روزانه</button>
-  <button class="tab-btn" id="tab_activity" onclick="switchTab('activity')">📜 فعالیت‌ها</button>
-  <button class="tab-btn" id="tab_changelog" onclick="switchTab('changelog')" style="display:none;color:#7c3aed;font-weight:700">🗃 لاگ تغییرات</button>
-  <button class="tab-btn" id="tab_tasks" onclick="switchTab('tasks')" style="color:#7c3aed;font-weight:700">📌 وظایف</button>
-  <button class="tab-btn" id="tab_kpi" onclick="switchTab('kpi')" style="color:#f59e0b">📊 KPI</button>
-  <button class="tab-btn" id="tab_manager" onclick="switchTab('manager')" style="color:#8b5cf6">📊 بررسی مدیر</button>
-  <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" style="color:#0ea5e9;font-weight:700"><span id="mtrBadge"></span>💰 مطالبات</button>
-  <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" style="color:#16a34a;font-weight:700">🏷 قیمت‌گذاری</button>
-  <button class="tab-btn" id="tab_proforma" onclick="switchTab('proforma')" style="color:#0284c7;font-weight:700">📄 پیشفاکتور</button>
-  <a href="/wms" class="tab-btn" style="color:#0d9488;font-weight:700;text-decoration:none">🏭 انبار</a>
-</div>
+<!-- SIDEBAR -->
+<nav class="sidebar" id="appSidebar">
+  <div class="sb-logo">🌊 <span>Flow CRM</span></div>
+  <div class="sb-nav">
+    <button class="tab-btn" id="tab_home" onclick="switchTab('home')" title="خانه"><span class="sb-icon">🏠</span><span class="sb-label">خانه</span></button>
+    <button class="tab-btn active" id="tab_provinces" onclick="switchTab('provinces')" title="استان‌ها"><span class="sb-icon">🗺</span><span class="sb-label">استان‌ها</span></button>
+    <button class="tab-btn" id="tab_weekplan" onclick="switchTab('weekplan')" title="برنامه هفته"><span class="sb-icon">📋</span><span class="sb-label">برنامه هفته</span></button>
+    <button class="tab-btn" id="tab_calendar" onclick="switchTab('calendar')" title="تقویم"><span class="sb-icon">📅</span><span class="sb-label">تقویم</span></button>
+    <button class="tab-btn" id="tab_checklist" onclick="switchTab('checklist')" title="چک‌لیست روزانه"><span class="sb-icon">✅</span><span class="sb-label">چک‌لیست</span></button>
+    <button class="tab-btn" id="tab_activity" onclick="switchTab('activity')" title="فعالیت‌ها"><span class="sb-icon">📜</span><span class="sb-label">فعالیت‌ها</span></button>
+    <button class="tab-btn" id="tab_tasks" onclick="switchTab('tasks')" title="وظایف"><span class="sb-icon">📌</span><span class="sb-label">وظایف</span></button>
+    <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" title="مطالبات"><span class="sb-icon">💰</span><span class="sb-label"><span id="mtrBadge"></span>مطالبات</span></button>
+    <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" title="قیمت‌گذاری"><span class="sb-icon">🏷</span><span class="sb-label">قیمت‌گذاری</span></button>
+    <button class="tab-btn" id="tab_proforma" onclick="switchTab('proforma')" title="پیشفاکتور"><span class="sb-icon">📄</span><span class="sb-label">پیشفاکتور</span></button>
+    <a href="/wms" class="tab-btn" title="انبار WMS" style="text-decoration:none"><span class="sb-icon">🏭</span><span class="sb-label">انبار</span></a>
+    <div class="sb-divider"></div>
+    <div class="sb-section-label">مدیریت</div>
+    <button class="tab-btn sb-manager" id="tab_kpi" onclick="switchTab('kpi')" title="KPI"><span class="sb-icon">📊</span><span class="sb-label">KPI</span></button>
+    <button class="tab-btn sb-manager" id="tab_manager" onclick="switchTab('manager')" title="بررسی مدیر"><span class="sb-icon">🔎</span><span class="sb-label">بررسی مدیر</span></button>
+    <button class="tab-btn sb-manager" id="tab_changelog" onclick="switchTab('changelog')" title="لاگ تغییرات"><span class="sb-icon">🗃</span><span class="sb-label">لاگ تغییرات</span></button>
+  </div>
+</nav>
+<div class="content-area">
 
-<!-- HOME PANEL -->
+<!-- TOP BAR -->
 <div id="homePanel" style="display:none;padding:12px 14px"></div>
 <!-- DASHBOARD -->
 <div id="userDashPanel"></div>
@@ -660,6 +666,7 @@
     <div id="gSearchResults"><div class="gs-empty">برای جستجو تایپ کنید…</div></div>
   </div>
 </div>
+</div><!-- /content-area -->
 <nav class="mobile-nav" id="mobileNav">
   <button class="mob-tab" id="mob_home" onclick="switchTab('home')"><span class="mob-icon">🏠</span>خانه</button>
   <button class="mob-tab" onclick="switchTab('provinces')"><span class="mob-icon">🗺</span>استان‌ها</button>
