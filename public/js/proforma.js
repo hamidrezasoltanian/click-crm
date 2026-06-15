@@ -167,9 +167,22 @@ async function pfAction(id, action, note) {
   }
 }
 
-async function pfReject(id) {
-  var note = prompt('دلیل رد (اختیاری):');
-  if (note === null) return;
+function pfReject(id) {
+  var pf = _pfList.find(function(p){ return p.id === id; });
+  var pfNo = pf ? pf.no : id;
+  openModal('pfRejectModal', '❌ رد پیشفاکتور ' + pfNo,
+    '<div style="margin-bottom:12px;font-size:13px;color:#475569">دلیل رد را بنویسید (اختیاری):</div>' +
+    '<textarea id="pfRejectNote" rows="3" class="form-input" placeholder="توضیحات رد..." style="resize:vertical"></textarea>',
+    '<button onclick="document.getElementById(\'pfRejectModal\').style.display=\'none\'" style="padding:8px 16px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer">انصراف</button>' +
+    '<button onclick="_pfDoReject(\'' + id + '\')" style="padding:8px 18px;background:#dc2626;color:white;border:none;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600">❌ رد پیشفاکتور</button>'
+  );
+}
+
+async function _pfDoReject(id) {
+  var noteEl = document.getElementById('pfRejectNote');
+  var note   = noteEl ? noteEl.value.trim() : '';
+  var modal  = document.getElementById('pfRejectModal');
+  if (modal) modal.style.display = 'none';
   await pfAction(id, 'reject', note);
 }
 
@@ -248,22 +261,21 @@ function _pfShowModal(pf) {
 }
 
 function _pfItemRow(i, item, readOnly) {
-  var prodOpts = _pfProdOptions(item.prodId || '');
   return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0" id="pfRow_' + i + '">' +
     '<div><label style="font-size:10px;color:#64748b;display:block">کالا</label>' +
       (readOnly
         ? '<span style="font-size:13px">' + esc(item.name || '') + '</span>'
-        : '<input class="form-input" style="font-size:13px" value="' + esc(item.name||'') + '" placeholder="نام کالا" onchange="_pfRowChange(' + i + ',\'name\',this.value)">') +
+        : '<input class="form-input pf-item-name" data-idx="' + i + '" style="font-size:13px" value="' + esc(item.name||'') + '" placeholder="نام کالا" oninput="_pfRowChange(' + i + ',\'name\',this.value)">') +
     '</div>' +
     '<div><label style="font-size:10px;color:#64748b;display:block">تعداد</label>' +
       (readOnly
         ? '<span style="font-size:13px">' + fmtNum(item.qty) + '</span>'
-        : '<input type="number" class="form-input" value="' + item.qty + '" min="1" onchange="_pfRowChange(' + i + ',\'qty\',this.value)">') +
+        : '<input type="number" class="form-input pf-item-qty" data-idx="' + i + '" value="' + item.qty + '" min="1" oninput="_pfRowChange(' + i + ',\'qty\',this.value)">') +
     '</div>' +
     '<div><label style="font-size:10px;color:#64748b;display:block">قیمت واحد (ریال)</label>' +
       (readOnly
         ? '<span style="font-size:13px;font-family:monospace">' + fmtNum(item.unitPrice) + '</span>'
-        : '<input type="number" class="form-input" value="' + item.unitPrice + '" min="0" onchange="_pfRowChange(' + i + ',\'unitPrice\',this.value)">') +
+        : '<input type="number" class="form-input pf-item-price" data-idx="' + i + '" value="' + item.unitPrice + '" min="0" oninput="_pfRowChange(' + i + ',\'unitPrice\',this.value)">') +
     '</div>' +
     (readOnly ? '<span></span>' :
       '<button onclick="pfRemoveRow(' + i + ')" style="padding:4px 8px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:5px;cursor:pointer;font-size:14px;margin-top:16px">✕</button>') +
@@ -332,14 +344,26 @@ function pfSearchCenter(q) {
   if (!q || q.length < 2) { drop.style.display = 'none'; return; }
   var qn = fNorm(q);
   var results = [];
-  // Search Tehran centers
+
+  // Tehran centers
   if (typeof CENTERS !== 'undefined') {
     CENTERS.forEach(function(c) {
-      if (results.length < 8 && fNorm(c.name).includes(qn)) {
+      if (results.length < 6 && fNorm(c.name).includes(qn)) {
         results.push({ key: 'center_' + c.id, name: c.name });
       }
     });
   }
+  // Province centers
+  if (typeof _PC_CACHE !== 'undefined') {
+    Object.keys(_PC_CACHE).forEach(function(provId) {
+      (_PC_CACHE[provId] || []).forEach(function(c) {
+        if (results.length < 10 && fNorm(c.name).includes(qn)) {
+          results.push({ key: 'pc_' + c.id, name: c.name });
+        }
+      });
+    });
+  }
+
   if (!results.length) { drop.style.display = 'none'; return; }
   drop.innerHTML = results.map(function(r) {
     return '<div onclick="pfSelectCenter(\'' + esc(r.key) + '\',\'' + esc(r.name) + '\')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'white\'">' + esc(r.name) + '</div>';
@@ -347,8 +371,8 @@ function pfSearchCenter(q) {
   var inp = document.getElementById('pfCenterName');
   if (inp) {
     var rect = inp.getBoundingClientRect();
-    drop.style.top  = (rect.bottom + window.scrollY) + 'px';
-    drop.style.right = (window.innerWidth - rect.right) + 'px';
+    drop.style.top    = (rect.bottom + window.scrollY) + 'px';
+    drop.style.right  = (window.innerWidth - rect.right) + 'px';
     drop.style.position = 'fixed';
   }
   drop.style.display = 'block';
@@ -372,12 +396,15 @@ async function pfSave() {
   var note    = document.getElementById('pfNote')  ? document.getElementById('pfNote').value.trim()  : '';
   var valid   = Number(document.getElementById('pfValid') ? document.getElementById('pfValid').value : 30);
 
-  // Sync items from DOM inputs
+  // Sync any un-fired input values from DOM before saving
   _pfItems.forEach(function(item, i) {
-    var nameEl  = document.querySelector('#pfRow_' + i + ' input:nth-of-type(1)');
-    var qtyEl   = document.querySelector('#pfRow_' + i + ' input[type=number]:nth-of-type(1)');
-    var priceEl = document.querySelector('#pfRow_' + i + ' input[type=number]:nth-of-type(2)');
-    // simpler: rely on _pfRowChange which already synced on change
+    var nameEl  = document.querySelector('.pf-item-name[data-idx="' + i + '"]');
+    var qtyEl   = document.querySelector('.pf-item-qty[data-idx="' + i + '"]');
+    var priceEl = document.querySelector('.pf-item-price[data-idx="' + i + '"]');
+    if (nameEl)  item.name      = nameEl.value.trim();
+    if (qtyEl)   item.qty       = Number(qtyEl.value)   || 0;
+    if (priceEl) item.unitPrice = Number(priceEl.value) || 0;
+    item.lineTotal = item.qty * item.unitPrice;
   });
 
   var items = _pfItems.filter(function(i){ return i.name && i.qty > 0; });
@@ -472,6 +499,9 @@ function _pfPrintHTML(pf) {
         '<tr style="background:#f0f4f8"><td colspan="5" style="padding:8px;border:2px solid #1a2744;font-weight:800;text-align:right;font-size:13px">جمع کل (ریال)</td><td style="padding:8px;border:2px solid #1a2744;font-family:monospace;font-weight:800;font-size:13px;text-align:left">' + fmtNum(total) + '</td></tr>' +
       '</tfoot>' +
     '</table>' +
+    '<div style="border:1px solid #1a2744;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:12px;background:#f0f4ff">' +
+      '<strong>مبلغ به حروف:</strong> ' + _numToWords(total) + ' ریال' +
+    '</div>' +
     (pf.note ? '<div style="border:1px dashed #cbd5e1;border-radius:6px;padding:10px;margin-bottom:16px;font-size:12px"><strong>توضیحات:</strong> ' + esc(pf.note) + '</div>' : '') +
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:32px">' +
       '<div style="text-align:center"><div style="font-size:12px;font-weight:800;margin-bottom:4px">مهر و امضای فروشنده</div><div style="height:50px"></div><div style="border-top:1px solid #000;padding-top:6px;font-size:10px;color:#666">آتنا زیست درمان</div></div>' +
@@ -506,6 +536,34 @@ function _pfPrintZone() {
 // ── Number formatter (uses Persian digits) ────────────────────────────────
 function fmtNum(n) {
   return Number(n || 0).toLocaleString('fa-IR');
+}
+
+// ── Number to Persian words ───────────────────────────────────────────────
+function _numToWords(n) {
+  n = Math.round(Number(n) || 0);
+  if (n === 0) return 'صفر';
+  var ones  = ['','یک','دو','سه','چهار','پنج','شش','هفت','هشت','نه','ده','یازده','دوازده','سیزده','چهارده','پانزده','شانزده','هفده','هجده','نوزده'];
+  var tens  = ['','','بیست','سی','چهل','پنجاه','شصت','هفتاد','هشتاد','نود'];
+  var hund  = ['','یکصد','دویست','سیصد','چهارصد','پانصد','ششصد','هفتصد','هشتصد','نهصد'];
+  var scale = ['','هزار','میلیون','میلیارد'];
+  function chunk(num) {
+    var parts = [];
+    if (num >= 100) { parts.push(hund[Math.floor(num/100)]); num %= 100; }
+    if (num >= 20)  { parts.push(tens[Math.floor(num/10)]); num %= 10; }
+    if (num > 0)    parts.push(ones[num]);
+    return parts.join(' و ');
+  }
+  var negative = n < 0;
+  n = Math.abs(n);
+  var segments = [];
+  var scaleIdx = 0;
+  while (n > 0) {
+    var seg = n % 1000;
+    if (seg) segments.unshift(chunk(seg) + (scale[scaleIdx] ? ' ' + scale[scaleIdx] : ''));
+    n = Math.floor(n / 1000);
+    scaleIdx++;
+  }
+  return (negative ? 'منفی ' : '') + segments.join(' و ');
 }
 
 // Print CSS (injected once) ───────────────────────────────────────────────

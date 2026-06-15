@@ -8,16 +8,14 @@
 // ════════════════════════════════════════════════════════════════
 
 const https  = require('https');
-const crypto = require('crypto');
 const Jimp   = require('jimp');
 const jsQR   = require('jsqr');
 const bcrypt = require('bcryptjs');
 const { query } = require('../db');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const API   = 'https://api.telegram.org/bot' + TOKEN;
 
-// ── In-memory sessions: chatId → { username, role, state, pendingUser } ──
+// ── In-memory sessions: chatId → { username, name, role, state, pendingUser, pfId } ──
 const sessions = {};
 
 // ── Conversation states ───────────────────────────────────────────────────
@@ -25,7 +23,7 @@ const ST = {
   IDLE:           'idle',
   AWAIT_USERNAME: 'await_username',
   AWAIT_PASSWORD: 'await_password',
-  AWAIT_REJECT:   'await_reject',  // pendingPfId set
+  AWAIT_REJECT:   'await_reject',
 };
 
 // ── Telegram API helpers ──────────────────────────────────────────────────
@@ -76,26 +74,7 @@ function downloadFile(fileId) {
   });
 }
 
-// ── Data helpers ──────────────────────────────────────────────────────────
-async function loadProformas() {
-  const r = await query(`SELECT value FROM app_data WHERE key = 'proformas'`);
-  return r.rows.length ? r.rows[0].value : [];
-}
-
-async function saveProformas(list, username) {
-  await query(
-    `INSERT INTO app_data (key, value, updated_at, updated_by)
-     VALUES ('proformas', $1, NOW(), $2)
-     ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=NOW(), updated_by=$2`,
-    [JSON.stringify(list), username]
-  );
-}
-
-async function loadWMS() {
-  const r = await query(`SELECT value FROM app_data WHERE key = 'wms'`);
-  return r.rows.length ? r.rows[0].value : null;
-}
-
+// ── Session persistence (still in app_data blob — lightweight) ────────────
 async function loadBotSessions() {
   const r = await query(`SELECT value FROM app_data WHERE key = 'bot_sessions'`);
   return r.rows.length ? r.rows[0].value : {};
@@ -125,7 +104,7 @@ async function verifyCRM(username, password) {
 }
 
 // ── Persian number formatter ──────────────────────────────────────────────
-function fmtN(n) { return Number(n||0).toLocaleString('fa-IR'); }
+function fmtN(n) { return Number(n || 0).toLocaleString('fa-IR'); }
 
 // ── Status labels ─────────────────────────────────────────────────────────
 const PF_LABELS = { draft:'پیش‌نویس', sent:'ارسال شده', approved:'✅ تأیید', rejected:'❌ رد', cancelled:'لغو' };
@@ -203,7 +182,6 @@ async function handleUpdate(upd) {
     }
 
     if (sess.state === ST.AWAIT_REJECT) {
-      // Manager typed rejection note
       const { pfId } = sess;
       delete sess.pfId;
       sess.state = ST.IDLE;
@@ -248,7 +226,7 @@ async function handleUpdate(upd) {
     }
 
     if (text === '📦 موجودی انبار' || text === '/inventory') {
-      await handleInventory(chatId, sess);
+      await handleInventory(chatId);
       return;
     }
 
@@ -257,7 +235,6 @@ async function handleUpdate(upd) {
       return;
     }
 
-    // Default
     await sendMsg(chatId, 'از منو زیر انتخاب کنید:', { reply_markup: MENU_KB });
 
   } catch(e) {
@@ -275,17 +252,27 @@ async function persistSession(chatId, remove) {
   } catch(e) {}
 }
 
-// ── Proformas handler ─────────────────────────────────────────────────────
+// ── Proformas handler — reads from SQL ────────────────────────────────────
 async function handleProformas(chatId, sess) {
   const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
-  const list = await loadProformas();
 
-  // Manager sees all 'sent' proformas; expert sees own
-  const visible = isManager
-    ? list.filter(function(p){ return p.status === 'sent'; })
-    : list.filter(function(p){ return p.createdBy === sess.username && ['draft','sent','approved','rejected'].includes(p.status); });
+  let rows;
+  if (isManager) {
+    const r = await query(
+      `SELECT * FROM proformas WHERE status = 'sent' ORDER BY sent_at DESC LIMIT 10`
+    );
+    rows = r.rows;
+  } else {
+    const r = await query(
+      `SELECT * FROM proformas WHERE created_by = $1
+       AND status IN ('draft','sent','approved','rejected')
+       ORDER BY created_at DESC LIMIT 10`,
+      [sess.username]
+    );
+    rows = r.rows;
+  }
 
-  if (!visible.length) {
+  if (!rows.length) {
     const msg = isManager
       ? '✅ هیچ پیشفاکتور در انتظار تأییدی وجود ندارد.'
       : '📄 پیشفاکتوری ثبت نشده است.';
@@ -293,32 +280,29 @@ async function handleProformas(chatId, sess) {
     return;
   }
 
-  for (const pf of visible.slice(0, 10)) {
-    const itemList = (pf.items || []).slice(0, 3).map(function(i){
-      return '  • ' + i.name + ' × ' + i.qty;
-    }).join('\n');
-    const moreItems = (pf.items || []).length > 3 ? '\n  و ' + ((pf.items||[]).length - 3) + ' ردیف دیگر...' : '';
+  for (const pf of rows) {
+    const items    = pf.items || [];
+    const itemList = items.slice(0, 3).map(function(i){ return '  • ' + i.name + ' × ' + i.qty; }).join('\n');
+    const moreItems = items.length > 3 ? '\n  و ' + (items.length - 3) + ' ردیف دیگر...' : '';
 
     let text =
       '📄 <b>' + pf.no + '</b>\n' +
-      '👤 مشتری: ' + (pf.centerName || '—') + '\n' +
-      '📅 تاریخ: ' + (pf.jalaliDate || '—') + '\n' +
+      '👤 مشتری: ' + (pf.center_name || '—') + '\n' +
+      '📅 تاریخ: ' + (pf.jalali_date || '—') + '\n' +
       '💰 مبلغ: <b>' + fmtN(pf.total) + ' ﷼</b>\n' +
       '🔖 وضعیت: ' + (PF_LABELS[pf.status] || pf.status) + '\n' +
       '📦 کالاها:\n' + itemList + moreItems;
 
     if (pf.note) text += '\n📝 ' + pf.note;
+    if (pf.manager_note) text += '\n👑 یادداشت مدیر: ' + pf.manager_note;
 
-    // Inline keyboard for manager
-    let inlineKb = undefined;
+    let inlineKb;
     if (isManager && pf.status === 'sent') {
       inlineKb = { inline_keyboard: [[
         { text: '✅ تأیید', callback_data: 'pf_approve:' + pf.id },
         { text: '❌ رد',    callback_data: 'pf_reject:'  + pf.id },
       ]] };
-    }
-    // Expert can send draft
-    if (!isManager && pf.status === 'draft' && pf.createdBy === sess.username) {
+    } else if (!isManager && pf.status === 'draft' && pf.created_by === sess.username) {
       inlineKb = { inline_keyboard: [[
         { text: '📤 ارسال برای تأیید', callback_data: 'pf_send:' + pf.id },
       ]] };
@@ -326,45 +310,40 @@ async function handleProformas(chatId, sess) {
 
     await sendMsg(chatId, text, inlineKb ? { reply_markup: inlineKb } : undefined);
   }
-
-  if (visible.length > 10) {
-    await sendMsg(chatId, '⚠️ ' + visible.length + ' پیشفاکتور موجود است. ۱۰ تای اول نمایش داده شد.', { reply_markup: MENU_KB });
-  }
 }
 
-// ── Inventory handler ─────────────────────────────────────────────────────
-async function handleInventory(chatId, sess) {
-  const wms = await loadWMS();
-  if (!wms || !wms.products || !wms.lots) {
-    await sendMsg(chatId, '⚠️ اطلاعات انبار بارگذاری نشده است.\nابتدا از طریق پنل وب، WMS را راه‌اندازی کنید.', { reply_markup: MENU_KB });
+// ── Inventory handler — SQL aggregate ────────────────────────────────────
+async function handleInventory(chatId) {
+  const r = await query(`
+    SELECT
+      p.id,
+      p.name,
+      p.full_name,
+      p.unit,
+      p.reorder_point,
+      COALESCE(SUM(l.qty), 0)::int         AS total_qty,
+      MIN(l.expiry)                          AS nearest_expiry,
+      BOOL_OR(l.expiry < NOW() + INTERVAL '90 days' AND l.expiry IS NOT NULL) AS expiry_soon
+    FROM wms_products p
+    LEFT JOIN wms_lots l ON l.product_id = p.id AND l.qty > 0
+    WHERE p.active = true
+    GROUP BY p.id, p.name, p.full_name, p.unit, p.reorder_point
+    ORDER BY p.name
+  `);
+
+  if (!r.rows.length) {
+    await sendMsg(chatId, '⚠️ هیچ کالایی در انبار ثبت نشده است.\nابتدا از طریق پنل وب، WMS را راه‌اندازی کنید.', { reply_markup: MENU_KB });
     return;
   }
 
-  // Aggregate stock per product
-  const stockMap = {};
-  wms.lots.forEach(function(lot) {
-    if (!lot.productId) return;
-    if (!stockMap[lot.productId]) stockMap[lot.productId] = { qty: 0, expirySoon: false };
-    stockMap[lot.productId].qty += (lot.qty || 0);
-    // Check if any lot expires within 90 days
-    if (lot.expiry) {
-      const daysLeft = Math.ceil((new Date(lot.expiry) - new Date()) / 86400000);
-      if (daysLeft < 90) stockMap[lot.productId].expirySoon = true;
-    }
+  const lines = r.rows.map(function(p) {
+    const qty     = p.total_qty;
+    const reorder = p.reorder_point || 10;
+    let icon = qty === 0 ? '🔴' : qty <= reorder ? '🟡' : '🟢';
+    const expWarn = p.expiry_soon ? ' ⚠️انقضا' : '';
+    const label   = p.full_name || p.name;
+    return icon + ' <b>' + label + '</b>: ' + fmtN(qty) + ' ' + (p.unit || 'عدد') + expWarn;
   });
-
-  const lines = wms.products
-    .filter(function(p){ return p.active; })
-    .map(function(p) {
-      const s = stockMap[p.id] || { qty: 0 };
-      const reorder = p.reorderPoint || 10;
-      let icon = '🟢';
-      if (s.qty === 0)        icon = '🔴';
-      else if (s.qty <= 15)   icon = '🔴';
-      else if (s.qty <= reorder) icon = '🟡';
-      const expWarn = s.expirySoon ? ' ⚠️انقضا' : '';
-      return icon + ' <b>' + (p.name || p.fullName) + '</b>: ' + fmtN(s.qty) + ' ' + (p.unit || 'عدد') + expWarn;
-    });
 
   const text = '📦 <b>موجودی انبار</b>\n\n' + lines.join('\n') +
     '\n\n🟢 کافی  🟡 زیر حد سفارش  🔴 اتمام/بحرانی';
@@ -390,99 +369,101 @@ async function handleCallback(cb) {
 
   if (data.startsWith('pf_approve:')) {
     if (!isManager) { await sendMsg(chatId, '❌ فقط مدیر می‌تواند تأیید کند.'); return; }
-    const pfId = data.split(':')[1];
-    await doApprovePf(chatId, msgId, pfId, sess);
+    await doApprovePf(chatId, msgId, data.split(':')[1], sess);
     return;
   }
 
   if (data.startsWith('pf_reject:')) {
     if (!isManager) { await sendMsg(chatId, '❌ فقط مدیر می‌تواند رد کند.'); return; }
-    const pfId = data.split(':')[1];
     sess.state = ST.AWAIT_REJECT;
-    sess.pfId  = pfId;
+    sess.pfId  = data.split(':')[1];
     await sendMsg(chatId, '✏️ دلیل رد پیشفاکتور را بنویسید (یا <code>-</code> برای بدون دلیل):');
     return;
   }
 
   if (data.startsWith('pf_send:')) {
-    const pfId = data.split(':')[1];
-    await doSendPf(chatId, msgId, pfId, sess);
+    await doSendPf(chatId, msgId, data.split(':')[1], sess);
     return;
   }
 }
 
-// ── Proforma actions ──────────────────────────────────────────────────────
+// ── Proforma actions — all SQL ────────────────────────────────────────────
 async function doApprovePf(chatId, msgId, pfId, sess) {
-  const list = await loadProformas();
-  const idx  = list.findIndex(function(p){ return p.id === pfId; });
-  if (idx === -1) { await sendMsg(chatId, '❌ پیشفاکتور یافت نشد.'); return; }
-  const pf = list[idx];
-  if (pf.status !== 'sent') { await sendMsg(chatId, '⚠️ این پیشفاکتور قابل تأیید نیست (وضعیت: ' + pf.status + ')'); return; }
-  pf.status      = 'approved';
-  pf.respondedAt = new Date().toISOString();
-  pf.respondedBy = sess.username;
-  list[idx] = pf;
-  await saveProformas(list, sess.username);
-
+  const r = await query(
+    `UPDATE proformas
+     SET status='approved', responded_at=NOW(), responded_by=$2, updated_at=NOW()
+     WHERE id=$1 AND status='sent'
+     RETURNING *`,
+    [pfId, sess.username]
+  );
+  if (!r.rows.length) {
+    await sendMsg(chatId, '⚠️ این پیشفاکتور قابل تأیید نیست یا یافت نشد.');
+    return;
+  }
+  const pf = r.rows[0];
   await editMsg(chatId, msgId,
     '✅ <b>پیشفاکتور ' + pf.no + ' تأیید شد.</b>\n' +
-    '👤 مشتری: ' + (pf.centerName || '—') + '\n' +
+    '👤 مشتری: ' + (pf.center_name || '—') + '\n' +
     '💰 مبلغ: ' + fmtN(pf.total) + ' ﷼\n' +
     '👑 تأیید توسط: ' + sess.name
   );
-
-  // Notify creator
-  await notifyCreator(pf, '✅ پیشفاکتور ' + pf.no + ' توسط ' + sess.name + ' تأیید شد.');
+  await notifyCreator(pf.created_by, '✅ پیشفاکتور ' + pf.no + ' توسط ' + sess.name + ' تأیید شد.');
 }
 
 async function doRejectPf(chatId, pfId, note, sess) {
-  const list = await loadProformas();
-  const idx  = list.findIndex(function(p){ return p.id === pfId; });
-  if (idx === -1) { await sendMsg(chatId, '❌ پیشفاکتور یافت نشد.'); return; }
-  const pf = list[idx];
-  if (pf.status !== 'sent') { await sendMsg(chatId, '⚠️ این پیشفاکتور قابل رد نیست.'); return; }
-  pf.status      = 'rejected';
-  pf.respondedAt = new Date().toISOString();
-  pf.respondedBy = sess.username;
-  pf.managerNote = (note === '-' ? '' : note);
-  list[idx] = pf;
-  await saveProformas(list, sess.username);
-
+  const managerNote = (note === '-' ? '' : note);
+  const r = await query(
+    `UPDATE proformas
+     SET status='rejected', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW()
+     WHERE id=$1 AND status='sent'
+     RETURNING *`,
+    [pfId, sess.username, managerNote]
+  );
+  if (!r.rows.length) {
+    await sendMsg(chatId, '⚠️ این پیشفاکتور قابل رد نیست یا یافت نشد.', { reply_markup: MENU_KB });
+    return;
+  }
+  const pf = r.rows[0];
   await sendMsg(chatId,
     '❌ <b>پیشفاکتور ' + pf.no + ' رد شد.</b>\n' +
-    (pf.managerNote ? '📝 دلیل: ' + pf.managerNote : ''),
+    (managerNote ? '📝 دلیل: ' + managerNote : ''),
     { reply_markup: MENU_KB }
   );
-
-  await notifyCreator(pf, '❌ پیشفاکتور ' + pf.no + ' رد شد.' + (pf.managerNote ? '\nدلیل: ' + pf.managerNote : ''));
+  await notifyCreator(pf.created_by,
+    '❌ پیشفاکتور ' + pf.no + ' رد شد.' + (managerNote ? '\nدلیل: ' + managerNote : '')
+  );
 }
 
 async function doSendPf(chatId, msgId, pfId, sess) {
-  const list = await loadProformas();
-  const idx  = list.findIndex(function(p){ return p.id === pfId; });
-  if (idx === -1) { await sendMsg(chatId, '❌ پیشفاکتور یافت نشد.'); return; }
-  const pf = list[idx];
-  if (pf.status !== 'draft') { await sendMsg(chatId, '⚠️ این پیشفاکتور قبلاً ارسال شده است.'); return; }
-  pf.status = 'sent';
-  pf.sentAt = new Date().toISOString();
-  list[idx] = pf;
-  await saveProformas(list, sess.username);
-
+  const r = await query(
+    `UPDATE proformas
+     SET status='sent', sent_at=NOW(), updated_at=NOW()
+     WHERE id=$1 AND status='draft' AND created_by=$2
+     RETURNING *`,
+    [pfId, sess.username]
+  );
+  if (!r.rows.length) {
+    await sendMsg(chatId, '⚠️ این پیشفاکتور قبلاً ارسال شده یا یافت نشد.');
+    return;
+  }
+  const pf = r.rows[0];
   await editMsg(chatId, msgId,
     '📤 <b>پیشفاکتور ' + pf.no + ' برای تأیید ارسال شد.</b>\n' +
-    '👤 مشتری: ' + (pf.centerName || '—') + '\n' +
+    '👤 مشتری: ' + (pf.center_name || '—') + '\n' +
     '💰 مبلغ: ' + fmtN(pf.total) + ' ﷼'
   );
-
-  // Notify managers
-  await notifyManagers('📄 پیشفاکتور ' + pf.no + ' از ' + sess.name + ' در انتظار تأیید است.\n💰 مبلغ: ' + fmtN(pf.total) + ' ﷼\n👤 مشتری: ' + (pf.centerName||'—'));
+  await notifyManagers(
+    '📄 پیشفاکتور ' + pf.no + ' از ' + sess.name + ' در انتظار تأیید است.\n' +
+    '💰 مبلغ: ' + fmtN(pf.total) + ' ﷼\n' +
+    '👤 مشتری: ' + (pf.center_name || '—')
+  );
 }
 
 // ── Notify linked Telegram users ──────────────────────────────────────────
-async function notifyCreator(pf, text) {
+async function notifyCreator(createdBy, text) {
   const stored = await loadBotSessions();
   for (const [chatId, s] of Object.entries(stored)) {
-    if (s.username === pf.createdBy && s.state === ST.IDLE) {
+    if (s.username === createdBy && s.state === ST.IDLE) {
       await sendMsg(parseInt(chatId), text).catch(function(){});
     }
   }
@@ -497,80 +478,87 @@ async function notifyManagers(text) {
   }
 }
 
-// ── QR Photo handler ──────────────────────────────────────────────────────
+// ── QR Photo handler — SQL lookup ─────────────────────────────────────────
 async function handlePhoto(chatId, msg) {
   await sendMsg(chatId, '🔍 در حال پردازش تصویر...');
 
   try {
-    // Pick highest-resolution photo
     const photos = msg.photo;
     const best   = photos[photos.length - 1];
     const buf    = await downloadFile(best.file_id);
 
     const image = await Jimp.read(buf);
     const { data, width, height } = image.bitmap;
-    // jsQR needs Uint8ClampedArray RGBA
     const rgba = new Uint8ClampedArray(data);
     const code = jsQR(rgba, width, height);
 
     if (!code || !code.data) {
-      await sendMsg(chatId, '❌ QR کد در تصویر یافت نشد.\nلطفاً تصویر واضح‌تری بفرستید یا کد را دستی وارد کنید.', { reply_markup: MENU_KB });
+      await sendMsg(chatId, '❌ QR کد در تصویر یافت نشد.\nلطفاً تصویر واضح‌تری بفرستید.', { reply_markup: MENU_KB });
       return;
     }
 
     const qrData = code.data.trim();
     await sendMsg(chatId, '📦 کد اسکن شد: <code>' + qrData + '</code>\n\nدر حال جستجو در انبار...');
 
-    // Lookup in WMS
-    const wms = await loadWMS();
-    let result = null;
+    // Try lot lookup first (by lot_no or id)
+    const lotRes = await query(`
+      SELECT l.*, p.name AS prod_name, p.full_name AS prod_full_name, p.unit,
+             w.name AS wh_name
+      FROM wms_lots l
+      JOIN wms_products p ON p.id = l.product_id
+      LEFT JOIN wms_warehouses w ON w.id = l.warehouse_id
+      WHERE l.lot_no = $1 OR l.id = $1
+      LIMIT 1
+    `, [qrData]);
 
-    if (wms) {
-      // Try lots first
-      const lotMatch = (wms.lots || []).find(function(l){
-        return l.lotNo === qrData || l.id === qrData;
-      });
-      if (lotMatch) {
-        const prod = (wms.products || []).find(function(p){ return p.id === lotMatch.productId; });
-        const wh   = (wms.warehouses || []).find(function(w){ return w.id === lotMatch.warehouseId; });
-        const daysLeft = lotMatch.expiry ? Math.ceil((new Date(lotMatch.expiry) - new Date()) / 86400000) : null;
-        result =
-          '📦 <b>اطلاعات لات</b>\n\n' +
-          '🏷 لات: <code>' + lotMatch.lotNo + '</code>\n' +
-          '💊 کالا: ' + (prod ? (prod.fullName || prod.name) : '?') + '\n' +
-          '🏭 انبار: ' + (wh ? wh.name : '?') + '\n' +
-          '📊 موجودی این لات: ' + fmtN(lotMatch.qty) + ' ' + (prod ? prod.unit : 'عدد') + '\n' +
-          (lotMatch.expiry ? '📅 انقضا: ' + lotMatch.expiry + (daysLeft !== null ? ' (' + daysLeft + ' روز)' : '') + (daysLeft < 30 ? ' ⚠️' : '') + '\n' : '') +
-          (lotMatch.ttacNo ? '📋 TTAC: ' + lotMatch.ttacNo : '');
-      } else {
-        // Try product
-        const prodMatch = (wms.products || []).find(function(p){
-          return p.id === qrData || p.catalogCode === qrData || p.ircCode === qrData;
-        });
-        if (prodMatch) {
-          // Sum all lots for this product
-          const totalQty = (wms.lots || [])
-            .filter(function(l){ return l.productId === prodMatch.id; })
-            .reduce(function(s, l){ return s + (l.qty || 0); }, 0);
-          result =
-            '💊 <b>اطلاعات کالا</b>\n\n' +
-            '🏷 نام: ' + (prodMatch.fullName || prodMatch.name) + '\n' +
-            '🔖 کد کاتالوگ: ' + (prodMatch.catalogCode || '—') + '\n' +
-            '📋 IRC: ' + (prodMatch.ircCode || '—') + '\n' +
-            '📦 موجودی کل: ' + fmtN(totalQty) + ' ' + prodMatch.unit + '\n' +
-            '🔄 حد سفارش مجدد: ' + (prodMatch.reorderPoint || 10) + ' ' + prodMatch.unit;
-        }
-      }
-    }
-
-    if (result) {
-      await sendMsg(chatId, result, { reply_markup: MENU_KB });
-    } else {
+    if (lotRes.rows.length) {
+      const l = lotRes.rows[0];
+      const daysLeft = l.expiry ? Math.ceil((new Date(l.expiry) - new Date()) / 86400000) : null;
+      const expLine  = l.expiry
+        ? '\n📅 انقضا: ' + l.expiry.toISOString().slice(0, 10) +
+          (daysLeft !== null ? ' (' + daysLeft + ' روز)' : '') +
+          (daysLeft !== null && daysLeft < 30 ? ' ⚠️' : '')
+        : '';
+      const ttac = l.ttac_no ? '\n📋 TTAC: ' + l.ttac_no : '';
       await sendMsg(chatId,
-        '🔍 کد <code>' + qrData + '</code> در انبار یافت نشد.\n\nممکن است این کالا هنوز وارد سیستم WMS نشده باشد.',
+        '📦 <b>اطلاعات لات</b>\n\n' +
+        '🏷 لات: <code>' + l.lot_no + '</code>\n' +
+        '💊 کالا: ' + (l.prod_full_name || l.prod_name) + '\n' +
+        '🏭 انبار: ' + (l.wh_name || '—') + '\n' +
+        '📊 موجودی این لات: ' + fmtN(l.qty) + ' ' + l.unit + expLine + ttac,
         { reply_markup: MENU_KB }
       );
+      return;
     }
+
+    // Try product lookup (by catalog_code or irc_code)
+    const prodRes = await query(`
+      SELECT p.*, COALESCE(SUM(l.qty), 0)::int AS total_qty
+      FROM wms_products p
+      LEFT JOIN wms_lots l ON l.product_id = p.id
+      WHERE p.id = $1 OR p.catalog_code = $1 OR p.irc_code = $1
+      GROUP BY p.id
+      LIMIT 1
+    `, [qrData]);
+
+    if (prodRes.rows.length) {
+      const p = prodRes.rows[0];
+      await sendMsg(chatId,
+        '💊 <b>اطلاعات کالا</b>\n\n' +
+        '🏷 نام: ' + (p.full_name || p.name) + '\n' +
+        '🔖 کد کاتالوگ: ' + (p.catalog_code || '—') + '\n' +
+        '📋 IRC: ' + (p.irc_code || '—') + '\n' +
+        '📦 موجودی کل: ' + fmtN(p.total_qty) + ' ' + p.unit + '\n' +
+        '🔄 حد سفارش مجدد: ' + (p.reorder_point || 10) + ' ' + p.unit,
+        { reply_markup: MENU_KB }
+      );
+      return;
+    }
+
+    await sendMsg(chatId,
+      '🔍 کد <code>' + qrData + '</code> در انبار یافت نشد.\n\nممکن است این کالا هنوز وارد سیستم WMS نشده باشد.',
+      { reply_markup: MENU_KB }
+    );
   } catch(e) {
     console.error('[bot] QR scan error:', e.message);
     await sendMsg(chatId, '❌ خطا در پردازش تصویر: ' + e.message, { reply_markup: MENU_KB });
