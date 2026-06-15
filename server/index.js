@@ -94,6 +94,11 @@ async function start() {
     app.listen(PORT, function () {
       console.log('[Atena CRM] Server running on http://localhost:' + PORT);
     });
+    // Start Telegram bot (non-blocking)
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      const bot = require('./bot/telegram');
+      bot.poll().catch(function(e){ console.error('[bot] fatal:', e.message); });
+    }
   } catch (e) {
     console.error('[Atena CRM] Startup failed:', e.message);
     process.exit(1);
