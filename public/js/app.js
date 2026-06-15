@@ -1072,8 +1072,10 @@ function switchTab(tab){
   var kp=document.getElementById('kpiPanel');if(kp)kp.style.display=(tab==='kpi')?'':'none';
   var mtrp=document.getElementById('mtrPanel');if(mtrp)mtrp.style.display=(tab==='mtr')?'':'none';
   var pricingP=document.getElementById('pricingPanel');if(pricingP)pricingP.style.display=(tab==='pricing')?'':'none';
+  var pfP=document.getElementById('proformaPanel');if(pfP)pfP.style.display=(tab==='proforma')?'':'none';
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
   if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
+  if(tab==='proforma'&&typeof renderProformaPanel==='function')renderProformaPanel();
   // update mobile nav
   (function(){var tabs=['home','provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
   if(tab==='provinces'){

@@ -58,6 +58,7 @@
   <button class="tab-btn" id="tab_manager" onclick="switchTab('manager')" style="color:#8b5cf6">📊 بررسی مدیر</button>
   <button class="tab-btn" id="tab_mtr" onclick="switchTab('mtr')" style="color:#0ea5e9;font-weight:700"><span id="mtrBadge"></span>💰 مطالبات</button>
   <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" style="color:#16a34a;font-weight:700">🏷 قیمت‌گذاری</button>
+  <button class="tab-btn" id="tab_proforma" onclick="switchTab('proforma')" style="color:#0284c7;font-weight:700">📄 پیشفاکتور</button>
   <a href="/wms" class="tab-btn" style="color:#0d9488;font-weight:700;text-decoration:none">🏭 انبار</a>
 </div>
 
@@ -274,6 +275,7 @@
 <!-- DATA -->
 <!-- bundled from 20 modules — rebuild with: python3 scripts/build-bundle.py -->
 <script src="/js/app.bundle.js"></script>
+<script src="/js/proforma.js"></script>
 
 <!-- JS -->
 
@@ -644,6 +646,9 @@
   </div><!-- /pl-mgmt-panel -->
 </div><!-- /pl-mgmt -->
 </div><!-- /pricingPanel -->
+
+<!-- PROFORMA PANEL -->
+<div id="proformaPanel" style="display:none;padding:16px"></div>
 
 <div id="centerContactPopup" class="contact-popup">
   <div id="ccp-name" class="contact-popup-name"></div>

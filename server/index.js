@@ -53,6 +53,7 @@ app.use('/api/files', require('./routes/files'));
 app.use('/api/discovery', require('./routes/discovery'));
 app.use('/api/missions', require('./routes/missions'));
 app.use('/api/wms', require('./routes/wms'));
+app.use('/api/proforma', require('./routes/proforma'));
 
 // Health check
 app.get('/api/health', function (req, res) {
