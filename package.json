@@ -6,8 +6,11 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "build": "vite build",
+    "build:watch": "vite build --watch",
+    "vue:dev": "vite",
     "setup": "node server/setup.js",
-    "migrate": "node server/migrate.js",
+    "migrate": "node scripts/migrate_blob_to_sql.js",
     "test": "node tests/behavioral.test.js"
   },
   "dependencies": {

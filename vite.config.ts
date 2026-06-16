@@ -17,6 +17,11 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/main.ts'),
       },
+      output: {
+        entryFileNames: 'assets/main.js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
     },
   },
   server: {
