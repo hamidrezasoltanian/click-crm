@@ -142,8 +142,16 @@ async function handleUpdate(upd) {
     // Restore session from DB on first contact
     if (!sessions[chatId]) {
       const stored = await loadBotSessions();
-      if (stored[chatId]) sessions[chatId] = stored[chatId];
-      else sessions[chatId] = { state: ST.AWAIT_USERNAME };
+      if (stored[chatId]) {
+        sessions[chatId] = stored[chatId];
+        // Reset any dangling auth state (e.g. server restart mid-login)
+        if (sessions[chatId].state !== ST.IDLE) {
+          sessions[chatId].state = ST.AWAIT_USERNAME;
+          delete sessions[chatId].pendingUser;
+        }
+      } else {
+        sessions[chatId] = { state: ST.AWAIT_USERNAME };
+      }
     }
 
     const sess = sessions[chatId];
