@@ -9938,7 +9938,10 @@ async function init(){
     if(!_st) currentTab='home';
     // On mobile, always start at home
     if(window.innerWidth<768) currentTab='home';
-    if(!_isManager())document.body.classList.add('is-expert');
+    // Show manager-only sidebar items for managers
+    if(_isManager()){
+      document.querySelectorAll('.sb-manager-wrap').forEach(function(el){el.style.display='';});
+    }
     switchTab(currentTab);
     _initOnboarding();
     var _clbtn=document.getElementById('tab_changelog');if(_clbtn)_clbtn.style.display=_isManager()?'':'none';

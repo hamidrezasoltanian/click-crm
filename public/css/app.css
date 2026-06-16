@@ -552,7 +552,7 @@ select.pot-3{background:#fef3c7;color:#854d0e}select.pot-4{background:#bbf7d0;co
 
 /* ══ PRINT ══ */
 @media print{
-  .top-bar,.tabs-bar,.filters-bar,.today-banner,.view-sw,.no-print{display:none!important}
+  .top-bar,.tabs-bar,.filters-bar,.today-banner,.view-sw,.no-print,.sidebar,.mobile-nav{display:none!important}
   .m-overlay,.toast,.jdp-wrap,.tag-menu{display:none!important}
   table{font-size:9px}.th,td{padding:3px}
   .st-sel,.ed-sel,.fd-inp{display:none!important}
@@ -1266,7 +1266,7 @@ html:not([data-theme="dark"]) body{
   background:linear-gradient(180deg,rgba(255,255,255,.07) 0%,transparent 100%);
   pointer-events:none
 }
-.top-bar{position:relative;overflow:hidden}
+.top-bar{position:sticky;overflow:hidden}
 
 /* ── Tab bar — pill active indicator ───────────────────────── */
 .tab-btn{position:relative;transition:color .2s,background .2s}
@@ -1629,10 +1629,6 @@ button:active:not(:disabled){transform:scale(.97)}
 }
 /* Hide old horizontal tabs-bar */
 .tabs-bar{display:none!important}
-/* Expert: hide manager section */
-body.is-expert .sb-manager,
-body.is-expert .sb-divider,
-body.is-expert .sb-section-label{display:none!important}
 /* Row action hover — de-emphasize until hover */
 .row-acts{opacity:.25;transition:opacity .15s;white-space:nowrap;display:inline-flex;gap:3px}
 tr:hover .row-acts,.row-acts:focus-within{opacity:1}
