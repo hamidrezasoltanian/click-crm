@@ -109,11 +109,20 @@ function fmtN(n) { return Number(n || 0).toLocaleString('fa-IR'); }
 // ── Status labels ─────────────────────────────────────────────────────────
 const PF_LABELS = { draft:'پیش‌نویس', sent:'ارسال شده', approved:'✅ تأیید', rejected:'❌ رد', cancelled:'لغو' };
 
-// ── Main menu keyboard ────────────────────────────────────────────────────
+// ── Main menu keyboards ───────────────────────────────────────────────────
 const MENU_KB = {
   keyboard: [
-    [{ text: '📄 پیشفاکتورها' }, { text: '📦 موجودی انبار' }],
+    [{ text: '☀️ برنامه امروز' }, { text: '📄 پیشفاکتورها' }],
     [{ text: '🔍 اسکن QR کالا' }, { text: '❓ راهنما' }],
+  ],
+  resize_keyboard: true,
+};
+
+const MENU_KB_MANAGER = {
+  keyboard: [
+    [{ text: '☀️ برنامه امروز' }, { text: '📄 پیشفاکتورها' }],
+    [{ text: '📦 موجودی انبار' }, { text: '🔍 اسکن QR کالا' }],
+    [{ text: '❓ راهنما' }],
   ],
   resize_keyboard: true,
 };
@@ -145,10 +154,40 @@ async function handleUpdate(upd) {
       return;
     }
 
+    // ── Handle /start and /logout BEFORE state machine ───────────────────
+    if (text === '/start' || text === '/help' || text === '❓ راهنما') {
+      if (!sess.username) {
+        sess.state = ST.AWAIT_USERNAME;
+        await sendMsg(chatId,
+          '🔐 <b>ورود به سیستم</b>\n\nلطفاً نام کاربری CRM خود را وارد کنید:\n(مثال: <code>Hamidreza.soltanian</code>)'
+        );
+      } else {
+        const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
+        await sendMsg(chatId,
+          '👋 سلام <b>' + sess.name + '</b>\n\n' +
+          '📋 <b>دستورات موجود:</b>\n' +
+          '📄 پیشفاکتورها\n' +
+          '📦 موجودی انبار\n' +
+          '☀️ برنامه امروز\n' +
+          '🔍 اسکن QR کالا\n' +
+          '/logout — خروج از حساب',
+          { reply_markup: isManager ? MENU_KB_MANAGER : MENU_KB }
+        );
+      }
+      return;
+    }
+
+    if (text === '/logout') {
+      delete sessions[chatId];
+      await persistSession(chatId, true);
+      await sendMsg(chatId, '👋 از سیستم خارج شدید.', { reply_markup: { remove_keyboard: true } });
+      return;
+    }
+
     // ── State machine ─────────────────────────────────────────────────────
     if (sess.state === ST.AWAIT_USERNAME) {
-      if (!text) {
-        await sendMsg(chatId, '🔐 <b>ورود به سیستم</b>\n\nلطفاً نام کاربری CRM خود را وارد کنید:\n(مثال: <code>Sarah.hosseini</code>)');
+      if (!text || text.startsWith('/')) {
+        await sendMsg(chatId, '🔐 <b>ورود به سیستم</b>\n\nلطفاً نام کاربری CRM خود را وارد کنید:\n(مثال: <code>Hamidreza.soltanian</code>)');
         return;
       }
       sess.pendingUser = text;
@@ -171,12 +210,12 @@ async function handleUpdate(upd) {
       sess.state    = ST.IDLE;
       delete sess.pendingUser;
       await persistSession(chatId);
-      const isManager = ['مدیر', 'سوپر ادمین'].includes(user.role);
+      const isManagerNew = ['مدیر', 'سوپر ادمین'].includes(user.role);
       await sendMsg(chatId,
         '✅ <b>خوش آمدید، ' + user.display_name + '!</b>\n' +
-        'نقش: ' + user.role + (isManager ? ' 👑' : '') + '\n\n' +
+        'نقش: ' + user.role + (isManagerNew ? ' 👑' : '') + '\n\n' +
         'از منو زیر انتخاب کنید:',
-        { reply_markup: MENU_KB }
+        { reply_markup: isManagerNew ? MENU_KB_MANAGER : MENU_KB }
       );
       return;
     }
@@ -189,34 +228,10 @@ async function handleUpdate(upd) {
       return;
     }
 
-    // ── Commands ──────────────────────────────────────────────────────────
-    if (text === '/start' || text === '/help' || text === '❓ راهنما') {
-      if (!sess.username) {
-        sess.state = ST.AWAIT_USERNAME;
-        await sendMsg(chatId, '🔐 <b>ورود به سیستم</b>\n\nلطفاً نام کاربری CRM خود را وارد کنید:');
-      } else {
-        await sendMsg(chatId,
-          '📋 <b>دستورات موجود:</b>\n\n' +
-          '📄 <b>پیشفاکتورها</b> — لیست و تأیید\n' +
-          '📦 <b>موجودی انبار</b> — خلاصه موجودی\n' +
-          '🔍 <b>اسکن QR کالا</b> — عکس QR بفرستید\n' +
-          '/logout — خروج از حساب',
-          { reply_markup: MENU_KB }
-        );
-      }
-      return;
-    }
-
+    // ── Require login for commands below ──────────────────────────────────
     if (!sess.username) {
-      await sendMsg(chatId, '🔐 ابتدا وارد شوید. نام کاربری CRM خود را بنویسید:');
       sess.state = ST.AWAIT_USERNAME;
-      return;
-    }
-
-    if (text === '/logout') {
-      delete sessions[chatId];
-      await persistSession(chatId, true);
-      await sendMsg(chatId, '👋 از سیستم خارج شدید.', { reply_markup: { remove_keyboard: true } });
+      await sendMsg(chatId, '🔐 ابتدا وارد شوید. نام کاربری CRM خود را بنویسید:');
       return;
     }
 
@@ -230,12 +245,18 @@ async function handleUpdate(upd) {
       return;
     }
 
+    if (text === '☀️ برنامه امروز' || text === '/today') {
+      await handleTodaySchedule(chatId, sess);
+      return;
+    }
+
     if (text === '🔍 اسکن QR کالا' || text === '/scan') {
       await sendMsg(chatId, '📸 عکس QR کد کالا را بفرستید:', { reply_markup: { force_reply: true } });
       return;
     }
 
-    await sendMsg(chatId, 'از منو زیر انتخاب کنید:', { reply_markup: MENU_KB });
+    const isManagerCmd = ['مدیر', 'سوپر ادمین'].includes(sess.role);
+    await sendMsg(chatId, 'از منو زیر انتخاب کنید:', { reply_markup: isManagerCmd ? MENU_KB_MANAGER : MENU_KB });
 
   } catch(e) {
     console.error('[bot] handleUpdate error:', e.message);
@@ -563,6 +584,79 @@ async function handlePhoto(chatId, msg) {
     console.error('[bot] QR scan error:', e.message);
     await sendMsg(chatId, '❌ خطا در پردازش تصویر: ' + e.message, { reply_markup: MENU_KB });
   }
+}
+
+
+// ── Minimal Gregorian → Jalali converter ─────────────────────────────────
+function toJalali(date) {
+  const gy = date.getFullYear(), gm = date.getMonth() + 1, gd = date.getDate();
+  const g_d_no = 365 * gy + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400);
+  const j_d_no = g_d_no - 79;
+  const j_np   = Math.floor(j_d_no / 12053);
+  let jy        = 979 + 33 * j_np;
+  let jd        = j_d_no % 12053;
+  jy           += 4 * Math.floor(jd / 1461);
+  jd           %= 1461;
+  if (jd >= 366) { jy += Math.floor((jd - 1) / 365); jd = (jd - 1) % 365; }
+  const jm_days = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
+  let jm = 0;
+  for (let i = 0; i < 12; i++) {
+    if (jd < jm_days[i]) { jm = i + 1; jd++; break; }
+    jd -= jm_days[i];
+  }
+  const p2 = function(n){ return String(n).padStart(2,'0'); };
+  return jy + '/' + p2(jm) + '/' + p2(jd);
+}
+
+// ── Today's schedule — reads weekEntries from app_data blob ──────────────
+async function handleTodaySchedule(chatId, sess) {
+  const todayStr = toJalali(new Date());
+
+  let dbBlob;
+  try {
+    const r = await query("SELECT value FROM app_data WHERE key = 'main'");
+    dbBlob = r.rows.length ? r.rows[0].value : null;
+  } catch(e) { dbBlob = null; }
+
+  if (!dbBlob || !dbBlob.weekEntries) {
+    await sendMsg(chatId, '📅 برنامه‌ای برای امروز (' + todayStr + ') یافت نشد.', { reply_markup: MENU_KB });
+    return;
+  }
+
+  const entries = Object.values(dbBlob.weekEntries).filter(function(we) {
+    if (we.scheduledDate !== todayStr) return false;
+    const owner = we.addedBy || we.owner || '';
+    // managers see all; experts see only their own
+    if (['مدیر', 'سوپر ادمین'].includes(sess.role)) return true;
+    return owner === sess.username;
+  });
+
+  if (!entries.length) {
+    await sendMsg(chatId,
+      '☀️ <b>برنامه امروز — ' + todayStr + '</b>\n\nهیچ مرکزی برای امروز برنامه‌ریزی نشده است.',
+      { reply_markup: MENU_KB }
+    );
+    return;
+  }
+
+  const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
+  const doneCount = entries.filter(function(e){ return e.done; }).length;
+  const actionIcon = { call: '📞', visit: '🚗' };
+
+  const lines = entries.map(function(we) {
+    const done   = we.done ? '✅' : '⬜';
+    const act    = actionIcon[we.actionType] || '📋';
+    const name   = we.centerName || we.rid || '—';
+    const owner  = isManager ? ' (' + (we.addedBy || '') + ')' : '';
+    return done + ' ' + act + ' ' + name + owner;
+  });
+
+  const text =
+    '☀️ <b>برنامه امروز — ' + todayStr + '</b>\n' +
+    '✅ ' + doneCount + ' از ' + entries.length + ' انجام شده\n\n' +
+    lines.join('\n');
+
+  await sendMsg(chatId, text, { reply_markup: isManager ? MENU_KB_MANAGER : MENU_KB });
 }
 
 // ── Long-polling loop ─────────────────────────────────────────────────────
