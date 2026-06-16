@@ -271,6 +271,8 @@ html:not([data-theme="dark"]) body{background:linear-gradient(150deg,#eef2ff 0%,
 
 /* ══ FILTERS ══ */
 .filters-bar{background:var(--bg-card);padding:9px 16px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)}
+#filterCollapsible{display:contents}
+#filterToggleBtn:hover{background:var(--bg-raised)!important;color:var(--brand)!important}
 .fl{font-size:11px;color:var(--text-muted);font-weight:600;white-space:nowrap}
 .filters-bar select,.filters-bar input[type=text]{padding:5px 9px;border:1px solid var(--border-input);border-radius:7px;font-size:12px;direction:rtl;background:var(--bg-input);color:var(--text-primary);transition:border-color .15s}
 .filters-bar select:focus,.filters-bar input[type=text]:focus{outline:none;border-color:var(--brand)}

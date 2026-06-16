@@ -101,8 +101,10 @@
     <button id="viewAllListBtn" class="vb" onclick="setProvView('list')" title="همه مراکز — لیست">📋 همه</button>
     <button id="viewAllKbBtn" class="vb" onclick="setProvView('kanban')" title="همه مراکز — کانبان">📊 کانبان</button>
   </span>
+  <button id="filterToggleBtn" onclick="toggleFiltersCollapse()" title="نمایش/پنهان فیلترها" style="display:none;padding:4px 9px;border:1px solid var(--border-input);border-radius:6px;background:var(--bg-input);color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:inherit">🔽 فیلترها</button>
   <span class="fl">جستجو:</span>
   <input type="text" id="srch" placeholder="نام مرکز..." oninput="renderTable()" style="display:none">
+  <div id="filterCollapsible" style="display:contents">
   <span class="fl" id="lblPot" style="display:none">پتانسیل:</span>
   <select id="fPot" onchange="renderTable()" style="display:none"><option value="">همه</option><option>1</option><option>2</option><option>3</option><option>4</option></select>
   <span class="fl" id="lblSt" style="display:none">وضعیت:</span>
@@ -115,6 +117,7 @@
   <select id="fType" onchange="renderTable()" style="display:none"><option value="">همه انواع</option></select>
   <span class="fl" id="lblTg" style="display:none">برچسب:</span>
   <select id="fTag" onchange="renderTable()" style="display:none"><option value="">همه</option></select>
+  </div>
   <select id="sortSel" style="display:none;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:11px;background:var(--bg-input);color:var(--text-primary);font-family:inherit" onchange="setCenterSortFromSel(this.value)">
     <option value="">⇅ مرتب‌سازی</option>
     <option value="name_asc">نام ↑ (الف→ی)</option>

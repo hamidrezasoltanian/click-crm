@@ -1048,6 +1048,16 @@ function onUserChange(u){
 }
 
 // ════════════════════════ TAB SWITCH ══════════════════
+
+function toggleFiltersCollapse() {
+  var fc = document.getElementById('filterCollapsible');
+  var btn = document.getElementById('filterToggleBtn');
+  if (!fc || !btn) return;
+  var collapsed = fc.style.display === 'none';
+  fc.style.display = collapsed ? 'contents' : 'none';
+  btn.textContent = collapsed ? '🔽 فیلترها' : '🔼 فیلترها';
+  try { localStorage.setItem('_filtersCollapsed', collapsed ? '0' : '1'); } catch(e){}
+}
 function switchTab(tab){
   if(tab!=='provinces')_currentProvId=null;
   currentTab=tab;
@@ -1131,6 +1141,7 @@ function openProvince(provId){
   var emsg=document.getElementById('emptyDBMsg');if(emsg)emsg.style.display='none';
   var pb=document.getElementById('provBackBtn');if(pb)pb.style.display='';
   var ab=document.getElementById('addCenterBtn');if(ab)ab.style.display='';
+  var ftb=document.getElementById('filterToggleBtn');if(ftb)ftb.style.display='';
   // نمایش filter controls
   ['srch','fPot','lblPot','fStatus','lblSt','fLead','lblLd','fOwner','lblOw','fTag','lblTg','fType','lblTp','viewSw','csvBtn','printBtn','xlsBtn','savePresetBtn','sortSel'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.style.display='';
@@ -1148,6 +1159,7 @@ function backToProvinces(){
   currentTab='provinces';
   var pb=document.getElementById('provBackBtn');if(pb)pb.style.display='none';
   var ab=document.getElementById('addCenterBtn');if(ab)ab.style.display='none';
+  var ftb=document.getElementById('filterToggleBtn');if(ftb)ftb.style.display='none';
   var hd=document.getElementById('provViewHead');if(hd)hd.textContent='';
   ['srch','fPot','lblPot','fStatus','lblSt','fLead','lblLd','fOwner','lblOw','fTag','lblTg','viewSw','csvBtn','printBtn','hardToggleBtn','xlsBtn','savePresetBtn','filterPresetSel','sortSel'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.style.display='none';

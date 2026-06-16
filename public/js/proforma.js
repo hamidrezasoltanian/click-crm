@@ -7,6 +7,7 @@
 // ── State ─────────────────────────────────────────────────────────────────
 var _pfList = [];
 var _pfFilter = 'all';   // all | draft | sent | approved | rejected | cancelled
+var _pfPage   = 0;
 var _pfEditId = null;    // currently open modal id (null = new)
 var _pfItems  = [];      // rows in open modal
 var _pfWmsProds = [];    // WMS product list (fetched once per session)
@@ -48,17 +49,21 @@ async function renderProformaPanel() {
 function _renderPfPanel(el) {
   var filtered = _pfFilter === 'all' ? _pfList : _pfList.filter(function(p){ return p.status === _pfFilter; });
   var isManager = _isManager();
+  var PER_PAGE  = 25;
+  var pageItems = filtered.slice(0, (_pfPage + 1) * PER_PAGE);
+  var hasMore   = filtered.length > pageItems.length;
 
   var filterBtns = ['all','draft','sent','approved','rejected','cancelled'].map(function(s) {
     var lbl = s === 'all' ? 'همه' : (PF_STATUS[s] || { label: s }).label;
+    var cnt = s === 'all' ? _pfList.length : _pfList.filter(function(p){ return p.status === s; }).length;
     return '<button onclick="_pfSetFilter(\'' + s + '\')" style="padding:5px 12px;border-radius:20px;border:1px solid ' +
       (_pfFilter === s ? 'var(--brand)' : '#e2e8f0') + ';background:' +
       (_pfFilter === s ? 'var(--brand)' : 'white') + ';color:' +
       (_pfFilter === s ? 'white' : '#64748b') + ';font-size:12px;font-family:inherit;cursor:pointer">' +
-      lbl + '</button>';
+      lbl + (cnt ? ' (' + cnt + ')' : '') + '</button>';
   }).join('');
 
-  var rows = filtered.length ? filtered.map(function(pf) {
+  var rows = pageItems.length ? pageItems.map(function(pf) {
     var st = PF_STATUS[pf.status] || { label: pf.status, cls: 'bgr' };
     var actions = _pfActions(pf);
     return '<tr>' +
@@ -93,6 +98,7 @@ function _renderPfPanel(el) {
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
     '</div>' +
+    (hasMore ? '<div style="text-align:center;margin-top:12px"><button onclick="_pfLoadMore()" style="padding:8px 24px;border:1px solid var(--brand);background:white;color:var(--brand);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer">⬇ بارگذاری بیشتر (' + (filtered.length - pageItems.length) + ' مورد دیگر)</button></div>' : '') +
     _pfModalHTML() +
     _pfPrintZone();
 }
@@ -110,8 +116,15 @@ function _pfCreatorName(uid) {
 }
 
 // ── Filter setter ─────────────────────────────────────────────────────────
+function _pfLoadMore() {
+  _pfPage++;
+  var el = document.getElementById('proformaPanel');
+  if (el) _renderPfPanel(el);
+}
+
 function _pfSetFilter(f) {
   _pfFilter = f;
+  _pfPage = 0;
   var el = document.getElementById('proformaPanel');
   if (el) _renderPfPanel(el);
 }
