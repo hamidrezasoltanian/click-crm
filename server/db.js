@@ -481,6 +481,91 @@ async function initSchema() {
   // Auto-migrate WMS from blob → tables (run once)
   await _migrateWMSFromBlob();
 
+  // ════════════════════════════════════════
+  // TASKS — extracted from DB.tasks blob
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      owner TEXT,
+      due_date TEXT,
+      priority INTEGER DEFAULT 2,
+      status TEXT DEFAULT 'todo',
+      center_key TEXT,
+      note TEXT DEFAULT '',
+      subtasks JSONB DEFAULT '[]',
+      done BOOLEAN DEFAULT FALSE,
+      done_at TIMESTAMPTZ,
+      created_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date)`);
+
+  // ════════════════════════════════════════
+  // WEEK ENTRIES — extracted from DB.weekEntries blob
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS week_entries (
+      id TEXT PRIMARY KEY,
+      week_id TEXT NOT NULL,
+      rec_key TEXT NOT NULL,
+      rtype TEXT NOT NULL,
+      rid TEXT NOT NULL,
+      scheduled_date TEXT,
+      action_type TEXT DEFAULT 'call',
+      done BOOLEAN DEFAULT FALSE,
+      done_date TEXT,
+      added_by TEXT,
+      center_name TEXT,
+      week_tag_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_we_week ON week_entries(week_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_we_reckey ON week_entries(rec_key)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_we_done ON week_entries(done)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_we_date ON week_entries(scheduled_date)`);
+
+  // ════════════════════════════════════════
+  // NOTIFICATIONS — extracted from DB.notifications blob
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      to_user TEXT NOT NULL,
+      msg TEXT NOT NULL,
+      center_key TEXT,
+      at TIMESTAMPTZ DEFAULT NOW(),
+      read BOOLEAN DEFAULT FALSE
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_notif_to ON notifications(to_user)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(read)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_notif_at ON notifications(at DESC)`);
+
+  // ════════════════════════════════════════
+  // CHANGE LOG — extracted from DB.changeLog blob
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS change_log (
+      id BIGSERIAL PRIMARY KEY,
+      at TIMESTAMPTZ NOT NULL,
+      by TEXT NOT NULL,
+      rkey TEXT NOT NULL,
+      field TEXT NOT NULL,
+      val JSONB
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_changelog_rkey ON change_log(rkey)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_changelog_at ON change_log(at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_changelog_by ON change_log(by)`);
+
   // Seed products and initial price list if products table is empty
   const prodCount = await query('SELECT COUNT(*) FROM products');
   if (parseInt(prodCount.rows[0].count) === 0) {

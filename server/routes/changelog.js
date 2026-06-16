@@ -1,0 +1,85 @@
+'use strict';
+
+const express = require('express');
+const { query } = require('../db');
+const { requireAuth, requireManager } = require('../auth');
+
+const router = express.Router();
+
+// ── Helper: map DB row → camelCase object ──────────────────────────────────
+function rowToObj(r) {
+  return {
+    id:    r.id,
+    at:    r.at,
+    by:    r.by,
+    rkey:  r.rkey,
+    field: r.field,
+    val:   r.val,
+  };
+}
+
+// ── GET /api/changelog ─────────────────────────────────────────────────────
+// Query params: ?rkey=, ?by=, ?limit=50
+router.get('/', requireAuth, async function (req, res) {
+  try {
+    const conditions = [];
+    const params = [];
+
+    if (req.query.rkey) {
+      params.push(req.query.rkey);
+      conditions.push(`rkey = $${params.length}`);
+    }
+    if (req.query.by) {
+      params.push(req.query.by);
+      conditions.push(`"by" = $${params.length}`);
+    }
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 500);
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const result = await query(
+      `SELECT * FROM change_log ${where} ORDER BY at DESC LIMIT $${params.length + 1}`,
+      [...params, limit]
+    );
+    res.json(result.rows.map(rowToObj));
+  } catch (e) {
+    console.error('[changelog GET /]', e.message);
+    res.status(500).json({ error: 'خطای داخلی سرور' });
+  }
+});
+
+// ── POST /api/changelog ────────────────────────────────────────────────────
+router.post('/', requireAuth, async function (req, res) {
+  try {
+    const { at, by, rkey, field, val } = req.body;
+    if (!at || !by || !rkey || !field) {
+      return res.status(400).json({ error: 'فیلدهای at، by، rkey و field الزامی هستند' });
+    }
+    const result = await query(
+      `INSERT INTO change_log (at, by, rkey, field, val)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [new Date(at), by, rkey, field, val !== undefined ? JSON.stringify(val) : null]
+    );
+    res.status(201).json(rowToObj(result.rows[0]));
+  } catch (e) {
+    console.error('[changelog POST /]', e.message);
+    res.status(500).json({ error: 'خطای داخلی سرور' });
+  }
+});
+
+// ── DELETE /api/changelog/cleanup ─────────────────────────────────────────
+// Manager-only: delete entries older than 90 days
+router.delete('/cleanup', requireManager, async function (req, res) {
+  try {
+    const result = await query(
+      `DELETE FROM change_log WHERE at < NOW() - INTERVAL '90 days' RETURNING id`
+    );
+    res.json({ deleted: result.rows.length });
+  } catch (e) {
+    console.error('[changelog DELETE /cleanup]', e.message);
+    res.status(500).json({ error: 'خطای داخلی سرور' });
+  }
+});
+
+module.exports = router;
