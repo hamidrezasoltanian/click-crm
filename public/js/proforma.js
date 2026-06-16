@@ -632,6 +632,14 @@ function _numToWords(n) {
   return (negative ? 'منفی ' : '') + segments.join(' و ');
 }
 
+// ── Vue bridge callbacks ──────────────────────────────────────────────────
+// Called by ProformaPanel.vue emits via window._pfXxx?.()
+window._pfNew     = function()    { pfOpenNew(); };
+window._pfView    = function(pf)  { pfOpenEdit(pf.id); };
+window._pfSend    = function(pf)  { pfAction(pf.id, 'send'); };
+window._pfApprove = function(pf)  { pfAction(pf.id, 'approve'); };
+window._pfReject  = function(pf)  { pfReject(pf.id); };
+
 // Print CSS (injected once) ───────────────────────────────────────────────
 (function() {
   if (document.getElementById('pfPrintStyle')) return;

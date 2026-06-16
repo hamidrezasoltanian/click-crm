@@ -1,4 +1,4 @@
-import { createApp, ref } from 'vue';
+import { createApp } from 'vue';
 import ProformaPanel from './components/ProformaPanel.vue';
 
 // Fetch current user role from API, then mount components.
@@ -10,14 +10,17 @@ fetch('/api/auth/me')
 
     const pfEl = document.getElementById('vue-proforma');
     if (pfEl) {
-      createApp(ProformaPanel, {
+      const instance = createApp(ProformaPanel, {
         userRole,
         onNew:     () => (window as any)._pfNew?.(),
         onView:    (pf: any) => (window as any)._pfView?.(pf),
         onSend:    (pf: any) => (window as any)._pfSend?.(pf),
         onApprove: (pf: any) => (window as any)._pfApprove?.(pf),
         onReject:  (pf: any) => (window as any)._pfReject?.(pf),
-      }).mount(pfEl);
+      });
+      const mounted = instance.mount(pfEl);
+      // Expose refresh so vanilla switchTab can trigger a list reload
+      (window as any)._pfVueRefresh = () => (mounted as any).refresh?.();
     }
   })
   .catch(() => {
