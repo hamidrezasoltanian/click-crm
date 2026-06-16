@@ -66,6 +66,7 @@ app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/week-entries', require('./routes/week-entries'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/changelog', require('./routes/changelog'));
+app.use('/api/migrate', require('./routes/migrate'));
 
 // Health check
 app.get('/api/health', function (req, res) {
