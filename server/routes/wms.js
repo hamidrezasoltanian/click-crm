@@ -645,7 +645,7 @@ router.post('/transactions', requireAuth, async (req, res) => {
          b.productId, b.lotId||null, b.warehouseId||null,
          qty, b.unitPrice||0, b.salePrice||0, b.counterpartyId||null,
          b.fromWarehouseId||null, b.toWarehouseId||null,
-         b.by || req.session.userId || null,
+         b.by || req.user.username || null,
          b.date||new Date(), b.status||'pending', b.note||'',
          b.refNo||'', b.imedStatus||'not_registered', b.imedRefNo||'', b.imedDate||'', b.ttacNo||'']
       );
@@ -799,7 +799,7 @@ router.post('/purchase-orders', requireAuth, async (req, res) => {
          approved_by,approved_at,status,items,po_date,expected_delivery,note,imed_status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [id, poNo, b.supplierId, b.warehouseId||null,
-       b.requestedBy || req.session.userId || null,
+       b.requestedBy || req.user.username || null,
        null, null, 'draft', JSON.stringify(b.items||[]),
        b.date||new Date(), b.expectedDelivery||null, b.note||'', 'not_registered']
     );
@@ -848,7 +848,7 @@ router.put('/purchase-orders/:id/approve', requireAuth, async (req, res) => {
       `UPDATE wms_purchase_orders SET
          status='approved', approved_by=$2, approved_at=NOW()
        WHERE id=$1 AND status='pending' RETURNING *`,
-      [req.params.id, req.session.userId || null]
+      [req.params.id, req.user.username || null]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'سفارش خرید یافت نشد یا قابل تأیید نیست' });
     res.json(rowToPO(r.rows[0]));
@@ -864,7 +864,7 @@ router.put('/purchase-orders/:id/reject', requireAuth, async (req, res) => {
       `UPDATE wms_purchase_orders SET
          status='rejected', approved_by=$2, approved_at=NOW()
        WHERE id=$1 AND status='pending' RETURNING *`,
-      [req.params.id, req.session.userId || null]
+      [req.params.id, req.user.username || null]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'سفارش خرید یافت نشد یا قابل رد نیست' });
     res.json(rowToPO(r.rows[0]));
