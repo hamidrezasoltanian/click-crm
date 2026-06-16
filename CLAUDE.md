@@ -15,12 +15,8 @@ Vanilla JS frontend + Express/PostgreSQL backend. Vite + TypeScript + Vue 3 scaf
 cd /home/user/Sales-Portal && node server/index.js
 # then open http://localhost:3000
 
-# Or serve static only (no backend persistence)
-python3 -m http.server 8080
-# then open http://localhost:8080/public/index.html
-
 # Syntax check after any JS edit (mandatory):
-node --check public/js/app.js
+node --check public/js/app.bundle.js
 ```
 
 ## File Structure
@@ -28,34 +24,60 @@ node --check public/js/app.js
 ```
 Sales-Portal/
   public/
-    index.html          ← HTML shell only (~640 lines): markup, tab buttons, panel divs
-    css/app.css         ← all styles (~1,150 lines), indigo design system
-    js/app.js           ← ALL application logic (~13,450 lines)
-    js/proforma.js      ← proforma invoice module (~550 lines)
-    wms.html            ← WMS warehouse app (served at /wms, backed by /api/wms)
-    sw.js               ← service worker (CDN caching)
-    fonts/              ← Vazirmatn font files
-  src/                  ← future Vue 3 + TypeScript frontend (Vite builds → public/dist/)
-    main.ts             ← placeholder entry point
+    index.html              ← HTML shell: markup, tab buttons, panel divs
+    css/app.css             ← all styles (~1,640 lines), indigo design system
+    js/
+      app.bundle.js         ← MAIN app file (15,292 lines) — served to browser
+                              ⚠ has NBSP (\xa0) — ALWAYS edit via Python, NEVER Edit tool
+                              ⚠ is a bundle of all the module files below
+      app.js                ← legacy single-file (NOT loaded) — kept for reference only
+      proforma.js           ← proforma invoice module (~650 lines)
+      modules/              ← extracted module files (organized copies, loaded before bundle)
+        auth-ui.js          ← login/logout UI
+        storage.js          ← loadDB, saveDB, SSE sync
+        user-mgmt.js        ← user CRUD, province ownership
+        tab-nav.js          ← switchTab, openProvince, navigation
+        banner.js           ← followup alerts, recent activity
+        week-plan.js        ← weekly schedule, drag-drop
+        notifications.js    ← bell panel, notification helpers
+      core/                 ← pure utility modules (no side effects)
+        jalali.js           ← Jalali date conversion (g2j, j2g, todayStr, ...)
+        helpers.js          ← esc, fNorm, showToast, flashRow
+        modal.js            ← openModal, closeModal, showContactPopup
+        date-picker.js      ← openJDP, buildJDP
+      [other module files]  ← activity.js, calendar.js, center-modal.js, checklist.js,
+                              dashboard.js, kpi.js, manager.js, manager-tasks.js,
+                              mtr.js, onboarding.js, pricing.js, provinces.js,
+                              settings.js, tasks.js, ui-core.js, weekplan.js
+    wms.html                ← WMS warehouse app (served at /wms); uses REST endpoints
+    sw.js                   ← service worker (CDN caching)
+    fonts/                  ← Vazirmatn font files
+  src/                      ← Vue 3 + TypeScript (Vite builds → public/dist/)
+    main.ts                 ← placeholder entry point
   server/
-    index.js            ← Express entry point (port 3000); helmet + compression
-    db.js               ← PostgreSQL pool (pg) + initSchema() for all tables
-    auth.js             ← cookie-session auth
+    index.js                ← Express entry point (port 3000); helmet + compression
+    db.js                   ← PostgreSQL pool (pg) + initSchema() for all tables
+    auth.js                 ← cookie-session auth
     bot/
-      telegram.js       ← Telegram long-polling bot (proforma approve/reject, inventory, QR scan)
+      telegram.js           ← Telegram long-polling bot (proforma approve/reject, inventory, QR scan)
     routes/
-      auth.js           ← /api/auth  (login/logout)
-      data.js           ← /api/data/db  (main DB blob PUT/GET)
-      contacts.js       ← /api/contacts/:key
-      pricing.js        ← /api/pricing
-      audit.js          ← /api/audit  (field change log)
-      events.js         ← /api/events (SSE broadcast)
-      users.js          ← /api/users
-      distribution.js   ← /api/distribution
-      ai.js             ← /api/ai proxy
-      discovery.js      ← /api/discovery (biopsy center discovery: list, ai-scan, import-file)
-      wms.js            ← /api/wms  (blob compat + REST: /inventory, /lots/scan/:code, /transactions)
-      proforma.js       ← /api/proforma  (CRUD + workflow actions, SQL-backed, zod validated)
+      auth.js               ← /api/auth  (login/logout)
+      data.js               ← /api/data/db  (main DB blob PUT/GET)
+      contacts.js           ← /api/contacts/:key
+      pricing.js            ← /api/pricing
+      audit.js              ← /api/audit  (field change log)
+      events.js             ← /api/events (SSE broadcast)
+      users.js              ← /api/users
+      distribution.js       ← /api/distribution
+      ai.js                 ← /api/ai proxy
+      discovery.js          ← /api/discovery (biopsy center discovery: list, ai-scan, import-file)
+      wms.js                ← /api/wms  (full REST CRUD: products, warehouses, lots, transactions, POs)
+      proforma.js           ← /api/proforma  (CRUD + workflow actions, SQL-backed, zod validated)
+      tasks.js              ← /api/tasks  (SQL-backed task CRUD)
+      week-entries.js       ← /api/week-entries  (SQL-backed week schedule)
+      notifications.js      ← /api/notifications  (SQL-backed)
+      changelog.js          ← /api/changelog  (SQL-backed)
+      migrate.js            ← /api/migrate/blob-to-sql  (one-shot blob→SQL migration)
   scripts/
     discover_centers.py ← CLI scraper (nobat.ir, doctorto.ir, --ai, --enrich modes)
   vite.config.ts        ← Vite 6 config: Vue plugin, src/ → public/dist/, dev proxy → :3000
@@ -70,22 +92,22 @@ Sales-Portal/
 
 ## ⚠️ Critical Edit Constraint
 
-`public/js/app.js` (and the legacy HTML) contain **non-breaking spaces (`\xa0`)** mixed into indented lines, plus deeply nested quote-escaping inside HTML-string templates.
-**NEVER use the Edit tool directly on these files** — exact-match will fail or corrupt content.
+`public/js/app.bundle.js` (the main frontend file) contains **non-breaking spaces (`\xa0`)** mixed into indented lines, plus deeply nested quote-escaping inside HTML-string templates.
+**NEVER use the Edit tool directly on this file** — exact-match will fail or corrupt content.
 
 **Always use Python scripts:**
 ```python
-with open(FILEPATH, 'r', encoding='utf-8') as f:
+with open('public/js/app.bundle.js', 'r', encoding='utf-8') as f:
     content = f.read()
 # use content.replace(old, new, 1) with exact strings verified via repr()
-with open(FILEPATH, 'w', encoding='utf-8') as f:
+with open('public/js/app.bundle.js', 'w', encoding='utf-8') as f:
     f.write(content)
 ```
 
 To inspect an exact line before replacing (0-indexed):
 ```bash
 python3 -c "
-with open('public/js/app.js','r',encoding='utf-8') as f:
+with open('public/js/app.bundle.js','r',encoding='utf-8') as f:
     lines=f.readlines()
 print(repr(lines[LINE_IDX]))
 "
@@ -94,8 +116,7 @@ print(repr(lines[LINE_IDX]))
 **Quote-escaping rule for generated HTML:** most UI is built as JS strings with
 `onclick="fn(\''+var+'\')"` patterns. When writing such strings from Python, the
 JS source must contain `\\'` (backslash-quote) inside the double-quoted HTML
-attribute. Always run `node --check public/js/app.js` after editing — past
-sessions introduced 6+ syntax errors from getting this wrong.
+attribute. Always run `node --check public/js/app.bundle.js` after editing.
 
 ## Architecture
 
