@@ -31,7 +31,20 @@ fetch('/api/auth/me')
     if (notifEl) {
       const ni = createApp(NotificationsPanel, {
         username,
-        onOpenCenter: (key: string) => (window as any).openProvince?.(key),
+        onOpenCenter: (key: string) => {
+          // key is a centerKey like "pc_p4||88" or "center_123" — parse to (rtype, id)
+          // and open the center modal. Do NOT call openProvince (it expects a province id).
+          if (!key || typeof key !== 'string') return;
+          const us = key.indexOf('_');
+          if (us < 0) return;
+          const rtype = key.slice(0, us);
+          const rid = key.slice(us + 1);
+          const w = window as any;
+          try { w._buildPCCache?.(); } catch (_) {}
+          if (typeof w.openCenterModal === 'function') {
+            w.openCenterModal(rtype, rid);
+          }
+        },
       });
       const nm = ni.mount(notifEl);
       (window as any)._notifVueLoad = () => (nm as any).load?.();

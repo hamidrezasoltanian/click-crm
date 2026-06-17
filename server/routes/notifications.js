@@ -109,6 +109,39 @@ router.post('/', requireAuth, async function (req, res) {
   }
 });
 
+// ── Helper: mark a blob notification read in app_data 'main' ────────────────
+// Most in-app notifications live in the DB blob (DB.notifications), not the SQL
+// table. Marking them read must persist back into the blob, otherwise the next
+// GET re-serves them as unread.
+async function _markBlobNotifRead(id, allForUser) {
+  const client = await require('../db').pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cur = await client.query("SELECT value FROM app_data WHERE key = 'main' FOR UPDATE");
+    if (!cur.rows.length) { await client.query('ROLLBACK'); return 0; }
+    const blob = cur.rows[0].value || {};
+    const notifs = Array.isArray(blob.notifications) ? blob.notifications : [];
+    let changed = 0;
+    notifs.forEach(function (n) {
+      const match = allForUser ? (n.to === allForUser && !n.read) : (n.id === id);
+      if (match && !n.read) { n.read = true; changed++; }
+      else if (match && allForUser) { /* already read */ }
+    });
+    if (changed > 0) {
+      blob.notifications = notifs;
+      await client.query("UPDATE app_data SET value = $1, updated_at = NOW() WHERE key = 'main'", [blob]);
+    }
+    await client.query('COMMIT');
+    return changed;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('[notifications _markBlobNotifRead]', e.message);
+    return 0;
+  } finally {
+    client.release();
+  }
+}
+
 // ── PUT /api/notifications/:id/read ───────────────────────────────────────
 router.put('/:id/read', requireAuth, async function (req, res) {
   try {
@@ -117,8 +150,9 @@ router.put('/:id/read', requireAuth, async function (req, res) {
       [req.params.id]
     );
     if (!result.rows.length) {
-      // Blob-sourced notifications don't exist in SQL — treat as already read
-      return res.json({ ok: true, local: true });
+      // Not in SQL → it's a blob notification; persist read state into the blob
+      await _markBlobNotifRead(req.params.id, null);
+      return res.json({ ok: true, blob: true });
     }
     res.json(rowToObj(result.rows[0]));
   } catch (e) {
@@ -128,21 +162,58 @@ router.put('/:id/read', requireAuth, async function (req, res) {
 });
 
 // ── POST /api/notifications/read-all ──────────────────────────────────────
-// Mark all notifications as read for the current user (or ?to= if manager)
+// Mark all notifications as read for the current user (or ?to= if manager).
+// A manager with no ?to= sees everyone's notifications, so mark them all.
 router.post('/read-all', requireAuth, async function (req, res) {
   try {
     const isManager = req.user.role === 'مدیر' || req.user.role === 'سوپر ادمین';
-    const targetUser = (isManager && req.body.to) ? req.body.to : req.user.username;
-    const result = await query(
-      `UPDATE notifications SET read = true WHERE to_user = $1 AND read = false RETURNING id`,
-      [targetUser]
-    );
-    res.json({ updated: result.rows.length });
+    const markEveryone = isManager && !req.body.to;
+    const targetUser = req.body.to || req.user.username;
+
+    // SQL table
+    const sqlResult = markEveryone
+      ? await query(`UPDATE notifications SET read = true WHERE read = false RETURNING id`)
+      : await query(`UPDATE notifications SET read = true WHERE to_user = $1 AND read = false RETURNING id`, [targetUser]);
+
+    // Blob notifications
+    const blobCount = await _markBlobReadAll(markEveryone ? null : targetUser);
+
+    res.json({ updated: sqlResult.rows.length + blobCount });
   } catch (e) {
     console.error('[notifications POST /read-all]', e.message);
     res.status(500).json({ error: 'خطای داخلی سرور' });
   }
 });
+
+// Mark all blob notifications read. If user is null, mark every unread one.
+async function _markBlobReadAll(user) {
+  const client = await require('../db').pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cur = await client.query("SELECT value FROM app_data WHERE key = 'main' FOR UPDATE");
+    if (!cur.rows.length) { await client.query('ROLLBACK'); return 0; }
+    const blob = cur.rows[0].value || {};
+    const notifs = Array.isArray(blob.notifications) ? blob.notifications : [];
+    let changed = 0;
+    notifs.forEach(function (n) {
+      if (n.read) return;
+      if (user && n.to !== user) return;
+      n.read = true; changed++;
+    });
+    if (changed > 0) {
+      blob.notifications = notifs;
+      await client.query("UPDATE app_data SET value = $1, updated_at = NOW() WHERE key = 'main'", [blob]);
+    }
+    await client.query('COMMIT');
+    return changed;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('[notifications _markBlobReadAll]', e.message);
+    return 0;
+  } finally {
+    client.release();
+  }
+}
 
 // ── DELETE /api/notifications/:id ─────────────────────────────────────────
 router.delete('/:id', requireAuth, async function (req, res) {
