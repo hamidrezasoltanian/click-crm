@@ -27,6 +27,7 @@ const ST = {
   AWAIT_PASSWORD:  'await_password',
   AWAIT_REJECT:    'await_reject',
   AWAIT_CALL_NOTE: 'await_call_note',
+  AWAIT_MSG_TEXT:  'await_msg_text',   // manager: typing message to expert
 };
 
 const sessions = {};
@@ -153,8 +154,10 @@ const MENU_KB = {
 const MENU_KB_MANAGER = {
   keyboard: [
     [{ text: '☀️ برنامه امروز' }, { text: '📋 وظایف من' }],
-    [{ text: '📄 پیشفاکتورها' }, { text: '📦 موجودی انبار' }],
-    [{ text: '🔍 اسکن QR' }, { text: '❓ راهنما' }],
+    [{ text: '📊 گزارش معوق' },   { text: '📈 KPI هفتگی' }],
+    [{ text: '📨 ارسال پیام' },   { text: '📄 پیشفاکتورها' }],
+    [{ text: '📦 موجودی انبار' }, { text: '🔍 اسکن QR' }],
+    [{ text: '❓ راهنما' }],
   ],
   resize_keyboard: true,
 };
@@ -261,6 +264,18 @@ async function handleUpdate(upd) {
       return;
     }
 
+    if (sess.state === ST.AWAIT_MSG_TEXT) {
+      const recipient = sess.pendingMsgTo;
+      delete sess.pendingMsgTo;
+      sess.state = ST.IDLE;
+      if (text && text !== '/cancel') {
+        await doSendMessageToExpert(chatId, sess, recipient, text);
+      } else {
+        await sendMsg(chatId, '❌ لغو شد.', { reply_markup: menuFor(sess) });
+      }
+      return;
+    }
+
     // Require login for commands below
     if (!sess.username) {
       sess.state = ST.AWAIT_USERNAME;
@@ -270,6 +285,9 @@ async function handleUpdate(upd) {
 
     if (text === '☀️ برنامه امروز' || text === '/today')    { await handleTodaySchedule(chatId, sess); return; }
     if (text === '📋 وظایف من'    || text === '/tasks')     { await handleTasks(chatId, sess); return; }
+    if (text === '📊 گزارش معوق'  || text === '/overdue')  { await handleOverdueReport(chatId, sess); return; }
+    if (text === '📈 KPI هفتگی'   || text === '/kpi')      { await handleWeeklyKPI(chatId, sess); return; }
+    if (text === '📨 ارسال پیام'  || text === '/msg')      { await handleSendMessage(chatId, sess); return; }
     if (text === '📄 پیشفاکتورها' || text === '/proformas') { await handleProformas(chatId, sess); return; }
     if (text === '📦 موجودی انبار'|| text === '/inventory') { await handleInventory(chatId); return; }
     if (text === '🔍 اسکن QR'     || text === '/scan') {
@@ -418,7 +436,16 @@ async function handleTasks(chatId, sess) {
   let header = '📋 <b>وظایف من</b> — ' + rows.length + ' وظیفه باز';
   if (overdueCount > 0) header += ' | ⚠️ ' + overdueCount + ' معوق';
 
-  await sendMsg(chatId, header + '\n\n' + lines.join('\n'), { reply_markup: menuFor(sess) });
+  // Inline "done" buttons for first 5 tasks
+  const inlineRows = rows.slice(0, 5).map(function(t, i) {
+    return [{ text: '✅ انجام: ' + (t.title || '').slice(0, 25), callback_data: 'tk_done:' + t.id }];
+  });
+
+  const opts = inlineRows.length
+    ? { reply_markup: { inline_keyboard: inlineRows } }
+    : { reply_markup: menuFor(sess) };
+
+  await sendMsg(chatId, header + '\n\n' + lines.join('\n'), opts);
 }
 
 // ── 📄 Proformas ──────────────────────────────────────────────────────────
@@ -538,6 +565,26 @@ async function handleCallback(cb) {
   }
   if (data.startsWith('pf_send:')) {
     await doSendPf(chatId, msgId, data.slice(8), sess);
+    return;
+  }
+
+  // ── Manager: send message recipient selected ──────────────────────────
+  if (data.startsWith('msg_to:')) {
+    if (!isMgr) return;
+    const recipient = data.slice(7);
+    sess.pendingMsgTo = recipient;
+    sess.state = ST.AWAIT_MSG_TEXT;
+    await answerCallback(cb.id, recipient);
+    await sendMsg(chatId,
+      '✏️ پیام خود را برای <b>' + recipient + '</b> بنویسید:\n(<code>/cancel</code> برای لغو)'
+    );
+    return;
+  }
+
+  // ── Manager: approve/reject task ──────────────────────────────────────
+  if (data.startsWith('tk_done:')) {
+    const taskId = data.slice(8);
+    await doMarkTaskDone(chatId, sess, taskId);
     return;
   }
 
@@ -697,6 +744,196 @@ async function handlePhoto(chatId, msg) {
   } catch(e) {
     console.error('[bot] QR scan error:', e.message);
     await sendMsg(chatId, '❌ خطا در پردازش تصویر: ' + e.message, { reply_markup: MENU_KB });
+  }
+}
+
+// ── 📊 Overdue report (manager) ───────────────────────────────────────────
+async function handleOverdueReport(chatId, sess) {
+  if (!isManagerRole(sess.role)) {
+    await sendMsg(chatId, '❌ این قابلیت فقط برای مدیران است.', { reply_markup: menuFor(sess) });
+    return;
+  }
+  const todayStr = toJalali(new Date());
+
+  let blob;
+  try {
+    const r = await query("SELECT value FROM app_data WHERE key = 'main'");
+    blob = r.rows.length ? r.rows[0].value : null;
+  } catch(e) { blob = null; }
+
+  if (!blob || !blob.edits) {
+    await sendMsg(chatId, '⚠️ داده‌ای یافت نشد.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  // Group overdue centers by owner
+  const byOwner = {};
+  const ACTIVE = ['contacted', 'interested', 'negotiating', 'demo', 'proposal'];
+  Object.entries(blob.edits).forEach(function([key, e]) {
+    if (!e.followupDate || e.followupDate >= todayStr) return;
+    if (e.status === 'lost' || e.status === 'inactive') return;
+    const owner = e.owner || 'نامشخص';
+    if (!byOwner[owner]) byOwner[owner] = [];
+    const daysLate = Math.floor(
+      (new Date(todayStr.replace(/\//g,'-')) - new Date(e.followupDate.replace(/\//g,'-'))) / 86400000
+    );
+    byOwner[owner].push({ daysLate, date: e.followupDate });
+  });
+
+  if (!Object.keys(byOwner).length) {
+    await sendMsg(chatId, '✅ <b>گزارش معوق</b>\n\nهیچ مرکز معوقی وجود ندارد! 🎉', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  const total = Object.values(byOwner).reduce(function(s, arr){ return s + arr.length; }, 0);
+  let text = '📊 <b>گزارش معوق — ' + todayStr + '</b>\n';
+  text += '⚠️ مجموع: <b>' + total + '</b> مرکز معوق\n\n';
+
+  Object.entries(byOwner)
+    .sort(function(a, b){ return b[1].length - a[1].length; })
+    .forEach(function([owner, items]) {
+      const maxDelay = Math.max.apply(null, items.map(function(i){ return i.daysLate; }));
+      const warn = maxDelay > 14 ? ' 🔴' : maxDelay > 7 ? ' 🟡' : ' 🟢';
+      text += '👤 <b>' + owner + '</b>: ' + items.length + ' مرکز' + warn + '\n';
+      text += '   بیشترین تأخیر: ' + maxDelay + ' روز\n';
+    });
+
+  await sendMsg(chatId, text, { reply_markup: menuFor(sess) });
+}
+
+// ── 📈 Weekly KPI (manager) ───────────────────────────────────────────────
+async function handleWeeklyKPI(chatId, sess) {
+  if (!isManagerRole(sess.role)) {
+    await sendMsg(chatId, '❌ این قابلیت فقط برای مدیران است.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const todayStr = toJalali(new Date());
+
+  let blob;
+  try {
+    const r = await query("SELECT value FROM app_data WHERE key = 'main'");
+    blob = r.rows.length ? r.rows[0].value : null;
+  } catch(e) { blob = null; }
+
+  if (!blob) {
+    await sendMsg(chatId, '⚠️ داده‌ای یافت نشد.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  // Collect stats per expert
+  const stats = {};
+  function inc(by, field) {
+    if (!by) return;
+    if (!stats[by]) stats[by] = { calls: 0, visits: 0, sales: 0 };
+    stats[by][field]++;
+  }
+
+  (blob.callLog   || []).filter(function(l){ return l.at && l.at >= weekAgo; }).forEach(function(l){ inc(l.by || l.user, 'calls'); });
+  (blob.visitLog  || []).filter(function(l){ return l.at && l.at >= weekAgo; }).forEach(function(l){ inc(l.by || l.user, 'visits'); });
+  (blob.salesLog  || []).filter(function(l){ return l.at && l.at >= weekAgo; }).forEach(function(l){ inc(l.by || l.user, 'sales'); });
+
+  // Week entries done this week
+  let weDone = {};
+  try {
+    const r = await query(
+      `SELECT value->>'addedBy' AS expert, COUNT(*)::int AS cnt
+       FROM week_entries
+       WHERE (value->>'done')::boolean = true AND updated_at >= NOW() - INTERVAL '7 days'
+       GROUP BY value->>'addedBy'`
+    );
+    r.rows.forEach(function(row){ weDone[row.expert] = row.cnt; });
+  } catch(e) {}
+
+  if (!Object.keys(stats).length && !Object.keys(weDone).length) {
+    await sendMsg(chatId, '📈 <b>KPI هفتگی</b>\n\nهیچ فعالیتی در ۷ روز گذشته ثبت نشده.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  // Merge all experts
+  const allExperts = new Set([...Object.keys(stats), ...Object.keys(weDone)]);
+  let text = '📈 <b>KPI هفتگی — ۷ روز گذشته</b>\n\n';
+
+  Array.from(allExperts).sort().forEach(function(expert) {
+    const s = stats[expert] || { calls: 0, visits: 0, sales: 0 };
+    const done = weDone[expert] || 0;
+    text += '👤 <b>' + expert + '</b>\n';
+    text += '  📞 تماس: ' + s.calls + ' | 🚗 بازدید: ' + s.visits;
+    if (s.sales)  text += ' | 💰 فروش: ' + s.sales;
+    if (done)     text += ' | ✅ انجام: ' + done;
+    text += '\n';
+  });
+
+  await sendMsg(chatId, text, { reply_markup: menuFor(sess) });
+}
+
+// ── 📨 Send message to expert (manager) ──────────────────────────────────
+async function handleSendMessage(chatId, sess) {
+  if (!isManagerRole(sess.role)) {
+    await sendMsg(chatId, '❌ این قابلیت فقط برای مدیران است.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  let users;
+  try {
+    const r = await query(`SELECT username, display_name, role FROM app_users WHERE active = true ORDER BY display_name`);
+    users = r.rows.filter(function(u){ return u.username !== sess.username; });
+  } catch(e) {
+    await sendMsg(chatId, '❌ خطا در دریافت لیست کاربران.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  if (!users.length) {
+    await sendMsg(chatId, '⚠️ کاربر دیگری یافت نشد.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  const rows = [];
+  for (let i = 0; i < users.length; i += 2) {
+    const row = [{ text: users[i].display_name || users[i].username, callback_data: 'msg_to:' + users[i].username }];
+    if (users[i+1]) row.push({ text: users[i+1].display_name || users[i+1].username, callback_data: 'msg_to:' + users[i+1].username });
+    rows.push(row);
+  }
+
+  await sendMsg(chatId, '📨 <b>ارسال پیام</b>\n\nگیرنده را انتخاب کنید:', {
+    reply_markup: { inline_keyboard: rows },
+  });
+}
+
+// ── Send message action ───────────────────────────────────────────────────
+async function doSendMessageToExpert(chatId, sess, recipient, text) {
+  try {
+    // Create CRM notification (will also push to Telegram via notifications.js hook)
+    const id = 'bot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    await query(
+      `INSERT INTO notifications (id, to_user, msg, center_key, at)
+       VALUES ($1, $2, $3, NULL, NOW())`,
+      [id, recipient, '📨 پیام از مدیر: ' + text]
+    );
+    // Also push directly (in case notifications route hook isn't reachable here)
+    await notifyUser(recipient, '📨 <b>پیام از مدیر (' + sess.name + '):</b>\n\n' + text);
+    await sendMsg(chatId, '✅ پیام به <b>' + recipient + '</b> ارسال شد.', { reply_markup: menuFor(sess) });
+  } catch(e) {
+    await sendMsg(chatId, '❌ خطا در ارسال پیام: ' + e.message, { reply_markup: menuFor(sess) });
+  }
+}
+
+// ── Mark task done from bot ───────────────────────────────────────────────
+async function doMarkTaskDone(chatId, sess, taskId) {
+  try {
+    const r = await query(
+      `UPDATE tasks SET done = true, done_at = NOW(), status = 'done'
+       WHERE id = $1 AND (owner = $2 OR created_by = $2) RETURNING title`,
+      [taskId, sess.username]
+    );
+    if (!r.rows.length) {
+      await sendMsg(chatId, '⚠️ وظیفه یافت نشد یا دسترسی ندارید.');
+      return;
+    }
+    await sendMsg(chatId, '✅ وظیفه «' + r.rows[0].title + '» انجام شد.', { reply_markup: menuFor(sess) });
+  } catch(e) {
+    await sendMsg(chatId, '❌ خطا: ' + e.message);
   }
 }
 
