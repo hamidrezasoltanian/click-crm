@@ -1,13 +1,17 @@
 import { createApp } from 'vue';
 import ProformaPanel from './components/ProformaPanel.vue';
+import NotificationsPanel from './components/NotificationsPanel.vue';
+import TasksPanel from './components/TasksPanel.vue';
 
-// Fetch current user role from API, then mount components.
-// This ensures the role is always up-to-date regardless of HTML static content.
 fetch('/api/auth/me')
   .then(r => r.ok ? r.json() : null)
   .then(user => {
-    const userRole = user?.role || '';
+    if (!user) return;
+    const userRole = user.role || '';
+    const username = user.username || '';
+    const isManager = userRole === 'مدیر' || userRole === 'سوپر ادمین';
 
+    // ProformaPanel
     const pfEl = document.getElementById('vue-proforma');
     if (pfEl) {
       const instance = createApp(ProformaPanel, {
@@ -19,10 +23,27 @@ fetch('/api/auth/me')
         onReject:  (pf: any) => (window as any)._pfReject?.(pf),
       });
       const mounted = instance.mount(pfEl);
-      // Expose refresh so vanilla switchTab can trigger a list reload
       (window as any)._pfVueRefresh = () => (mounted as any).refresh?.();
     }
+
+    // NotificationsPanel
+    const notifEl = document.getElementById('vue-notifications');
+    if (notifEl) {
+      const ni = createApp(NotificationsPanel, {
+        username,
+        onOpenCenter: (key: string) => (window as any).openProvince?.(key),
+      });
+      const nm = ni.mount(notifEl);
+      (window as any)._notifVueLoad = () => (nm as any).load?.();
+    }
+
+    // TasksPanel
+    const tasksEl = document.getElementById('vue-tasks');
+    if (tasksEl) {
+      const ti = createApp(TasksPanel, { username, isManager });
+      const tm = ti.mount(tasksEl);
+      (window as any)._tasksVueLoad = () => (tm as any).load?.();
+    }
   })
-  .catch(() => {
-    // Not logged in or server unreachable — components stay unmounted
-  });
+  .catch(() => {});
+
