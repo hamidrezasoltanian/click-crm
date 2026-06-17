@@ -1,0 +1,20 @@
+[Unit]
+Description=Click CRM Sales Portal
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=hamidreza
+WorkingDirectory=/home/hamidreza/Sales-Portal
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=click-crm
+Environment=NODE_ENV=production
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
