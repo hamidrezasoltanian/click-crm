@@ -2666,7 +2666,9 @@ function renderProvList(){
       if(e.followupDate&&e.followupDate<today2&&st!=='قرارداد بسته شد'&&st!=='غیرفعال')overdueCount++;
     });
     var centers=getProvCenters(p.id); // برای تعداد کل مراکز
-    var cls='prov-card'+(p.id==='tehran'?' tehran':'')+(isMyProv&&_globalOwnerFilter?' prov-mine':'')+(dimmed?' prov-dimmed':'');
+    var _heatRatio=centers.length>0?overdueCount/centers.length:0;
+    var _heatCls=contracted>0&&_heatRatio<0.1?' heat-green':_heatRatio>=0.3?' heat-red':_heatRatio>=0.1?' heat-yellow':'';
+    var cls='prov-card'+(p.id==='tehran'?' tehran':'')+(isMyProv&&_globalOwnerFilter?' prov-mine':'')+(dimmed?' prov-dimmed':'')+_heatCls;
     var style=dimmed?'opacity:.4;pointer-events:none':'';
     var ownerColor=owner?(isMyProv||!_globalOwnerFilter?'#0369a1':'#94a3b8'):'#cbd5e1';
     var cntLabel=String(centers.length);
@@ -2838,7 +2840,7 @@ function renderProvTable(){
       +'<td><select class="st-sel '+sc+'" onchange="onStatus(\''+rtype+'\',\''+r.id+'\',this)">'
         +STATUS_LIST.map(function(s,i){return'<option class="'+STATUS_CLS[i]+'"'+(s===st?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'
         +'<span class="st-print">'+st+'</span></td>'
-      +'<td><input type="text" class="'+fdCls+'" value="'+fd+'" readonly onclick="openJDP(this,function(v){setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);this.value=v;renderBanner();renderProvTable();}.bind(this))" style="cursor:pointer"></td>'
+      +'<td style="white-space:nowrap"><input type="text" class="'+fdCls+'" value="'+fd+'" readonly onclick="openJDP(this,function(v){setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);this.value=v;renderBanner();renderProvTable();}.bind(this))" style="cursor:pointer;max-width:82px">'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',1)" title="فردا">+۱</button>'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',3)" title="۳ روز">+۳</button>'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',7)" title="هفته">+۷</button></td>'
       +'<td><button class="note-btn'+(notes.length?' has':'')+'" onclick="openNotes(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">📝'+(notes.length?' '+notes.length:'')+'</button>'
         +'<input style="margin-right:4px;width:100px;border:1px solid var(--border-input);border-radius:4px;padding:2px 5px;font-size:10px;direction:rtl" placeholder="یادداشت سریع" onkeydown="if(event.key===\'Enter\'&&this.value.trim()){addNote(\''+rtype+'\',\''+r.id+'\',this.value,this);}">'
         +notePreview+'</td>'
@@ -12074,6 +12076,51 @@ function renderKPIPanel(){
     html+='<div style="background:'+alertBg+';border:1px solid '+alertBorder+';border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:'+alertColor+';font-weight:600">'      +'⚠️ هشدار: '+lowKPIs.length+' شاخص زیر ۵۰ هستند: <span style="font-weight:400">'+alertNames+'</span>'      +'</div>';
   }
 
+  // ── هفته‌به‌هفته + هشدار ۰ فعالیت
+  (function(){
+    var now=new Date();
+    var todayJ=todayStr();
+    var thisWeekStart=toJalali(new Date(now.getTime()-6*24*60*60*1000));
+    var lastWeekStart=toJalali(new Date(now.getTime()-13*24*60*60*1000));
+    var lastWeekEnd=toJalali(new Date(now.getTime()-7*24*60*60*1000));
+    function countInRange(log,user,s,e){
+      return (log||[]).filter(function(l){
+        var by=l.by||l.user;var at=l.at?l.at.slice(0,10):'';
+        var jd=at?toJalali(new Date(at)).replace(/-/g,'/'):'';
+        return (!user||by===user)&&jd>=s&&jd<=e;
+      }).length;
+    }
+    var thisW={calls:countInRange(DB.callLog,_kpiUser,thisWeekStart,todayJ),visits:countInRange(DB.visitLog,_kpiUser,thisWeekStart,todayJ)};
+    var lastW={calls:countInRange(DB.callLog,_kpiUser,lastWeekStart,lastWeekEnd),visits:countInRange(DB.visitLog,_kpiUser,lastWeekStart,lastWeekEnd)};
+    var totalThis=thisW.calls+thisW.visits;
+    var totalLast=lastW.calls+lastW.visits;
+    var diff=totalThis-totalLast;
+    var arrow=diff>0?'↑':'↓';var arrowClr=diff>0?'#16a34a':'#dc2626';
+    if(diff===0)arrow='→';if(diff===0)arrowClr='#6366f1';
+    html+='<div style="display:flex;gap:12px;align-items:center;background:var(--bg-raised);border-radius:10px;padding:10px 16px;margin-bottom:14px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;font-weight:700;color:var(--text-secondary)">📊 هفته‌به‌هفته</span>'
+      +'<span style="font-size:12px">📞 '+thisW.calls+(lastW.calls?' <span style="color:'+arrowClr+';font-weight:700">'+arrow+(Math.abs(thisW.calls-lastW.calls)||'')+'</span>':'')+' تماس</span>'
+      +'<span style="font-size:12px">🚗 '+thisW.visits+(lastW.visits?' <span style="color:'+arrowClr+';font-weight:700">'+arrow+(Math.abs(thisW.visits-lastW.visits)||'')+'</span>':'')+' بازدید</span>'
+      +'<span style="font-size:11px;color:var(--text-muted)">هفته گذشته: '+totalLast+' فعالیت</span>'
+      +'</div>';
+    // ─ هشدار ۰ فعالیت
+    if(totalThis===0&&_isManager()){
+      var zeroExperts=Object.keys(USERS).filter(function(u){
+        return (DB.callLog||[]).concat(DB.visitLog||[]).filter(function(l){
+          var by=l.by||l.user;var at=l.at?l.at.slice(0,10):'';
+          var jd=at?toJalali(new Date(at)).replace(/-/g,'/'):'';
+          return by===u&&jd>=thisWeekStart&&jd<=todayJ;
+        }).length===0;
+      });
+      if(zeroExperts.length){
+        html+='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#991b1b">'
+          +'⚠️ <b>'+zeroExperts.length+' کارشناس</b> این هفته هیچ فعالیتی ثبت نکرده‌اند: '
+          +zeroExperts.map(function(u){return USERS[u]||u;}).join('، ')
+          +'</div>';
+      }
+    }
+  })();
+
   // ── header
   html+='<div class="kpi-header-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px">'    +'<h2 style="margin:0;font-size:18px;color:var(--text-primary)">📊 عملکرد KPI</h2>'    +'<select onchange="_kpiUserChange(this.value)" style="padding:5px 10px;border:1px solid var(--border-input);border-radius:5px;background:var(--bg-input);color:var(--text-primary);font-family:inherit;font-size:12px">'+userOpts+'</select>'    +'<select onchange="_kpiMonth=this.value;renderKPIPanel()" style="padding:5px 10px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'+monthOpts+'</select>'    +'<div style="margin-right:auto;display:flex;gap:8px">'    +'<button style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:5px;font-size:11px;padding:5px 12px;cursor:pointer;font-weight:600" onclick="openTeamKPITargets()">🎯 تنظیم اهداف تیم</button>'    +(_isManager()?'<button style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;font-size:11px;padding:5px 12px;cursor:pointer;font-weight:600;margin-right:6px" onclick="openProvTargetsModal()">🗺 اهداف استانی</button>':'')    +'<button class="btn-primary" onclick="openKPILog(_kpiUser)" style="font-size:11px;padding:5px 12px">📝 ثبت فعالیت</button>'    +'<button style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;font-size:11px;padding:5px 12px;cursor:pointer;font-weight:600" onclick="exportKPIReport()">📥 دانلود گزارش</button>'    +'</div></div>';
 
@@ -15065,6 +15112,17 @@ function mtrLazyInit(){
 
 
 // ════════ IMPROVEMENT 1: Bulk Selection ════════
+function quickSetFd(rtype,rid,days){
+  var t=todayStr();var parts=t.split('/').map(Number);
+  var jy=parts[0],jm=parts[1],jd=parts[2];
+  var mdays=[31,31,31,31,31,31,30,30,30,30,30,29];
+  jd+=days;
+  while(jd>(mdays[jm-1]||30)){jd-=(mdays[jm-1]||30);jm++;if(jm>12){jm=1;jy++;}}
+  var nd=jy+'/'+p2(jm)+'/'+p2(jd);
+  setE(rtype,rid,'followupDate',nd);
+  renderBanner();renderProvTable();
+  showToast('📅 فالوآپ: '+nd,1800);
+}
 function toggleCenterSelect(cb,id){
   var rtype=cb.getAttribute('data-rtype');
   var key=rtype+'_'+id;
