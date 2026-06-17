@@ -172,6 +172,11 @@ function _saveDBNow(){
           var merged=Object.assign({},DB,d);
           merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
           merged.edits=Object.assign({},d.edits||{},DB.edits||{});
+          // Preserve local read=true for notifications on 409 retry
+          if(DB.notifications&&d.notifications){
+            var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
+            merged.notifications=(d.notifications||[]).map(function(n){return _lr409[n.id]?Object.assign({},n,{read:true}):n;});
+          }
           delete merged._serverTs;delete merged._clientTs;
           Object.keys(merged).forEach(function(k){DB[k]=merged[k];});
           // Retry save with updated timestamp
@@ -6177,7 +6182,6 @@ function toggleNotifPanel(){
       var hasMultiCk=n.centerKeys&&n.centerKeys.length>1;
       var ckParts=hasCk?n.centerKey.split('_'):[];
       var ckRtype=ckParts[0]||'';var ckRid=ckParts.slice(1).join('_');
-      var cName=hasCk?_clGetName(n.centerKey):'';
       return '<div class="notif-item'+(n.read?'':' unread')+(n.ack?' notif-acked':'')+'" data-nid="'+nid+'">'
         +'<div class="notif-item-msg">'+esc(n.message)+'</div>'
         +((hasCk||hasMultiCk)?'<div class="notif-item-center">📍 <span class="notif-center-link" onclick="goToNotifCenter(\''+nid+'\')">'+( hasMultiCk?(n.centerKeys.length+' مرکز'):esc(cName))+'</span></div>':'')
@@ -6224,7 +6228,8 @@ function goToNotifCenter(nid){
   var keys=n.centerKeys&&n.centerKeys.length?n.centerKeys:[n.centerKey];
   if(keys.length===1){
     var parts=keys[0].split('_');var rtype=parts[0];var rid=parts.slice(1).join('_');
-    // Open center modal directly — no tab switch needed, modal works on any tab
+    // Build PC cache so openCenterModal can find any province center
+    if(typeof _buildPCCache==='function')_buildPCCache();
     setTimeout(function(){openCenterModal(rtype,rid);},100);
     return;
   }
