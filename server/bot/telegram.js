@@ -1,10 +1,15 @@
 'use strict';
 
 // ════════════════════════════════════════════════════════════════
-// TELEGRAM BOT — آتنا زیست درمان
-// Features: proforma approval, inventory check, QR product scan
-// Auth: /start → username → password (verified against CRM DB)
-// Polling mode (no webhook needed)
+// TELEGRAM BOT — Click CRM
+// Features:
+//   • proforma approve/reject
+//   • inventory check + QR scan
+//   • today's schedule (SQL week_entries)
+//   • mark entry done + call note
+//   • tasks list
+//   • 🌅 daily morning report at 08:00 to managers
+//   • 🔔 push CRM notifications to Telegram
 // ════════════════════════════════════════════════════════════════
 
 const https  = require('https');
@@ -15,16 +20,16 @@ const { query } = require('../db');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
-// ── In-memory sessions: chatId → { username, name, role, state, pendingUser, pfId } ──
-const sessions = {};
-
-// ── Conversation states ───────────────────────────────────────────────────
+// ── States ────────────────────────────────────────────────────────────────
 const ST = {
-  IDLE:           'idle',
-  AWAIT_USERNAME: 'await_username',
-  AWAIT_PASSWORD: 'await_password',
-  AWAIT_REJECT:   'await_reject',
+  IDLE:            'idle',
+  AWAIT_USERNAME:  'await_username',
+  AWAIT_PASSWORD:  'await_password',
+  AWAIT_REJECT:    'await_reject',
+  AWAIT_CALL_NOTE: 'await_call_note',
 };
+
+const sessions = {};
 
 // ── Telegram API helpers ──────────────────────────────────────────────────
 function tgCall(method, body) {
@@ -59,7 +64,6 @@ function answerCallback(cbId, text) {
   return tgCall('answerCallbackQuery', { callback_query_id: cbId, text: text || '' });
 }
 
-// Download file from Telegram CDN and return Buffer
 function downloadFile(fileId) {
   return tgCall('getFile', { file_id: fileId }).then(function(r) {
     if (!r.ok) throw new Error('getFile failed');
@@ -74,7 +78,7 @@ function downloadFile(fileId) {
   });
 }
 
-// ── Session persistence (still in app_data blob — lightweight) ────────────
+// ── Session persistence ───────────────────────────────────────────────────
 async function loadBotSessions() {
   const r = await query(`SELECT value FROM app_data WHERE key = 'bot_sessions'`);
   return r.rows.length ? r.rows[0].value : {};
@@ -89,7 +93,16 @@ async function saveBotSessions(map) {
   );
 }
 
-// Verify CRM credentials — returns user row or null
+async function persistSession(chatId, remove) {
+  try {
+    const stored = await loadBotSessions();
+    if (remove) delete stored[chatId];
+    else stored[chatId] = sessions[chatId];
+    await saveBotSessions(stored);
+  } catch(e) {}
+}
+
+// ── Auth helper ───────────────────────────────────────────────────────────
 async function verifyCRM(username, password) {
   try {
     const r = await query(
@@ -98,88 +111,94 @@ async function verifyCRM(username, password) {
     );
     if (!r.rows.length) return null;
     const u = r.rows[0];
-    const ok = await bcrypt.compare(password, u.password_hash);
-    return ok ? u : null;
+    return (await bcrypt.compare(password, u.password_hash)) ? u : null;
   } catch(e) { return null; }
 }
 
-// ── Persian number formatter ──────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
 function fmtN(n) { return Number(n || 0).toLocaleString('fa-IR'); }
+function isManagerRole(role) { return ['مدیر', 'سوپر ادمین'].includes(role); }
 
-// ── Status labels ─────────────────────────────────────────────────────────
 const PF_LABELS = { draft:'پیش‌نویس', sent:'ارسال شده', approved:'✅ تأیید', rejected:'❌ رد', cancelled:'لغو' };
 
-// ── Main menu keyboards ───────────────────────────────────────────────────
+// Minimal Gregorian → Jalali
+function toJalali(date) {
+  const gy = date.getFullYear(), gm = date.getMonth() + 1, gd = date.getDate();
+  const g_d_no = 365*gy + Math.floor((gy+3)/4) - Math.floor((gy+99)/100) + Math.floor((gy+399)/400);
+  const j_d_no = g_d_no - 79;
+  const j_np   = Math.floor(j_d_no / 12053);
+  let jy = 979 + 33*j_np, jd = j_d_no % 12053;
+  jy += 4 * Math.floor(jd / 1461);
+  jd %= 1461;
+  if (jd >= 366) { jy += Math.floor((jd-1)/365); jd = (jd-1)%365; }
+  const jm_days = [31,31,31,31,31,31,30,30,30,30,30,29];
+  let jm = 0;
+  for (let i = 0; i < 12; i++) {
+    if (jd < jm_days[i]) { jm = i+1; jd++; break; }
+    jd -= jm_days[i];
+  }
+  return jy + '/' + String(jm).padStart(2,'0') + '/' + String(jd).padStart(2,'0');
+}
+
+// ── Keyboards ─────────────────────────────────────────────────────────────
 const MENU_KB = {
   keyboard: [
-    [{ text: '☀️ برنامه امروز' }, { text: '📄 پیشفاکتورها' }],
-    [{ text: '🔍 اسکن QR کالا' }, { text: '❓ راهنما' }],
+    [{ text: '☀️ برنامه امروز' }, { text: '📋 وظایف من' }],
+    [{ text: '📄 پیشفاکتورها' }, { text: '🔍 اسکن QR' }],
+    [{ text: '❓ راهنما' }],
   ],
   resize_keyboard: true,
 };
 
 const MENU_KB_MANAGER = {
   keyboard: [
-    [{ text: '☀️ برنامه امروز' }, { text: '📄 پیشفاکتورها' }],
-    [{ text: '📦 موجودی انبار' }, { text: '🔍 اسکن QR کالا' }],
-    [{ text: '❓ راهنما' }],
+    [{ text: '☀️ برنامه امروز' }, { text: '📋 وظایف من' }],
+    [{ text: '📄 پیشفاکتورها' }, { text: '📦 موجودی انبار' }],
+    [{ text: '🔍 اسکن QR' }, { text: '❓ راهنما' }],
   ],
   resize_keyboard: true,
 };
 
+function menuFor(sess) { return isManagerRole(sess.role) ? MENU_KB_MANAGER : MENU_KB; }
+
 // ── Update handler ────────────────────────────────────────────────────────
 async function handleUpdate(upd) {
   try {
-    if (upd.callback_query) {
-      await handleCallback(upd.callback_query);
-      return;
-    }
+    if (upd.callback_query) { await handleCallback(upd.callback_query); return; }
     const msg = upd.message;
     if (!msg) return;
     const chatId = msg.chat.id;
     const text   = (msg.text || '').trim();
 
-    // Restore session from DB on first contact
+    // Restore session
     if (!sessions[chatId]) {
       const stored = await loadBotSessions();
-      if (stored[chatId]) {
-        sessions[chatId] = stored[chatId];
-        // Reset any dangling auth state (e.g. server restart mid-login)
-        if (sessions[chatId].state !== ST.IDLE) {
-          sessions[chatId].state = ST.AWAIT_USERNAME;
-          delete sessions[chatId].pendingUser;
-        }
-      } else {
-        sessions[chatId] = { state: ST.AWAIT_USERNAME };
-      }
+      sessions[chatId] = stored[chatId] || { state: ST.AWAIT_USERNAME };
+      const s = sessions[chatId];
+      if (s.state !== ST.IDLE) { s.state = ST.AWAIT_USERNAME; delete s.pendingUser; }
     }
 
     const sess = sessions[chatId];
 
-    // ── QR photo ──────────────────────────────────────────────────────────
-    if (msg.photo && sess.state === ST.IDLE) {
-      await handlePhoto(chatId, msg);
-      return;
-    }
+    // QR photo
+    if (msg.photo && sess.state === ST.IDLE) { await handlePhoto(chatId, msg); return; }
 
-    // ── Handle /start and /logout BEFORE state machine ───────────────────
+    // /start / /help / help button
     if (text === '/start' || text === '/help' || text === '❓ راهنما') {
       if (!sess.username) {
         sess.state = ST.AWAIT_USERNAME;
-        await sendMsg(chatId,
-          '🔐 <b>ورود به سیستم</b>\n\nلطفاً نام کاربری CRM خود را وارد کنید:\n(مثال: <code>Hamidreza.soltanian</code>)'
-        );
+        await sendMsg(chatId, '🔐 <b>ورود به سیستم</b>\n\nنام کاربری CRM خود را وارد کنید:\n<i>مثال: Hamidreza.soltanian</i>');
       } else {
-        const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
         await sendMsg(chatId,
-          '👋 سلام <b>' + sess.name + '</b>\n\n' +
-          '📋 <b>دستورات موجود:</b>\n' +
-          '📄 پیشفاکتورها\n' +
-          '📦 موجودی انبار\n' +
-          '☀️ برنامه امروز\n' +
-          '🔍 اسکن QR کالا\n' +
-          '/logout — خروج از حساب',
-          { reply_markup: isManager ? MENU_KB_MANAGER : MENU_KB }
+          '👋 سلام <b>' + sess.name + '</b> | ' + sess.role + (isManagerRole(sess.role) ? ' 👑' : '') + '\n\n' +
+          '📋 دستورات:\n' +
+          '☀️ برنامه امروز — مراکز برنامه‌ریزی شده\n' +
+          '📋 وظایف من — وظایف باز\n' +
+          '📄 پیشفاکتورها — لیست و تأیید\n' +
+          '📦 موجودی انبار — وضعیت کالاها\n' +
+          '🔍 اسکن QR — اطلاعات لات/کالا\n' +
+          '/logout — خروج',
+          { reply_markup: menuFor(sess) }
         );
       }
       return;
@@ -192,15 +211,15 @@ async function handleUpdate(upd) {
       return;
     }
 
-    // ── State machine ─────────────────────────────────────────────────────
+    // State machine
     if (sess.state === ST.AWAIT_USERNAME) {
       if (!text || text.startsWith('/')) {
-        await sendMsg(chatId, '🔐 <b>ورود به سیستم</b>\n\nلطفاً نام کاربری CRM خود را وارد کنید:\n(مثال: <code>Hamidreza.soltanian</code>)');
+        await sendMsg(chatId, '🔐 نام کاربری CRM خود را وارد کنید:');
         return;
       }
       sess.pendingUser = text;
       sess.state = ST.AWAIT_PASSWORD;
-      await sendMsg(chatId, '🔑 رمز عبور خود را وارد کنید:');
+      await sendMsg(chatId, '🔑 رمز عبور:');
       return;
     }
 
@@ -209,21 +228,16 @@ async function handleUpdate(upd) {
       if (!user) {
         sess.state = ST.AWAIT_USERNAME;
         delete sess.pendingUser;
-        await sendMsg(chatId, '❌ نام کاربری یا رمز عبور اشتباه است.\n\nدوباره نام کاربری خود را وارد کنید:');
+        await sendMsg(chatId, '❌ نام کاربری یا رمز اشتباه است.\n\nدوباره نام کاربری را وارد کنید:');
         return;
       }
-      sess.username = user.username;
-      sess.name     = user.display_name;
-      sess.role     = user.role;
-      sess.state    = ST.IDLE;
+      Object.assign(sess, { username: user.username, name: user.display_name, role: user.role, state: ST.IDLE });
       delete sess.pendingUser;
       await persistSession(chatId);
-      const isManagerNew = ['مدیر', 'سوپر ادمین'].includes(user.role);
       await sendMsg(chatId,
         '✅ <b>خوش آمدید، ' + user.display_name + '!</b>\n' +
-        'نقش: ' + user.role + (isManagerNew ? ' 👑' : '') + '\n\n' +
-        'از منو زیر انتخاب کنید:',
-        { reply_markup: isManagerNew ? MENU_KB_MANAGER : MENU_KB }
+        'نقش: ' + user.role + (isManagerRole(user.role) ? ' 👑' : ''),
+        { reply_markup: menuFor(sess) }
       );
       return;
     }
@@ -236,80 +250,199 @@ async function handleUpdate(upd) {
       return;
     }
 
-    // ── Require login for commands below ──────────────────────────────────
+    if (sess.state === ST.AWAIT_CALL_NOTE) {
+      const note = (text === '/skip' || text === '-') ? '' : text;
+      const key  = sess.pendingWeKey;
+      const result = sess.pendingWeResult || '';
+      delete sess.pendingWeKey;
+      delete sess.pendingWeResult;
+      sess.state = ST.IDLE;
+      await markEntryDone(chatId, sess, key, result, note);
+      return;
+    }
+
+    // Require login for commands below
     if (!sess.username) {
       sess.state = ST.AWAIT_USERNAME;
-      await sendMsg(chatId, '🔐 ابتدا وارد شوید. نام کاربری CRM خود را بنویسید:');
+      await sendMsg(chatId, '🔐 ابتدا وارد شوید. نام کاربری CRM:');
       return;
     }
 
-    if (text === '📄 پیشفاکتورها' || text === '/proformas') {
-      await handleProformas(chatId, sess);
-      return;
-    }
-
-    if (text === '📦 موجودی انبار' || text === '/inventory') {
-      await handleInventory(chatId);
-      return;
-    }
-
-    if (text === '☀️ برنامه امروز' || text === '/today') {
-      await handleTodaySchedule(chatId, sess);
-      return;
-    }
-
-    if (text === '🔍 اسکن QR کالا' || text === '/scan') {
+    if (text === '☀️ برنامه امروز' || text === '/today')    { await handleTodaySchedule(chatId, sess); return; }
+    if (text === '📋 وظایف من'    || text === '/tasks')     { await handleTasks(chatId, sess); return; }
+    if (text === '📄 پیشفاکتورها' || text === '/proformas') { await handleProformas(chatId, sess); return; }
+    if (text === '📦 موجودی انبار'|| text === '/inventory') { await handleInventory(chatId); return; }
+    if (text === '🔍 اسکن QR'     || text === '/scan') {
       await sendMsg(chatId, '📸 عکس QR کد کالا را بفرستید:', { reply_markup: { force_reply: true } });
       return;
     }
 
-    const isManagerCmd = ['مدیر', 'سوپر ادمین'].includes(sess.role);
-    await sendMsg(chatId, 'از منو زیر انتخاب کنید:', { reply_markup: isManagerCmd ? MENU_KB_MANAGER : MENU_KB });
+    await sendMsg(chatId, 'از منو زیر انتخاب کنید:', { reply_markup: menuFor(sess) });
 
   } catch(e) {
     console.error('[bot] handleUpdate error:', e.message);
   }
 }
 
-// ── Persist session to DB ─────────────────────────────────────────────────
-async function persistSession(chatId, remove) {
-  try {
-    const stored = await loadBotSessions();
-    if (remove) delete stored[chatId];
-    else stored[chatId] = sessions[chatId];
-    await saveBotSessions(stored);
-  } catch(e) {}
-}
-
-// ── Proformas handler — reads from SQL ────────────────────────────────────
-async function handleProformas(chatId, sess) {
-  const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
+// ── ☀️ Today's schedule (reads from week_entries SQL table) ───────────────
+async function handleTodaySchedule(chatId, sess) {
+  const todayStr = toJalali(new Date());
+  const isMgr = isManagerRole(sess.role);
 
   let rows;
-  if (isManager) {
-    const r = await query(
-      `SELECT * FROM proformas WHERE status = 'sent' ORDER BY sent_at DESC LIMIT 10`
-    );
-    rows = r.rows;
-  } else {
-    const r = await query(
-      `SELECT * FROM proformas WHERE created_by = $1
-       AND status IN ('draft','sent','approved','rejected')
-       ORDER BY created_at DESC LIMIT 10`,
-      [sess.username]
-    );
-    rows = r.rows;
-  }
-
-  if (!rows.length) {
-    const msg = isManager
-      ? '✅ هیچ پیشفاکتور در انتظار تأییدی وجود ندارد.'
-      : '📄 پیشفاکتوری ثبت نشده است.';
-    await sendMsg(chatId, msg, { reply_markup: MENU_KB });
+  try {
+    if (isMgr) {
+      const r = await query(
+        `SELECT key, value FROM week_entries WHERE value->>'scheduledDate' = $1 ORDER BY updated_at`,
+        [todayStr]
+      );
+      rows = r.rows;
+    } else {
+      const r = await query(
+        `SELECT key, value FROM week_entries
+         WHERE value->>'scheduledDate' = $1 AND value->>'addedBy' = $2
+         ORDER BY updated_at`,
+        [todayStr, sess.username]
+      );
+      rows = r.rows;
+    }
+  } catch(e) {
+    await sendMsg(chatId, '❌ خطا در دریافت برنامه:\n' + e.message, { reply_markup: menuFor(sess) });
     return;
   }
 
-  for (const pf of rows) {
+  if (!rows.length) {
+    await sendMsg(chatId,
+      '☀️ <b>برنامه امروز — ' + todayStr + '</b>\n\nهیچ مرکزی برای امروز برنامه‌ریزی نشده.',
+      { reply_markup: menuFor(sess) }
+    );
+    return;
+  }
+
+  // Store keys in session for callback reference (avoids 64-byte callback_data limit)
+  sess.todayEntries = rows.map(function(r) { return r.key; });
+
+  const doneCount = rows.filter(function(r) { return r.value.done; }).length;
+  const actionIcon = { call: '📞', visit: '🚗' };
+
+  let text = '☀️ <b>برنامه امروز — ' + todayStr + '</b>\n';
+  text += '✅ ' + doneCount + ' از ' + rows.length + ' انجام شده\n\n';
+
+  const inlineRows = [];
+  rows.forEach(function(r, idx) {
+    const we   = r.value;
+    const act  = actionIcon[we.actionType] || '📋';
+    const name = (we.centerName || we.rid || '—').slice(0, 25);
+    const ownerTag = isMgr && we.addedBy ? ' <i>(' + we.addedBy + ')</i>' : '';
+    text += (idx + 1) + '. ' + (we.done ? '✅' : '⬜') + ' ' + act + ' ' + name + ownerTag + '\n';
+    if (!we.done) {
+      inlineRows.push([{
+        text: '✅ ثبت نتیجه: ' + name.slice(0, 18),
+        callback_data: 'we_done:' + idx,
+      }]);
+    }
+  });
+
+  const opts = inlineRows.length
+    ? { reply_markup: { inline_keyboard: inlineRows } }
+    : { reply_markup: menuFor(sess) };
+  await sendMsg(chatId, text, opts);
+}
+
+// ── Mark entry done ───────────────────────────────────────────────────────
+async function markEntryDone(chatId, sess, key, result, note) {
+  try {
+    const todayStr = toJalali(new Date());
+    const update = { done: true, doneDate: todayStr };
+    if (result) update.callResult = result;
+    if (note)   update.callNote   = note;
+
+    await query(
+      `UPDATE week_entries SET value = value || $2::jsonb, updated_at = NOW(), updated_by = $3 WHERE key = $1`,
+      [key, JSON.stringify(update), sess.username]
+    );
+
+    const resultLabel = { ok: '✅ موفق', followup: '🔄 پیگیری', fail: '❌ ناموفق' };
+    let reply = '✅ <b>ثبت شد!</b>\n';
+    if (result) reply += '📊 نتیجه: ' + (resultLabel[result] || result) + '\n';
+    if (note)   reply += '📝 یادداشت: ' + note;
+
+    await sendMsg(chatId, reply, { reply_markup: menuFor(sess) });
+  } catch(e) {
+    await sendMsg(chatId, '❌ خطا در ثبت: ' + e.message, { reply_markup: menuFor(sess) });
+  }
+}
+
+// ── 📋 Tasks ──────────────────────────────────────────────────────────────
+async function handleTasks(chatId, sess) {
+  const isMgr = isManagerRole(sess.role);
+  const todayStr = toJalali(new Date());
+
+  let rows;
+  try {
+    const r = await query(
+      `SELECT id, title, owner, due_date, priority, status, done
+       FROM tasks
+       WHERE (owner = $1 OR created_by = $1) AND done = false
+       ORDER BY
+         CASE WHEN due_date IS NOT NULL AND due_date < $2 THEN 0 ELSE 1 END,
+         due_date ASC NULLS LAST,
+         priority DESC
+       LIMIT 20`,
+      [sess.username, todayStr]
+    );
+    rows = r.rows;
+  } catch(e) {
+    await sendMsg(chatId, '⚠️ خطا در دریافت وظایف.', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  if (!rows.length) {
+    await sendMsg(chatId, '📋 <b>وظایف من</b>\n\n✅ هیچ وظیفه بازی ندارید!', { reply_markup: menuFor(sess) });
+    return;
+  }
+
+  const priIcon = { 3: '🔴', 2: '🟡', 1: '🔵' };
+
+  const lines = rows.map(function(t, i) {
+    const pri = priIcon[t.priority] || '⚪';
+    const ownerTag = (isMgr && t.owner && t.owner !== sess.username) ? ' <i>(' + t.owner + ')</i>' : '';
+    let dueTag = '';
+    if (t.due_date) {
+      dueTag = t.due_date < todayStr ? ' ⚠️<b>معوق</b>' : ' 📅' + t.due_date;
+    }
+    return (i+1) + '. ' + pri + ' ' + (t.title || '—') + ownerTag + dueTag;
+  });
+
+  const overdueCount = rows.filter(function(t){ return t.due_date && t.due_date < todayStr; }).length;
+  let header = '📋 <b>وظایف من</b> — ' + rows.length + ' وظیفه باز';
+  if (overdueCount > 0) header += ' | ⚠️ ' + overdueCount + ' معوق';
+
+  await sendMsg(chatId, header + '\n\n' + lines.join('\n'), { reply_markup: menuFor(sess) });
+}
+
+// ── 📄 Proformas ──────────────────────────────────────────────────────────
+async function handleProformas(chatId, sess) {
+  const isMgr = isManagerRole(sess.role);
+
+  const r = isMgr
+    ? await query(`SELECT * FROM proformas WHERE status = 'sent' ORDER BY sent_at DESC LIMIT 10`)
+    : await query(
+        `SELECT * FROM proformas WHERE created_by = $1
+         AND status IN ('draft','sent','approved','rejected')
+         ORDER BY created_at DESC LIMIT 10`,
+        [sess.username]
+      );
+
+  if (!r.rows.length) {
+    await sendMsg(chatId,
+      isMgr ? '✅ پیشفاکتور در انتظار تأییدی وجود ندارد.' : '📄 پیشفاکتوری ثبت نشده است.',
+      { reply_markup: menuFor(sess) }
+    );
+    return;
+  }
+
+  for (const pf of r.rows) {
     const items    = pf.items || [];
     const itemList = items.slice(0, 3).map(function(i){ return '  • ' + i.name + ' × ' + i.qty; }).join('\n');
     const moreItems = items.length > 3 ? '\n  و ' + (items.length - 3) + ' ردیف دیگر...' : '';
@@ -322,16 +455,16 @@ async function handleProformas(chatId, sess) {
       '🔖 وضعیت: ' + (PF_LABELS[pf.status] || pf.status) + '\n' +
       '📦 کالاها:\n' + itemList + moreItems;
 
-    if (pf.note) text += '\n📝 ' + pf.note;
+    if (pf.note)         text += '\n📝 ' + pf.note;
     if (pf.manager_note) text += '\n👑 یادداشت مدیر: ' + pf.manager_note;
 
     let inlineKb;
-    if (isManager && pf.status === 'sent') {
+    if (isMgr && pf.status === 'sent') {
       inlineKb = { inline_keyboard: [[
         { text: '✅ تأیید', callback_data: 'pf_approve:' + pf.id },
         { text: '❌ رد',    callback_data: 'pf_reject:'  + pf.id },
       ]] };
-    } else if (!isManager && pf.status === 'draft' && pf.created_by === sess.username) {
+    } else if (!isMgr && pf.status === 'draft' && pf.created_by === sess.username) {
       inlineKb = { inline_keyboard: [[
         { text: '📤 ارسال برای تأیید', callback_data: 'pf_send:' + pf.id },
       ]] };
@@ -341,17 +474,11 @@ async function handleProformas(chatId, sess) {
   }
 }
 
-// ── Inventory handler — SQL aggregate ────────────────────────────────────
+// ── 📦 Inventory ──────────────────────────────────────────────────────────
 async function handleInventory(chatId) {
   const r = await query(`
-    SELECT
-      p.id,
-      p.name,
-      p.full_name,
-      p.unit,
-      p.reorder_point,
-      COALESCE(SUM(l.qty), 0)::int         AS total_qty,
-      MIN(l.expiry)                          AS nearest_expiry,
+    SELECT p.id, p.name, p.full_name, p.unit, p.reorder_point,
+      COALESCE(SUM(l.qty), 0)::int AS total_qty,
       BOOL_OR(l.expiry < NOW() + INTERVAL '90 days' AND l.expiry IS NOT NULL) AS expiry_soon
     FROM wms_products p
     LEFT JOIN wms_lots l ON l.product_id = p.id AND l.qty > 0
@@ -361,23 +488,23 @@ async function handleInventory(chatId) {
   `);
 
   if (!r.rows.length) {
-    await sendMsg(chatId, '⚠️ هیچ کالایی در انبار ثبت نشده است.\nابتدا از طریق پنل وب، WMS را راه‌اندازی کنید.', { reply_markup: MENU_KB });
+    await sendMsg(chatId, '⚠️ هیچ کالایی در WMS ثبت نشده است.', { reply_markup: MENU_KB });
     return;
   }
 
   const lines = r.rows.map(function(p) {
-    const qty     = p.total_qty;
-    const reorder = p.reorder_point || 10;
-    let icon = qty === 0 ? '🔴' : qty <= reorder ? '🟡' : '🟢';
-    const expWarn = p.expiry_soon ? ' ⚠️انقضا' : '';
-    const label   = p.full_name || p.name;
-    return icon + ' <b>' + label + '</b>: ' + fmtN(qty) + ' ' + (p.unit || 'عدد') + expWarn;
+    const qty  = p.total_qty;
+    const low  = p.reorder_point || 10;
+    const icon = qty === 0 ? '🔴' : qty <= low ? '🟡' : '🟢';
+    return icon + ' <b>' + (p.full_name || p.name) + '</b>: ' + fmtN(qty) + ' ' + (p.unit || 'عدد') +
+      (p.expiry_soon ? ' ⚠️انقضا' : '');
   });
 
-  const text = '📦 <b>موجودی انبار</b>\n\n' + lines.join('\n') +
-    '\n\n🟢 کافی  🟡 زیر حد سفارش  🔴 اتمام/بحرانی';
-
-  await sendMsg(chatId, text, { reply_markup: MENU_KB });
+  await sendMsg(chatId,
+    '📦 <b>موجودی انبار</b>\n\n' + lines.join('\n') +
+    '\n\n🟢 کافی  🟡 زیر حد سفارش  🔴 اتمام',
+    { reply_markup: MENU_KB }
+  );
 }
 
 // ── Callback handler ──────────────────────────────────────────────────────
@@ -394,87 +521,103 @@ async function handleCallback(cb) {
     return;
   }
 
-  const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
+  const isMgr = isManagerRole(sess.role);
 
+  // ── Proforma callbacks ─────────────────────────────────────────────────
   if (data.startsWith('pf_approve:')) {
-    if (!isManager) { await sendMsg(chatId, '❌ فقط مدیر می‌تواند تأیید کند.'); return; }
-    await doApprovePf(chatId, msgId, data.split(':')[1], sess);
+    if (!isMgr) { await sendMsg(chatId, '❌ فقط مدیر می‌تواند تأیید کند.'); return; }
+    await doApprovePf(chatId, msgId, data.slice(11), sess);
     return;
   }
-
   if (data.startsWith('pf_reject:')) {
-    if (!isManager) { await sendMsg(chatId, '❌ فقط مدیر می‌تواند رد کند.'); return; }
+    if (!isMgr) { await sendMsg(chatId, '❌ فقط مدیر می‌تواند رد کند.'); return; }
     sess.state = ST.AWAIT_REJECT;
-    sess.pfId  = data.split(':')[1];
-    await sendMsg(chatId, '✏️ دلیل رد پیشفاکتور را بنویسید (یا <code>-</code> برای بدون دلیل):');
+    sess.pfId  = data.slice(10);
+    await sendMsg(chatId, '✏️ دلیل رد را بنویسید (یا <code>-</code> برای بدون دلیل):');
+    return;
+  }
+  if (data.startsWith('pf_send:')) {
+    await doSendPf(chatId, msgId, data.slice(8), sess);
     return;
   }
 
-  if (data.startsWith('pf_send:')) {
-    await doSendPf(chatId, msgId, data.split(':')[1], sess);
+  // ── Week entry callbacks ───────────────────────────────────────────────
+  if (data.startsWith('we_done:')) {
+    const idx = parseInt(data.slice(8));
+    const key = (sess.todayEntries || [])[idx];
+    if (!key) { await sendMsg(chatId, '❌ برنامه یافت نشد. دوباره ☀️ برنامه امروز را باز کنید.'); return; }
+    sess.pendingWeKey = key;
+    await sendMsg(chatId, '📊 نتیجه تماس/بازدید را انتخاب کنید:', {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '✅ موفق',    callback_data: 'we_result:' + idx + ':ok' },
+          { text: '🔄 پیگیری', callback_data: 'we_result:' + idx + ':followup' },
+          { text: '❌ ناموفق', callback_data: 'we_result:' + idx + ':fail' },
+        ]],
+      },
+    });
+    return;
+  }
+
+  if (data.startsWith('we_result:')) {
+    const parts  = data.split(':');
+    const idx    = parseInt(parts[1]);
+    const result = parts[2];
+    const key    = (sess.todayEntries || [])[idx];
+    if (!key) { await sendMsg(chatId, '❌ برنامه یافت نشد.'); return; }
+    sess.pendingWeKey    = key;
+    sess.pendingWeResult = result;
+    sess.state = ST.AWAIT_CALL_NOTE;
+    const label = { ok: 'موفق ✅', followup: 'پیگیری 🔄', fail: 'ناموفق ❌' };
+    await answerCallback(cb.id, label[result] || '');
+    await sendMsg(chatId, '✏️ یادداشت (یا <code>/skip</code> بدون یادداشت):');
     return;
   }
 }
 
-// ── Proforma actions — all SQL ────────────────────────────────────────────
+// ── Proforma actions ──────────────────────────────────────────────────────
 async function doApprovePf(chatId, msgId, pfId, sess) {
   const r = await query(
-    `UPDATE proformas
-     SET status='approved', responded_at=NOW(), responded_by=$2, updated_at=NOW()
-     WHERE id=$1 AND status='sent'
-     RETURNING *`,
+    `UPDATE proformas SET status='approved', responded_at=NOW(), responded_by=$2, updated_at=NOW()
+     WHERE id=$1 AND status='sent' RETURNING *`,
     [pfId, sess.username]
   );
-  if (!r.rows.length) {
-    await sendMsg(chatId, '⚠️ این پیشفاکتور قابل تأیید نیست یا یافت نشد.');
-    return;
-  }
+  if (!r.rows.length) { await sendMsg(chatId, '⚠️ این پیشفاکتور قابل تأیید نیست.'); return; }
   const pf = r.rows[0];
   await editMsg(chatId, msgId,
     '✅ <b>پیشفاکتور ' + pf.no + ' تأیید شد.</b>\n' +
     '👤 مشتری: ' + (pf.center_name || '—') + '\n' +
     '💰 مبلغ: ' + fmtN(pf.total) + ' ﷼\n' +
-    '👑 تأیید توسط: ' + sess.name
+    '👑 تأیید: ' + sess.name
   );
-  await notifyCreator(pf.created_by, '✅ پیشفاکتور ' + pf.no + ' توسط ' + sess.name + ' تأیید شد.');
+  await notifyUser(pf.created_by, '✅ پیشفاکتور ' + pf.no + ' توسط ' + sess.name + ' تأیید شد.');
 }
 
 async function doRejectPf(chatId, pfId, note, sess) {
   const managerNote = (note === '-' ? '' : note);
   const r = await query(
-    `UPDATE proformas
-     SET status='rejected', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW()
-     WHERE id=$1 AND status='sent'
-     RETURNING *`,
+    `UPDATE proformas SET status='rejected', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW()
+     WHERE id=$1 AND status='sent' RETURNING *`,
     [pfId, sess.username, managerNote]
   );
-  if (!r.rows.length) {
-    await sendMsg(chatId, '⚠️ این پیشفاکتور قابل رد نیست یا یافت نشد.', { reply_markup: MENU_KB });
-    return;
-  }
+  if (!r.rows.length) { await sendMsg(chatId, '⚠️ این پیشفاکتور قابل رد نیست.', { reply_markup: menuFor(sess) }); return; }
   const pf = r.rows[0];
   await sendMsg(chatId,
-    '❌ <b>پیشفاکتور ' + pf.no + ' رد شد.</b>\n' +
-    (managerNote ? '📝 دلیل: ' + managerNote : ''),
-    { reply_markup: MENU_KB }
+    '❌ <b>پیشفاکتور ' + pf.no + ' رد شد.</b>' + (managerNote ? '\n📝 دلیل: ' + managerNote : ''),
+    { reply_markup: menuFor(sess) }
   );
-  await notifyCreator(pf.created_by,
+  await notifyUser(pf.created_by,
     '❌ پیشفاکتور ' + pf.no + ' رد شد.' + (managerNote ? '\nدلیل: ' + managerNote : '')
   );
 }
 
 async function doSendPf(chatId, msgId, pfId, sess) {
   const r = await query(
-    `UPDATE proformas
-     SET status='sent', sent_at=NOW(), updated_at=NOW()
-     WHERE id=$1 AND status='draft' AND created_by=$2
-     RETURNING *`,
+    `UPDATE proformas SET status='sent', sent_at=NOW(), updated_at=NOW()
+     WHERE id=$1 AND status='draft' AND created_by=$2 RETURNING *`,
     [pfId, sess.username]
   );
-  if (!r.rows.length) {
-    await sendMsg(chatId, '⚠️ این پیشفاکتور قبلاً ارسال شده یا یافت نشد.');
-    return;
-  }
+  if (!r.rows.length) { await sendMsg(chatId, '⚠️ این پیشفاکتور قبلاً ارسال شده.'); return; }
   const pf = r.rows[0];
   await editMsg(chatId, msgId,
     '📤 <b>پیشفاکتور ' + pf.no + ' برای تأیید ارسال شد.</b>\n' +
@@ -482,62 +625,34 @@ async function doSendPf(chatId, msgId, pfId, sess) {
     '💰 مبلغ: ' + fmtN(pf.total) + ' ﷼'
   );
   await notifyManagers(
-    '📄 پیشفاکتور ' + pf.no + ' از ' + sess.name + ' در انتظار تأیید است.\n' +
-    '💰 مبلغ: ' + fmtN(pf.total) + ' ﷼\n' +
-    '👤 مشتری: ' + (pf.center_name || '—')
+    '📄 پیشفاکتور ' + pf.no + ' از ' + sess.name + ' در انتظار تأیید\n' +
+    '💰 ' + fmtN(pf.total) + ' ﷼ | 👤 ' + (pf.center_name || '—')
   );
 }
 
-// ── Notify linked Telegram users ──────────────────────────────────────────
-async function notifyCreator(createdBy, text) {
-  const stored = await loadBotSessions();
-  for (const [chatId, s] of Object.entries(stored)) {
-    if (s.username === createdBy && s.state === ST.IDLE) {
-      await sendMsg(parseInt(chatId), text).catch(function(){});
-    }
-  }
-}
-
-async function notifyManagers(text) {
-  const stored = await loadBotSessions();
-  for (const [chatId, s] of Object.entries(stored)) {
-    if (['مدیر', 'سوپر ادمین'].includes(s.role) && s.state === ST.IDLE) {
-      await sendMsg(parseInt(chatId), text).catch(function(){});
-    }
-  }
-}
-
-// ── QR Photo handler — SQL lookup ─────────────────────────────────────────
+// ── 🔍 QR Photo handler ───────────────────────────────────────────────────
 async function handlePhoto(chatId, msg) {
   await sendMsg(chatId, '🔍 در حال پردازش تصویر...');
-
   try {
-    const photos = msg.photo;
-    const best   = photos[photos.length - 1];
-    const buf    = await downloadFile(best.file_id);
-
+    const best  = msg.photo[msg.photo.length - 1];
+    const buf   = await downloadFile(best.file_id);
     const image = await Jimp.read(buf);
     const { data, width, height } = image.bitmap;
-    const rgba = new Uint8ClampedArray(data);
-    const code = jsQR(rgba, width, height);
+    const code  = jsQR(new Uint8ClampedArray(data), width, height);
 
     if (!code || !code.data) {
-      await sendMsg(chatId, '❌ QR کد در تصویر یافت نشد.\nلطفاً تصویر واضح‌تری بفرستید.', { reply_markup: MENU_KB });
+      await sendMsg(chatId, '❌ QR کد در تصویر یافت نشد.\nتصویر واضح‌تری بفرستید.', { reply_markup: MENU_KB });
       return;
     }
 
     const qrData = code.data.trim();
-    await sendMsg(chatId, '📦 کد اسکن شد: <code>' + qrData + '</code>\n\nدر حال جستجو در انبار...');
+    await sendMsg(chatId, '📦 کد: <code>' + qrData + '</code>\n\nدر حال جستجو...');
 
-    // Try lot lookup first (by lot_no or id)
     const lotRes = await query(`
-      SELECT l.*, p.name AS prod_name, p.full_name AS prod_full_name, p.unit,
-             w.name AS wh_name
-      FROM wms_lots l
-      JOIN wms_products p ON p.id = l.product_id
+      SELECT l.*, p.name AS prod_name, p.full_name AS prod_full_name, p.unit, w.name AS wh_name
+      FROM wms_lots l JOIN wms_products p ON p.id = l.product_id
       LEFT JOIN wms_warehouses w ON w.id = l.warehouse_id
-      WHERE l.lot_no = $1 OR l.id = $1
-      LIMIT 1
+      WHERE l.lot_no = $1 OR l.id = $1 LIMIT 1
     `, [qrData]);
 
     if (lotRes.rows.length) {
@@ -548,123 +663,150 @@ async function handlePhoto(chatId, msg) {
           (daysLeft !== null ? ' (' + daysLeft + ' روز)' : '') +
           (daysLeft !== null && daysLeft < 30 ? ' ⚠️' : '')
         : '';
-      const ttac = l.ttac_no ? '\n📋 TTAC: ' + l.ttac_no : '';
       await sendMsg(chatId,
-        '📦 <b>اطلاعات لات</b>\n\n' +
-        '🏷 لات: <code>' + l.lot_no + '</code>\n' +
+        '📦 <b>لات</b>: <code>' + l.lot_no + '</code>\n' +
         '💊 کالا: ' + (l.prod_full_name || l.prod_name) + '\n' +
         '🏭 انبار: ' + (l.wh_name || '—') + '\n' +
-        '📊 موجودی این لات: ' + fmtN(l.qty) + ' ' + l.unit + expLine + ttac,
+        '📊 موجودی لات: ' + fmtN(l.qty) + ' ' + l.unit + expLine +
+        (l.ttac_no ? '\n📋 TTAC: ' + l.ttac_no : ''),
         { reply_markup: MENU_KB }
       );
       return;
     }
 
-    // Try product lookup (by catalog_code or irc_code)
     const prodRes = await query(`
       SELECT p.*, COALESCE(SUM(l.qty), 0)::int AS total_qty
-      FROM wms_products p
-      LEFT JOIN wms_lots l ON l.product_id = p.id
+      FROM wms_products p LEFT JOIN wms_lots l ON l.product_id = p.id
       WHERE p.id = $1 OR p.catalog_code = $1 OR p.irc_code = $1
-      GROUP BY p.id
-      LIMIT 1
+      GROUP BY p.id LIMIT 1
     `, [qrData]);
 
     if (prodRes.rows.length) {
       const p = prodRes.rows[0];
       await sendMsg(chatId,
-        '💊 <b>اطلاعات کالا</b>\n\n' +
-        '🏷 نام: ' + (p.full_name || p.name) + '\n' +
+        '💊 <b>کالا</b>: ' + (p.full_name || p.name) + '\n' +
         '🔖 کد کاتالوگ: ' + (p.catalog_code || '—') + '\n' +
         '📋 IRC: ' + (p.irc_code || '—') + '\n' +
-        '📦 موجودی کل: ' + fmtN(p.total_qty) + ' ' + p.unit + '\n' +
-        '🔄 حد سفارش مجدد: ' + (p.reorder_point || 10) + ' ' + p.unit,
+        '📦 موجودی کل: ' + fmtN(p.total_qty) + ' ' + p.unit,
         { reply_markup: MENU_KB }
       );
       return;
     }
 
-    await sendMsg(chatId,
-      '🔍 کد <code>' + qrData + '</code> در انبار یافت نشد.\n\nممکن است این کالا هنوز وارد سیستم WMS نشده باشد.',
-      { reply_markup: MENU_KB }
-    );
+    await sendMsg(chatId, '🔍 کد <code>' + qrData + '</code> در انبار یافت نشد.', { reply_markup: MENU_KB });
   } catch(e) {
     console.error('[bot] QR scan error:', e.message);
     await sendMsg(chatId, '❌ خطا در پردازش تصویر: ' + e.message, { reply_markup: MENU_KB });
   }
 }
 
-
-// ── Minimal Gregorian → Jalali converter ─────────────────────────────────
-function toJalali(date) {
-  const gy = date.getFullYear(), gm = date.getMonth() + 1, gd = date.getDate();
-  const g_d_no = 365 * gy + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400);
-  const j_d_no = g_d_no - 79;
-  const j_np   = Math.floor(j_d_no / 12053);
-  let jy        = 979 + 33 * j_np;
-  let jd        = j_d_no % 12053;
-  jy           += 4 * Math.floor(jd / 1461);
-  jd           %= 1461;
-  if (jd >= 366) { jy += Math.floor((jd - 1) / 365); jd = (jd - 1) % 365; }
-  const jm_days = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
-  let jm = 0;
-  for (let i = 0; i < 12; i++) {
-    if (jd < jm_days[i]) { jm = i + 1; jd++; break; }
-    jd -= jm_days[i];
-  }
-  const p2 = function(n){ return String(n).padStart(2,'0'); };
-  return jy + '/' + p2(jm) + '/' + p2(jd);
+// ── Notify helpers ────────────────────────────────────────────────────────
+async function notifyUser(username, text) {
+  try {
+    const stored = await loadBotSessions();
+    for (const [chatId, s] of Object.entries(stored)) {
+      if (s.username === username && s.state === ST.IDLE) {
+        await sendMsg(parseInt(chatId), text).catch(function(){});
+      }
+    }
+  } catch(e) {}
 }
 
-// ── Today's schedule — reads weekEntries from app_data blob ──────────────
-async function handleTodaySchedule(chatId, sess) {
-  const todayStr = toJalali(new Date());
-
-  let dbBlob;
+async function notifyManagers(text) {
   try {
-    const r = await query("SELECT value FROM app_data WHERE key = 'main'");
-    dbBlob = r.rows.length ? r.rows[0].value : null;
-  } catch(e) { dbBlob = null; }
+    const stored = await loadBotSessions();
+    for (const [chatId, s] of Object.entries(stored)) {
+      if (isManagerRole(s.role) && s.state === ST.IDLE) {
+        await sendMsg(parseInt(chatId), text).catch(function(){});
+      }
+    }
+  } catch(e) {}
+}
 
-  if (!dbBlob || !dbBlob.weekEntries) {
-    await sendMsg(chatId, '📅 برنامه‌ای برای امروز (' + todayStr + ') یافت نشد.', { reply_markup: MENU_KB });
-    return;
+async function notifyAll(text) {
+  try {
+    const stored = await loadBotSessions();
+    for (const [chatId, s] of Object.entries(stored)) {
+      if (s.username && s.state === ST.IDLE) {
+        await sendMsg(parseInt(chatId), text).catch(function(){});
+      }
+    }
+  } catch(e) {}
+}
+
+// ── 🌅 Daily morning report ───────────────────────────────────────────────
+let _lastReportDate = '';
+
+async function sendDailyReport() {
+  try {
+    const todayStr = toJalali(new Date());
+
+    // Today's schedule stats per expert
+    const weRes = await query(
+      `SELECT
+         value->>'addedBy' AS expert,
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE (value->>'done')::boolean = true)::int AS done_count
+       FROM week_entries WHERE value->>'scheduledDate' = $1
+       GROUP BY value->>'addedBy' ORDER BY value->>'addedBy'`,
+      [todayStr]
+    ).catch(function(){ return { rows: [] }; });
+
+    // Overdue centers from blob
+    let overdueCount = 0;
+    try {
+      const blobRes = await query("SELECT value FROM app_data WHERE key = 'main'");
+      if (blobRes.rows.length) {
+        const edits = (blobRes.rows[0].value || {}).edits || {};
+        Object.values(edits).forEach(function(e) {
+          if (e.followupDate && e.followupDate < todayStr && e.status && e.status !== 'lost') {
+            overdueCount++;
+          }
+        });
+      }
+    } catch(e) {}
+
+    const totalToday = weRes.rows.reduce(function(s, r){ return s + r.total; }, 0);
+
+    // Pending proformas
+    let pfCount = 0;
+    try {
+      const pfRes = await query(`SELECT COUNT(*)::int AS cnt FROM proformas WHERE status = 'sent'`);
+      pfCount = pfRes.rows[0].cnt;
+    } catch(e) {}
+
+    let text = '🌅 <b>گزارش صبح — ' + todayStr + '</b>\n\n';
+    text += '📅 برنامه امروز: <b>' + totalToday + '</b> مرکز\n';
+    if (overdueCount > 0) text += '⚠️ مراکز معوق: <b>' + overdueCount + '</b>\n';
+    if (pfCount > 0)      text += '📄 پیشفاکتور منتظر تأیید: <b>' + pfCount + '</b>\n';
+
+    if (weRes.rows.length) {
+      text += '\n👥 <b>بر اساس کارشناس:</b>\n';
+      weRes.rows.forEach(function(r) {
+        text += '• ' + (r.expert || 'نامشخص') + ': ' + r.total + ' برنامه\n';
+      });
+    }
+
+    await notifyManagers(text);
+    console.log('[bot] Daily report sent for ' + todayStr);
+  } catch(e) {
+    console.error('[bot] daily report error:', e.message);
   }
+}
 
-  const entries = Object.values(dbBlob.weekEntries).filter(function(we) {
-    if (we.scheduledDate !== todayStr) return false;
-    const owner = we.addedBy || we.owner || '';
-    // managers see all; experts see only their own
-    if (['مدیر', 'سوپر ادمین'].includes(sess.role)) return true;
-    return owner === sess.username;
-  });
-
-  if (!entries.length) {
-    await sendMsg(chatId,
-      '☀️ <b>برنامه امروز — ' + todayStr + '</b>\n\nهیچ مرکزی برای امروز برنامه‌ریزی نشده است.',
-      { reply_markup: MENU_KB }
-    );
-    return;
-  }
-
-  const isManager = ['مدیر', 'سوپر ادمین'].includes(sess.role);
-  const doneCount = entries.filter(function(e){ return e.done; }).length;
-  const actionIcon = { call: '📞', visit: '🚗' };
-
-  const lines = entries.map(function(we) {
-    const done   = we.done ? '✅' : '⬜';
-    const act    = actionIcon[we.actionType] || '📋';
-    const name   = we.centerName || we.rid || '—';
-    const owner  = isManager ? ' (' + (we.addedBy || '') + ')' : '';
-    return done + ' ' + act + ' ' + name + owner;
-  });
-
-  const text =
-    '☀️ <b>برنامه امروز — ' + todayStr + '</b>\n' +
-    '✅ ' + doneCount + ' از ' + entries.length + ' انجام شده\n\n' +
-    lines.join('\n');
-
-  await sendMsg(chatId, text, { reply_markup: isManager ? MENU_KB_MANAGER : MENU_KB });
+function startDailyScheduler() {
+  setInterval(async function() {
+    try {
+      const now = new Date();
+      const h = now.getHours();
+      const m = now.getMinutes();
+      const dateKey = now.toDateString();
+      if (h === 8 && m === 0 && dateKey !== _lastReportDate) {
+        _lastReportDate = dateKey;
+        await sendDailyReport();
+      }
+    } catch(e) {}
+  }, 60000);
 }
 
 // ── Long-polling loop ─────────────────────────────────────────────────────
@@ -672,12 +814,10 @@ let _offset  = 0;
 let _running = false;
 
 async function poll() {
-  if (!TOKEN) {
-    console.log('[bot] TELEGRAM_BOT_TOKEN not set — bot disabled');
-    return;
-  }
+  if (!TOKEN) { console.log('[bot] TELEGRAM_BOT_TOKEN not set — bot disabled'); return; }
   _running = true;
   console.log('[bot] Telegram bot started (long-polling)');
+  startDailyScheduler();
 
   while (_running) {
     try {
@@ -701,16 +841,4 @@ async function poll() {
 
 function stop() { _running = false; }
 
-// ── External notify API (called from proforma route) ─────────────────────
-async function notifyAll(text) {
-  try {
-    const stored = await loadBotSessions();
-    for (const [chatId, s] of Object.entries(stored)) {
-      if (s.username && s.state === ST.IDLE) {
-        await sendMsg(parseInt(chatId), text).catch(function(){});
-      }
-    }
-  } catch(e) {}
-}
-
-module.exports = { poll, stop, notifyManagers, notifyAll };
+module.exports = { poll, stop, notifyManagers, notifyAll, notifyUser };

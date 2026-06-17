@@ -4,6 +4,13 @@ const express = require('express');
 const { query } = require('../db');
 const { requireAuth } = require('../auth');
 
+// Lazy-load bot to avoid circular deps
+let _tgNotify = null;
+function getTgNotify() {
+  if (!_tgNotify) { try { _tgNotify = require('../bot/telegram').notifyUser; } catch(e) {} }
+  return _tgNotify;
+}
+
 const router = express.Router();
 
 // ── Helper: map DB row → camelCase object ──────────────────────────────────
@@ -88,7 +95,11 @@ router.post('/', requireAuth, async function (req, res) {
        RETURNING *`,
       [id, to, msg, centerKey || null, at ? new Date(at) : new Date()]
     );
-    res.status(201).json(rowToObj(result.rows[0]));
+    const notif = rowToObj(result.rows[0]);
+    // Push to Telegram if the recipient has an active bot session
+    const tgNotify = getTgNotify();
+    if (tgNotify) tgNotify(to, '🔔 ' + msg).catch(function(){});
+    res.status(201).json(notif);
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'اعلان با این شناسه قبلاً ثبت شده' });
