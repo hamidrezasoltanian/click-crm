@@ -11,26 +11,44 @@ const router = express.Router();
 // All routes require auth
 router.use(requireAuth);
 
-// GET /api/data/db
+// GET /api/data/db — single REPEATABLE READ snapshot so blob ts and weekEntries are consistent
 router.get('/db', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const result = await query("SELECT value, updated_at FROM app_data WHERE key = 'main'");
-    if (result.rows.length === 0) {
-      return res.json({ _serverTs: null });
+    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    const [mainResult, weResult] = await Promise.all([
+      client.query("SELECT value, updated_at FROM app_data WHERE key = 'main'"),
+      client.query("SELECT key, value FROM week_entries").catch(() => ({ rows: [] })),
+    ]);
+    await client.query('COMMIT');
+
+    if (mainResult.rows.length === 0) {
+      return res.json({ weekEntries: {}, _serverTs: null });
     }
-    const data = result.rows[0].value;
-    const _serverTs = result.rows[0].updated_at ? result.rows[0].updated_at.toISOString() : null;
-    // Strip server-side secrets before sending to client
+    const data = mainResult.rows[0].value;
+    const _serverTs = mainResult.rows[0].updated_at ? mainResult.rows[0].updated_at.toISOString() : null;
+
+    const weekEntries = {};
+    weResult.rows.forEach(function(r) { weekEntries[r.key] = r.value; });
+
+    // Also merge any weekEntries still in the blob (backward compat with old snapshots)
+    if (data && data.weekEntries && typeof data.weekEntries === 'object') {
+      Object.assign(weekEntries, data.weekEntries);
+    }
+
     let safe = data;
     if (data && data.settings && data.settings.anthropicKey) {
       safe = Object.assign({}, data, {
         settings: Object.assign({}, data.settings, { anthropicKey: '***' }),
       });
     }
-    return res.json(Object.assign({}, safe, { _serverTs }));
+    return res.json(Object.assign({}, safe, { weekEntries, _serverTs }));
   } catch (e) {
+    await client.query('ROLLBACK').catch(function() {});
     console.error('[data/db GET]', e.message);
     return res.status(500).json({ error: 'خطای سرور' });
+  } finally {
+    client.release();
   }
 });
 
@@ -67,6 +85,34 @@ router.put('/db', async (req, res) => {
     delete mainData._clientTs;
     delete mainData._serverTs;
 
+    // Extract weekEntries and explicit deletions — store in SQL table, not blob
+    const incomingWE = mainData.weekEntries || {};
+    delete mainData.weekEntries;
+    const deletedKeys = (Array.isArray(mainData._weDeletedKeys) ? mainData._weDeletedKeys : [])
+      .filter(function(k) { return !incomingWE[k]; });
+    delete mainData._weDeletedKeys;
+
+    // Delete explicitly removed entries
+    if (deletedKeys.length > 0) {
+      await query('DELETE FROM week_entries WHERE key = ANY($1::text[])', [deletedKeys]).catch(function(e) {
+        console.warn('[week_entries DELETE]', e.message);
+      });
+    }
+    // Upsert incoming entries to week_entries SQL table
+    if (Object.keys(incomingWE).length > 0) {
+      await query(
+        `INSERT INTO week_entries (key, value, updated_at, updated_by)
+         SELECT e.key, e.value, NOW(), $2
+         FROM jsonb_each($1::jsonb) AS e(key, value)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+        [JSON.stringify(incomingWE), req.user.username]
+      ).catch(function(e) {
+        // Fallback: table may have old columnar schema — store in blob instead
+        console.warn('[week_entries upsert]', e.message, '— falling back to blob');
+        mainData.weekEntries = incomingWE;
+      });
+    }
+
     // If body has _mtr key, store separately
     if (mainData._mtr) {
       const mtrData = mainData._mtr;
@@ -77,21 +123,6 @@ router.put('/db', async (req, res) => {
         [JSON.stringify(mtrData), req.user.username]
       );
       delete mainData._mtr;
-    }
-
-    // weekEntries guard: never allow incoming data to reduce weekEntries count
-    // (protects against a stale session overwriting with fewer planned entries)
-    if (existingRow && existingRow.value) {
-      const serverWE = existingRow.value.weekEntries || {};
-      const incomingWE = mainData.weekEntries || {};
-      const serverCount = Object.keys(serverWE).length;
-      const incomingCount = Object.keys(incomingWE).length;
-      if (serverCount > incomingCount) {
-        // Merge: keep server entries not present in incoming (incoming entries take priority)
-        const merged = Object.assign({}, serverWE, incomingWE);
-        mainData.weekEntries = merged;
-        console.warn(`[data/db PUT] weekEntries guard: merged server(${serverCount}) + incoming(${incomingCount}) → ${Object.keys(merged).length}`);
-      }
     }
 
     // Save current version to history before overwriting (keeps 30 days)

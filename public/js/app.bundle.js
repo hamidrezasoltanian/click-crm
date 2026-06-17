@@ -82,7 +82,7 @@ var _redoStack=[];
 var MAX_UNDO=50;
 var _undoSuppressed=false;
 var _actPage=0;
-var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
+var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},_weDeletedKeys:[],events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
 // ── Login/Auth helpers ────────────────────────────────────────
@@ -152,6 +152,11 @@ async function loadDB(){
     var _sp2=document.getElementById('loadingSpinner');if(_sp2)_sp2.style.display='none';
   }
 }
+function _weRemove(k){
+  _weRemove(k);
+  if(!DB._weDeletedKeys)DB._weDeletedKeys=[];
+  if(DB._weDeletedKeys.indexOf(k)<0)DB._weDeletedKeys.push(k);
+}
 function _saveDBNow(){
   var payload=JSON.parse(JSON.stringify(DB));
   if(_dbServerTs)payload._clientTs=_dbServerTs;
@@ -165,6 +170,7 @@ function _saveDBNow(){
       }
       return r.json().then(function(result){
         if(result&&result._serverTs&&seq===_saveSeq)_dbServerTs=result._serverTs;
+        if(seq===_saveSeq)DB._weDeletedKeys=[];
       });
     })
     .catch(function(e){console.warn('saveDB sync failed:',e.message);});
@@ -4491,7 +4497,7 @@ function _cleanCenterData(rtype,id){
   Object.keys(DB.weekEntries||{}).forEach(function(k){
     var we=DB.weekEntries[k];
     if(we.recKey===recKey||(we.rtype===rtype&&we.rid===id))
-      delete DB.weekEntries[k];
+      _weRemove(k);
   });
   // حذف followupDate از DB.edits (بقیه CRM حفظ می‌شه)
   if(DB.edits[recKey])delete DB.edits[recKey].followupDate;
@@ -5373,7 +5379,7 @@ function wpRemoveFromOtherWeeks(recKey, keepWeekId){
     var we=DB.weekEntries[k];
     if(!we||typeof we!=='object')return;
     var rk=we.recKey||(we.rtype+'_'+we.rid);
-    if(rk===recKey) delete DB.weekEntries[k];
+    if(rk===recKey) _weRemove(k);
   });
 }
 
@@ -5396,7 +5402,7 @@ function wpDeduplicateEntries(){
     keys.sort();
     var keep=keys[keys.length-1];
     keys.forEach(function(k){
-      if(k!==keep){delete DB.weekEntries[k];removed++;}
+      if(k!==keep){_weRemove(k);removed++;}
     });
   });
   return removed;
@@ -5592,7 +5598,7 @@ function wpBulkRemove(){
   var keys = Array.from(_wpSelected);
   if(!keys.length) return;
   if(!confirm(keys.length+' مورد از برنامه هفته حذف شود؟')) return;
-  keys.forEach(function(k){ delete DB.weekEntries[k]; });
+  keys.forEach(function(k){ _weRemove(k); });
   saveDB(); wpClearSelection(); renderWeekPlan();
   showToast('🗑 '+keys.length+' مورد حذف شد',2000);
 }
@@ -5627,7 +5633,7 @@ function wpDoBulkMove(targetWeekId){
     wpRemoveFromOtherWeeks(recKey, targetWeekId);
     var newKey = wpEntryKey(targetWeekId, parsed.rtype||we.rtype||'', parsed.rid||we.rid||'');
     if(newKey !== eKey) DB.weekEntries[newKey] = Object.assign({}, we, {scheduledDate:null, done:false, doneDate:null});
-    if(newKey !== eKey) delete DB.weekEntries[eKey];
+    if(newKey !== eKey) _weRemove(eKey);
   });
   saveDB(); wpClearSelection(); closeModal('wpBulkMoveModal'); renderWeekPlan();
   showToast('↪ '+keys.length+' مورد منتقل شد',2500);
@@ -5775,7 +5781,7 @@ function wpDrop(event, targetDate) {
 }
 
 function wpRemoveEntry(eKey){
-  delete DB.weekEntries[eKey];saveDB();renderWeekPlan();
+  _weRemove(eKey);saveDB();renderWeekPlan();
 }
 // حذف همه ورودی‌های یک مرکز در یک هفته خاص (برای رفع مشکل duplicate)
 function wpRemoveAllInWeek(weekId,recKey){
@@ -5785,7 +5791,7 @@ function wpRemoveAllInWeek(weekId,recKey){
     var rk=we.recKey||(we.rtype+'_'+we.rid);
     var parsed=wpParseEntryKey(k);
     var keyRk=parsed.rtype+'_'+parsed.rid;
-    if(rk===recKey||keyRk===recKey)delete DB.weekEntries[k];
+    if(rk===recKey||keyRk===recKey)_weRemove(k);
   });
   saveDBSync();renderWeekPlan();
   if(currentTab==='provinces'&&_currentProvId)setTimeout(renderTable,100);
@@ -5819,7 +5825,7 @@ function wpDoMoveEntry(eKey,targetWeekId){
   if(newKey===eKey){showToast('مرکز از قبل در این هفته است');closeModal('wpMoveModal');return;}
   if(DB.weekEntries[newKey]){showToast('مرکز از قبل در هفته مقصد است');closeModal('wpMoveModal');return;}
   DB.weekEntries[newKey]=Object.assign({},we,{scheduledDate:null,done:false,doneDate:null});
-  delete DB.weekEntries[eKey];
+  _weRemove(eKey);
   closeModal('wpMoveModal');
   renderWeekPlan();
   showToast('مرکز به هفته جدید منتقل شد',2500);
@@ -5892,7 +5898,7 @@ function saveScheduleFromModal(eKey) {
         var newKey2=wpEntryKey(destWeek.id,_we2.rtype,_we2.rid);
         if(newKey2!==eKey){
           DB.weekEntries[newKey2]=Object.assign({},_we2,{scheduledDate:dateVal,actionType:actVal,done:false,doneDate:null});
-          delete DB.weekEntries[eKey];
+          _weRemove(eKey);
         } else {
           DB.weekEntries[eKey].scheduledDate=dateVal;
           DB.weekEntries[eKey].actionType=actVal;
@@ -6025,7 +6031,7 @@ function wpOpenAssignAll(){
 
 function saveWpAssign(weekId){
   var actType = document.getElementById('wpAssignActType').value || 'call';
-  Object.keys(DB.weekEntries||{}).filter(function(k){return k.startsWith(weekId+':::');}).forEach(function(k){delete DB.weekEntries[k];});
+  Object.keys(DB.weekEntries||{}).filter(function(k){return k.startsWith(weekId+':::');}).forEach(function(k){_weRemove(k);});
   document.querySelectorAll('#wpAList input[type=checkbox]').forEach(function(cb){
     if(!cb.checked)return;
     var rtype=cb.getAttribute('data-rtype');var rid=cb.getAttribute('data-rid');
@@ -10519,7 +10525,7 @@ function cleanupOrphanedEntries(showReport){
     var we=DB.weekEntries[k];
     var rk=we.recKey||(we.rtype?we.rtype+'_'+we.rid:'');
     if(rk&&!valid.has(rk)){
-      delete DB.weekEntries[k];removedWP++;
+      _weRemove(k);removedWP++;
     }
   });
 

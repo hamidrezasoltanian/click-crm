@@ -520,44 +520,20 @@ async function initSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date)`).catch(()=>{});
 
   // ════════════════════════════════════════
-  // WEEK ENTRIES — extracted from DB.weekEntries blob
+  // WEEK ENTRIES — key/value store (key = "{weekId}:::{rtype}:::{rid}")
   // ════════════════════════════════════════
   await query(`
     CREATE TABLE IF NOT EXISTS week_entries (
-      id TEXT PRIMARY KEY,
-      week_id TEXT NOT NULL,
-      rec_key TEXT NOT NULL,
-      rtype TEXT NOT NULL,
-      rid TEXT NOT NULL,
-      scheduled_date TEXT,
-      action_type TEXT DEFAULT 'call',
-      done BOOLEAN DEFAULT FALSE,
-      done_date TEXT,
-      added_by TEXT,
-      center_name TEXT,
-      week_tag_id TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      key VARCHAR(600) PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by VARCHAR(100)
     )
   `);
-  // Add missing columns to existing week_entries tables (idempotent migrations)
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS week_id TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS rec_key TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS rtype TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS rid TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS scheduled_date TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS action_type TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS done BOOLEAN DEFAULT FALSE`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS done_date TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS added_by TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS center_name TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS week_tag_id TEXT`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
-  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_we_week ON week_entries(week_id)`).catch(()=>{});
-  await query(`CREATE INDEX IF NOT EXISTS idx_we_reckey ON week_entries(rec_key)`).catch(()=>{});
-  await query(`CREATE INDEX IF NOT EXISTS idx_we_done ON week_entries(done)`).catch(()=>{});
-  await query(`CREATE INDEX IF NOT EXISTS idx_we_date ON week_entries(scheduled_date)`).catch(()=>{});
+  // Ensure key column exists (handles old columnar schema on existing installs)
+  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS key VARCHAR(600)`).catch(()=>{});
+  await query(`ALTER TABLE week_entries ADD COLUMN IF NOT EXISTS value JSONB`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_we_updated ON week_entries(updated_at DESC)`).catch(()=>{});
 
   // ════════════════════════════════════════
   // NOTIFICATIONS — extracted from DB.notifications blob
