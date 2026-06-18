@@ -1664,3 +1664,27 @@ tr:hover .row-acts,.row-acts:focus-within{opacity:1}
 .prov-card.heat-green { border-right: 4px solid #22c55e; }
 .prov-card.heat-yellow { border-right: 4px solid #f59e0b; }
 .prov-card.heat-red { border-right: 4px solid #ef4444; }
+
+/* ── UX Polish: Never-contacted row ── */
+tr.row-no-followup td:nth-child(8) {
+  background: #fff7ed;
+}
+tr.row-no-followup td:nth-child(8)::after {
+  content: ' ⬜';
+  font-size: 9px;
+  color: #f59e0b;
+}
+
+/* ── UX Polish: Compact table mode ── */
+table.compact-mode th:nth-child(4),
+table.compact-mode td:nth-child(4),
+table.compact-mode th:nth-child(5),
+table.compact-mode td:nth-child(5),
+table.compact-mode th:nth-child(11),
+table.compact-mode td:nth-child(11) {
+  display: none;
+}
+table.compact-mode th:nth-child(9),
+table.compact-mode td:nth-child(9) {
+  display: none;
+}
