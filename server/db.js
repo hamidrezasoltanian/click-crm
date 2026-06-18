@@ -556,6 +556,8 @@ async function initSchema() {
   await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS center_key TEXT`);
   await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS at TIMESTAMPTZ DEFAULT NOW()`);
   await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS read BOOLEAN DEFAULT FALSE`);
+  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'general'`);
+  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS meta JSONB`);
   await query(`CREATE INDEX IF NOT EXISTS idx_notif_to ON notifications(to_user)`).catch(()=>{});
   await query(`CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(read)`).catch(()=>{});
   await query(`CREATE INDEX IF NOT EXISTS idx_notif_at ON notifications(at DESC)`).catch(()=>{});

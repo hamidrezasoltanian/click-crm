@@ -952,7 +952,7 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
     }
   }
   DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();
-  if(field==='status'&&val==='غیرفعال'&&!_undoSuppressed)setTimeout(function(){_promptLostReason(type,id);},400);if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();if(field==='followupDate'&&val){(function(){var _p=(val+'').split('/').map(Number);if(_p.length!==3||isNaN(_p[0]))return;var _ndMs=jMs(_p[0],_p[1],_p[2]);Object.keys(DB.weekEntries||{}).forEach(function(_wk){var _we=DB.weekEntries[_wk];if(_we.rtype!==type||_we.rid!==id||_we.done)return;var _wId=_wk.split(':::')[0];var _mWk=(typeof wpGetWeeks==='function'?wpGetWeeks():[]).find(function(w){return w.id===_wId;});if(!_mWk)return;var _wsMs=jMs(_mWk.wsArr[0],_mWk.wsArr[1],_mWk.wsArr[2]);var _weMs=jMs(_mWk.weArr[0],_mWk.weArr[1],_mWk.weArr[2]);if(_ndMs>=_wsMs&&_ndMs<=_weMs)_we.scheduledDate=val;});})();}saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);if(field==='followupDate'&&currentTab==='weekplan')setTimeout(renderWeekPlan,50);if(field==='owner'&&val&&typeof sendNotif==='function'){(function(){var _oldOwner=(DB.edits[k]||{})._prevOwner||'';if(val!==_oldOwner&&val!==currentUser){var _cn=_getCenterName(type,id);sendNotif(val,'مرکز "'+_cn+'" به شما واگذار شد',type+'_'+id);}DB.edits[k]._prevOwner=val;})();}var _cFields=['contactName','contactTitle','phones','address','contacts'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contacts:_ce.contacts||[],address:_ce.address||''})  }).catch(function(){});}}
+  if(field==='status'&&val==='غیرفعال'&&!_undoSuppressed)setTimeout(function(){_promptLostReason(type,id);},400);if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();if(field==='followupDate'&&val){(function(){var _p=(val+'').split('/').map(Number);if(_p.length!==3||isNaN(_p[0]))return;var _ndMs=jMs(_p[0],_p[1],_p[2]);Object.keys(DB.weekEntries||{}).forEach(function(_wk){var _we=DB.weekEntries[_wk];if(_we.rtype!==type||_we.rid!==id||_we.done)return;var _wId=_wk.split(':::')[0];var _mWk=(typeof wpGetWeeks==='function'?wpGetWeeks():[]).find(function(w){return w.id===_wId;});if(!_mWk)return;var _wsMs=jMs(_mWk.wsArr[0],_mWk.wsArr[1],_mWk.wsArr[2]);var _weMs=jMs(_mWk.weArr[0],_mWk.weArr[1],_mWk.weArr[2]);if(_ndMs>=_wsMs&&_ndMs<=_weMs)_we.scheduledDate=val;});})();}saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);if(field==='followupDate'&&currentTab==='weekplan')setTimeout(renderWeekPlan,50);if(field==='owner'&&val&&typeof sendNotif==='function'){(function(){var _oldOwner=(DB.edits[k]||{})._prevOwner||'';if(val!==_oldOwner&&val!==currentUser){var _cn=_getCenterName(type,id);sendNotif(val,'مرکز "'+_cn+'" به شما واگذار شد',type+'_'+id,[],'owner_change',{centerKey:type+'_'+id});}DB.edits[k]._prevOwner=val;})();}var _cFields=['contactName','contactTitle','phones','address','contacts'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contacts:_ce.contacts||[],address:_ce.address||''})  }).catch(function(){});}}
 function _lrSelect(btn,reason){
   document.querySelectorAll('[data-lrb]').forEach(function(b){
     b.style.background='var(--bg-raised)';b.style.color='var(--text-primary)';b.style.borderColor='var(--border)';
@@ -6248,9 +6248,10 @@ document.addEventListener('visibilitychange', function() {
 // Polling fallback: refresh badge every 60s
 setInterval(function() { if (currentUser) _refreshNotifs(); }, 60000);
 
-function sendNotif(toUser, message, centerKey, centerKeys) {
+function sendNotif(toUser, message, centerKey, centerKeys, type, meta) {
   var id = Date.now() + '_' + Math.random().toString(36).slice(2);
-  var payload = { id: id, to: toUser, msg: message, centerKey: centerKey || null };
+  var payload = { id: id, to: toUser, msg: message, centerKey: centerKey || null,
+                  type: type || 'general', meta: meta || null };
   if (centerKeys && centerKeys.length) payload.centerKeys = centerKeys;
   fetch('/api/notifications', {
     method: 'POST',
@@ -6272,7 +6273,7 @@ function sendNotif(toUser, message, centerKey, centerKeys) {
     if (!DB.notifications) DB.notifications = [];
     var n = { id: id, to: toUser, from: currentUser, at: new Date().toISOString(),
               message: message, msg: message, centerKey: centerKey || '',
-              centerKeys: centerKeys || null, read: false };
+              centerKeys: centerKeys || null, read: false, type: type || 'general', meta: meta || null };
     DB.notifications.push(n);
     _notifCache.unshift(n);
     if (DB.notifications.length > 300) DB.notifications = DB.notifications.slice(-300);
@@ -6336,9 +6337,25 @@ function _renderNotifPanel(arr) {
         + ((hasCk || hasMultiCk) ? '<button class="notif-act-btn" onclick="goToNotifCenter(\'' + nid + '\')">\U0001f50d ' + (hasMultiCk ? 'مشاهده مراکز' : 'مشاهده مرکز') + '</button>' : '')
         + (viewAll
           ? (n.ack ? '<span class="notif-ack-badge">✓ تأیید شده</span>' : '')
-          : (n.ack
-            ? '<span class="notif-ack-badge">✓ تأیید شده</span>'
-            : '<button class="notif-act-btn notif-ack-btn" onclick="ackNotif(\'' + nid + '\')">✓ انجام دادم</button>'))
+          : (n.ack ? '<span class="notif-ack-badge">✓ تأیید شده</span>' : (function(){
+              var ntype = n.type || 'general';
+              if (ntype === 'followup' || ntype === 'manager_request') {
+                return (n.centerKey && n.centerKey.indexOf('_') > 0
+                  ? '<button class="notif-act-btn" onclick="_notifAction(\'' + nid + '\',\'call\')">📞 ثبت تماس</button>'
+                    + '<button class="notif-act-btn" onclick="_notifAction(\'' + nid + '\',\'brief\')">📋 خلاصه</button>'
+                  : '<button class="notif-act-btn notif-ack-btn" onclick="ackNotif(\'' + nid + '\')">✓ انجام دادم</button>');
+              } else if (ntype === 'task') {
+                return '<button class="notif-act-btn" onclick="_notifAction(\'' + nid + '\',\'task\')">📋 باز کردن تکلیف</button>';
+              } else if (ntype === 'morning_brief') {
+                return '<button class="notif-act-btn" onclick="_notifAction(\'' + nid + '\',\'weekplan\')">📅 برنامه هفته</button>';
+              } else if (ntype === 'owner_change') {
+                return '<button class="notif-act-btn" onclick="_notifAction(\'' + nid + '\',\'center\')">🔍 مشاهده مرکز</button>';
+              } else if (ntype === 'ack') {
+                return '';
+              } else {
+                return '<button class="notif-act-btn notif-ack-btn" onclick="ackNotif(\'' + nid + '\')">✓ انجام دادم</button>';
+              }
+            })()))
         + '</div>'
         + '<div class="notif-item-time">' + (viewAll ? 'به: <b>' + esc(USERS[n.to] || n.to) + '</b> · ' : '') + 'از: ' + (USERS[nfrom] || nfrom) + ' · ' + timeAgo + (viewAll && !n.read ? ' · <span style="color:#f59e0b">خوانده نشده</span>' : '') + '</div>'
         + '</div>';
@@ -6414,7 +6431,7 @@ function ackNotif(nid) {
     var nmsg = n.msg || n.message || '';
     var cName = n.centerKey ? _clGetName(n.centerKey) : '';
     var replyMsg = (USERS[currentUser] || currentUser) + ' تأیید کرد: ' + (cName ? '"' + cName + '" ' : '') + 'انجام شد ✓';
-    sendNotif(n.from, replyMsg, n.centerKey || '');
+    sendNotif(n.from, replyMsg, n.centerKey || '', [], 'ack', null);
   }
   updateNotifBadge();
   var p = document.getElementById('notifPanel');
@@ -6460,6 +6477,33 @@ function _timeAgo(isoStr) {
   if (diff < 3600) return Math.floor(diff / 60) + ' دقیقه پیش';
   if (diff < 86400) return Math.floor(diff / 3600) + ' ساعت پیش';
   return Math.floor(diff / 86400) + ' روز پیش';
+}
+
+function _notifAction(nid, action) {
+  var n = _notifCache.find(function(x) { return x.id === nid; });
+  if (!n) return;
+  markNotifRead(nid);
+  var p = document.getElementById('notifPanel'); if (p) { p.remove(); _notifPanelOpen = false; }
+  var ck = n.centerKey || '';
+  var parts = ck.indexOf('_') > 0 ? ck.split('_') : [];
+  var rtype = parts[0] || 'center';
+  var rid = parts.slice(1).join('_');
+  var centerName = ck ? (_clGetName(ck) || ck) : '';
+  if (action === 'call') {
+    if (rid) setTimeout(function() { quickCallLog(rtype, rid, centerName); }, 100);
+    else showToast('مرکز مشخص نیست');
+  } else if (action === 'brief') {
+    if (rid) setTimeout(function() { openPreCallBrief(rtype, rid); }, 100);
+    else showToast('مرکز مشخص نیست');
+  } else if (action === 'task') {
+    var tid = n.meta && n.meta.taskId;
+    if (tid) setTimeout(function() { openTaskModal(tid); }, 100);
+    else { switchTab('tasks'); }
+  } else if (action === 'weekplan') {
+    switchTab('weekplan');
+  } else if (action === 'center') {
+    if (rid) setTimeout(function() { openCenterModal(rtype, rid); }, 100);
+  }
 }
 
 function openDailyMonitor(){
@@ -6617,7 +6661,7 @@ function sendReminderToAll(){
       +names.slice(0,5).join('\n• ')
       +(names.length>5?'\nو '+(names.length-5)+' مورد دیگر':'')
       +'\nوارد برنامه هفته شوید.';
-    sendNotif(exp,msg,'');
+    sendNotif(exp,msg,'',[],'followup',null);
   });
   if(cnt>0)showToast('🔔 یادآوری برای '+cnt+' کارشناس ارسال شد',3000);
   else showToast('✅ همه کارشناسان گزارش داده‌اند');
@@ -6662,7 +6706,7 @@ function sendReminderToExpert(expertUser){
   });
   if(!noActEntries.length){showToast('✅ این کارشناس برای همه مراکز گزارش داده است');return;}
   var msg='لطفاً برای مراکز زیر که امروز برنامه دارید گزارش وارد کنید: '+noActEntries.slice(0,5).join('، ')+(noActEntries.length>5?' و '+(noActEntries.length-5)+' مرکز دیگر':'');
-  sendNotif(expertUser,msg,'');
+  sendNotif(expertUser,msg,'',[],'followup',null);
 }
 
 
@@ -7210,7 +7254,7 @@ function tkSaveTask(tid){
   }
   // notify new owner
   if(t.owner&&t.owner!==currentUser&&typeof sendNotif==='function'&&t._notifiedOwner!==t.owner){
-    sendNotif(t.owner,'وظیفه «'+t.title+'» به شما واگذار شد',t.centerKey||'');
+    sendNotif(t.owner,'وظیفه «'+t.title+'» به شما واگذار شد',t.centerKey||'',[],'task',{taskId:t.id,taskTitle:t.title});
     t._notifiedOwner=t.owner;
   }
   saveDB();
@@ -7499,7 +7543,7 @@ function _runMorningBriefing(today){
       + items.slice(0,5).join('\n• ')
       + (items.length>5?'\nو '+(items.length-5)+' مورد دیگر':'')
       + '\nروز خوبی داشته باشید! 💪';
-    sendNotif(exp, msg, '');
+    sendNotif(exp, msg, '', [], 'morning_brief', null);
   });
   if(cnt>0) showToast('🌅 بریفینگ صبحگاهی برای '+cnt+' کارشناس ارسال شد', 3000);
 }
@@ -7525,7 +7569,7 @@ function _runTodayReminders(today){
       + items.slice(0,5).map(function(x){return x.name;}).join('\n• ')
       + (items.length>5?'\nو '+(items.length-5)+' مورد دیگر':'')
       + '\nوارد برنامه هفته شوید.';
-    sendNotif(exp, msg, items[0].key, items.map(function(x){return x.key;}));
+    sendNotif(exp, msg, items[0].key, items.map(function(x){return x.key;}), 'followup', null);
   });
   if(cnt>0) showToast('🔔 یادآوری ساعت ۱۵ برای '+cnt+' کارشناس ارسال شد', 3000);
 }
@@ -7560,7 +7604,7 @@ function _runOverdueAndUndatedReminders(today){
         + d.overdue.slice(0,5).map(function(x){return x.name+' (تاریخ: '+x.date+')';}).join('\n• ')
         + (d.overdue.length>5?'\nو '+(d.overdue.length-5)+' مورد دیگر':'')
         + '\nلطفاً گزارش ثبت کنید.';
-      sendNotif(exp, msg, d.overdue[0].key, d.overdue.map(function(x){return x.key;}));
+      sendNotif(exp, msg, d.overdue[0].key, d.overdue.map(function(x){return x.key;}), 'followup', null);
       cnt++;
     }
     if(d.noDate.length){
@@ -7568,7 +7612,7 @@ function _runOverdueAndUndatedReminders(today){
         + d.noDate.slice(0,5).map(function(x){return x.name;}).join('\n• ')
         + (d.noDate.length>5?'\nو '+(d.noDate.length-5)+' مورد دیگر':'')
         + '\nبرای هر مرکز تاریخ تنظیم کنید.';
-      sendNotif(exp, msg2, d.noDate[0].key, d.noDate.map(function(x){return x.key;}));
+      sendNotif(exp, msg2, d.noDate[0].key, d.noDate.map(function(x){return x.key;}), 'followup', null);
       if(!d.overdue.length) cnt++;
     }
   });
@@ -10119,7 +10163,7 @@ function _sendReportNotif(memberId,memberName){
     +'</div>';
   openModal('rptNotifCompose','📨 ارسال اعلان به '+esc(memberName),body,
     '<button class="btn-secondary" onclick="closeModal(\'rptNotifCompose\')">لغو</button>'
-    +'<button class="btn-primary" onclick="(function(){var msg=document.getElementById(\'rptNotifMsg\').value.trim();if(!msg){showToast(\'⚠ متن پیام خالی است\');return;}sendNotif(\''+memberId+'\',msg,\'\');closeModal(\'rptNotifCompose\');})()">ارسال 📨</button>'
+    +'<button class="btn-primary" onclick="(function(){var msg=document.getElementById(\'rptNotifMsg\').value.trim();if(!msg){showToast(\'⚠ متن پیام خالی است\');return;}sendNotif(\''+memberId+'\',msg,\'\',[],\'manager_request\',null);closeModal(\'rptNotifCompose\');})()">ارسال 📨</button>'
   );
   setTimeout(function(){var t=document.getElementById('rptNotifMsg');if(t)t.focus();},100);
 }

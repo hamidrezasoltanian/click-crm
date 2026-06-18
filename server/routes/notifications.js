@@ -29,6 +29,8 @@ function rowToObj(r) {
     centerKey: r.center_key,
     at:        r.at,
     read:      r.read,
+    type:      r.type || 'general',
+    meta:      r.meta || null,
   };
 }
 
@@ -71,10 +73,12 @@ router.get('/', requireAuth, async function (req, res) {
         .map(n => ({
           id: n.id,
           to: n.to || null,
-          msg: n.msg || n.message || '',   // blob uses "message", SQL uses "msg"
+          msg: n.msg || n.message || '',
           centerKey: n.centerKey || null,
           at: n.at || new Date().toISOString(),
           read: !!n.read,
+          type: n.type || 'general',
+          meta: n.meta || null,
         }));
     } catch (_) {}
 
@@ -92,15 +96,16 @@ router.get('/', requireAuth, async function (req, res) {
 // ── POST /api/notifications ────────────────────────────────────────────────
 router.post('/', requireAuth, async function (req, res) {
   try {
-    const { id, to, msg, centerKey, at } = req.body;
+    const { id, to, msg, centerKey, at, type, meta } = req.body;
     if (!id || !to || !msg) {
       return res.status(400).json({ error: 'فیلدهای id، to و msg الزامی هستند' });
     }
     const result = await query(
-      `INSERT INTO notifications (id, to_user, msg, center_key, at)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO notifications (id, to_user, msg, center_key, at, type, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [id, to, msg, centerKey || null, at ? new Date(at) : new Date()]
+      [id, to, msg, centerKey || null, at ? new Date(at) : new Date(),
+       type || 'general', meta ? JSON.stringify(meta) : null]
     );
     const notif = rowToObj(result.rows[0]);
     // Push to Telegram if the recipient has an active bot session
