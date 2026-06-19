@@ -683,6 +683,94 @@ async function initSchema() {
     }
   }
 
+  // ════════════════════════════════════════
+  // SUPPORT TICKETS — پشتیبان فروش
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id           TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      center_key   TEXT,
+      center_name  TEXT,
+      reporter     TEXT,
+      assigned_to  TEXT,
+      category     TEXT DEFAULT 'other',
+      priority     INT DEFAULT 2,
+      status       TEXT DEFAULT 'open',
+      sla_deadline TEXT,
+      description  TEXT,
+      resolution   TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW(),
+      resolved_at  TIMESTAMPTZ,
+      done         BOOLEAN DEFAULT false
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tkt_status ON support_tickets(status)`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_tkt_assigned ON support_tickets(assigned_to)`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_tkt_reporter ON support_tickets(reporter)`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_tkt_center ON support_tickets(center_key)`).catch(()=>{});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS ticket_comments (
+      id           TEXT PRIMARY KEY,
+      ticket_id    TEXT REFERENCES support_tickets(id) ON DELETE CASCADE,
+      author       TEXT,
+      body         TEXT,
+      at           TIMESTAMPTZ DEFAULT NOW(),
+      is_internal  BOOLEAN DEFAULT false
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_cmt_ticket ON ticket_comments(ticket_id)`).catch(()=>{});
+
+  // ════════════════════════════════════════
+  // HR / EMPLOYEES — منابع انسانی
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS employees (
+      id              TEXT PRIMARY KEY,
+      username        TEXT,
+      full_name       TEXT,
+      national_id     TEXT,
+      hire_date       TEXT,
+      department      TEXT,
+      position        TEXT,
+      manager         TEXT,
+      phone           TEXT,
+      salary_level    INT DEFAULT 2,
+      employment_type TEXT DEFAULT 'full_time',
+      active          BOOLEAN DEFAULT true,
+      notes           TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS leave_requests (
+      id           TEXT PRIMARY KEY,
+      employee     TEXT,
+      type         TEXT DEFAULT 'annual',
+      from_date    TEXT,
+      to_date      TEXT,
+      days         DECIMAL(4,1),
+      reason       TEXT,
+      status       TEXT DEFAULT 'pending',
+      approved_by  TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_leave_emp ON leave_requests(employee)`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_leave_status ON leave_requests(status)`).catch(()=>{});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS leave_balance (
+      employee     TEXT PRIMARY KEY,
+      annual_total DECIMAL(5,1) DEFAULT 30,
+      annual_used  DECIMAL(5,1) DEFAULT 0,
+      year         INT
+    )
+  `);
+
   console.log('[DB] Schema initialized');
 }
 

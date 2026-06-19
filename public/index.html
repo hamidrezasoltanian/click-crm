@@ -59,6 +59,8 @@
     <button class="tab-btn" id="tab_pricing" onclick="switchTab('pricing')" title="قیمت‌گذاری"><span class="sb-icon">🏷</span><span class="sb-label">قیمت‌گذاری</span></button>
     <button class="tab-btn" id="tab_proforma" onclick="switchTab('proforma')" title="پیشفاکتور"><span class="sb-icon">📄</span><span class="sb-label">پیشفاکتور</span></button>
     <a href="/wms" class="tab-btn" title="انبار WMS" style="text-decoration:none"><span class="sb-icon">🏭</span><span class="sb-label">انبار</span></a>
+    <button class="tab-btn" id="tab_support" onclick="switchTab('support')" title="پشتیبان فروش"><span class="sb-icon">🎧</span><span class="sb-label">پشتیبانی</span></button>
+    <button class="tab-btn sb-manager-wrap" id="tab_hr" onclick="switchTab('hr')" title="منابع انسانی" style="display:none"><span class="sb-icon">👥</span><span class="sb-label">HR</span></button>
     <div class="sb-divider sb-manager-wrap" style="display:none"></div>
     <div class="sb-section-label sb-manager-wrap" style="display:none">مدیریت</div>
     <button class="tab-btn sb-manager-wrap" id="tab_kpi" onclick="switchTab('kpi')" title="KPI" style="display:none"><span class="sb-icon">📊</span><span class="sb-label">KPI</span></button>
@@ -292,6 +294,8 @@
 <!-- bundled from 20 modules — rebuild with: python3 scripts/build-bundle.py -->
 <script src="/js/app.bundle.js?v=20260618a"></script>
 <script src="/js/proforma.js?v=20260618a"></script>
+<script src="/js/support.js?v=20260619a"></script>
+<script src="/js/hr.js?v=20260619a"></script>
 
 <!-- JS -->
 
@@ -665,6 +669,16 @@
 
 <!-- PROFORMA PANEL -->
 <div id="proformaPanel" style="display:none;padding:16px"><div id="vue-proforma" data-user-role=""></div></div>
+
+<!-- SUPPORT PANEL -->
+<div id="supportPanel" style="display:none;padding:16px">
+  <div id="supportRoot"></div>
+</div>
+
+<!-- HR PANEL -->
+<div id="hrPanel" style="display:none;padding:16px">
+  <div id="hrRoot"></div>
+</div>
 
 <div id="centerContactPopup" class="contact-popup">
   <div id="ccp-name" class="contact-popup-name"></div>

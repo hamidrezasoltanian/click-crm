@@ -1131,6 +1131,10 @@ function switchTab(tab){
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
   if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
   if(tab==='proforma'){if(window._pfVueRefresh)window._pfVueRefresh();else if(typeof renderProformaPanel==='function')renderProformaPanel();}
+  var spPanel=document.getElementById('supportPanel');if(spPanel)spPanel.style.display=(tab==='support')?'':'none';
+  var hrPanel=document.getElementById('hrPanel');if(hrPanel)hrPanel.style.display=(tab==='hr')?'':'none';
+  if(tab==='support'&&typeof renderSupportPanel==='function')renderSupportPanel();
+  if(tab==='hr'&&typeof renderHRPanel==='function')renderHRPanel();
   // update mobile nav
   (function(){var tabs=['home','provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
   function _safeRender(fn, tabName) {
@@ -10515,7 +10519,7 @@ async function init(){
     var _spid=localStorage.getItem('_spid');
     var _svm=localStorage.getItem('_svm');
     if(_svm&&['list','card','pipeline'].indexOf(_svm)>=0)_viewMode=_svm;
-    if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing','tasks','changelog','proforma'].indexOf(_st)>=0)currentTab=_st;
+    if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing','tasks','changelog','proforma','support','hr'].indexOf(_st)>=0)currentTab=_st;
     if(_spid)_currentProvId=_spid;
   }catch(e){}
   if(!_st) currentTab=_isManager()?'manager':'home';
