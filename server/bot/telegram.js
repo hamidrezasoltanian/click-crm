@@ -978,6 +978,7 @@ async function handleCallback(cb) {
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW(), updated_by = $3`,
         [key, JSON.stringify(value), sess.username]
       );
+      try { require('./routes/events').broadcast('db-updated', { by: sess.username }); } catch(_) {}
       const actLabel = actionType === 'call' ? '📞 تماس تلفنی' : '🚗 بازدید حضوری';
       await sendMsg(chatId,
         '✅ <b>اضافه شد به برنامه!</b>\n\n' +
