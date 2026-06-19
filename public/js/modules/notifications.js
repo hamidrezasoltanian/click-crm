@@ -64,11 +64,40 @@ document.addEventListener('visibilitychange', function() {
 // Polling fallback: refresh badge every 60s
 setInterval(function() { if (currentUser) _refreshNotifs(); }, 60000);
 
+var _npickData = null;
+function _npickSelect(i) {
+  if (!_npickData || i >= _npickData.keys.length) return;
+  closeModal('_npick');
+  var ck = _npickData.keys[i];
+  var cp = ck.split('_'); var crt = cp[0]; var crid = cp.slice(1).join('_');
+  var cn = _clGetName(ck) || ck;
+  var act = _npickData.action;
+  setTimeout(function() {
+    if (act === 'call') quickCallLog(crt, crid, cn);
+    else if (act === 'brief') openPreCallBrief(crt, crid);
+    else openCenterModal(crt, crid);
+  }, 80);
+}
 function _notifAction(nid, action) {
   var n = _notifCache.find(function(x) { return x.id === nid; });
   if (!n) return;
   markNotifRead(nid);
   var p = document.getElementById('notifPanel'); if (p) { p.remove(); _notifPanelOpen = false; }
+  var multiKeys = n.centerKeys && n.centerKeys.length > 1 ? n.centerKeys : null;
+  if (multiKeys && (action === 'call' || action === 'brief' || action === 'center')) {
+    _npickData = { keys: multiKeys, action: action };
+    var _title = action === 'call' ? '📞 کدام مرکز را تماس می‌گیرید؟'
+               : action === 'brief' ? '📋 خلاصه کدام مرکز؟'
+               : '🔍 کدام مرکز؟';
+    var _html = '<div style="display:flex;flex-direction:column;gap:5px;max-height:360px;overflow-y:auto;padding:2px 0">';
+    multiKeys.forEach(function(ck, i) {
+      var cn = _clGetName(ck) || ck;
+      _html += '<button onclick="_npickSelect(' + i + ')" style="text-align:right;padding:8px 12px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer">' + esc(cn) + '</button>';
+    });
+    _html += '</div>';
+    openModal('_npick', _title, _html, '<button class="btn-secondary" onclick="closeModal(\'_npick\')">لغو</button>');
+    return;
+  }
   var ck = n.centerKey || '';
   var parts = ck.indexOf('_') > 0 ? ck.split('_') : [];
   var rtype = parts[0] || 'center';

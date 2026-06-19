@@ -574,7 +574,8 @@ async function doCompleteEntry(chatId, sess, key, outcome, note, nextDate, cente
     await client.query("UPDATE app_data SET value = $1, updated_at = NOW() WHERE key = 'main'", [blob]);
     await client.query('COMMIT');
 
-    // Schedule next week entry if followup
+    // Notify all open web tabs to reload data
+    try { require('./routes/events').broadcast('db-updated', { by: sess.username }); } catch(_) {}
     if (outcome === 'followup' && nextDate && rid) {
       const newKey = nextDate + ':::' + rkey;
       await query(
@@ -674,6 +675,7 @@ async function doSetStatus(chatId, sess, rkey, newStatus) {
     blob.changeLog.push({ at: new Date().toISOString(), by: sess.username, rkey, field: 'status', val: newStatus });
     await client.query("UPDATE app_data SET value = $1, updated_at = NOW() WHERE key = 'main'", [blob]);
     await client.query('COMMIT');
+    try { require('./routes/events').broadcast('db-updated', { by: sess.username }); } catch(_) {}
     await sendMsg(chatId, '✅ وضعیت تغییر کرد:\n' + oldStatus + ' ← <b>' + newStatus + '</b>', { reply_markup: menuFor(sess) });
   } catch(e) {
     try { await client.query('ROLLBACK'); } catch(_) {}
