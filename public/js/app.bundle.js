@@ -10426,23 +10426,23 @@ async function init(){
   setTimeout(_sendWeeklyDigest,3000);
   buildUSERS();updateNotifBadge();
   setTimeout(_setupAutoReminder,5000);
+  // Restore tab BEFORE loadMasterCenters so that even if centers fail to load,
+  // currentTab is always the right value (default was 'provinces' which was wrong).
+  try{
+    var _st=localStorage.getItem('_st');
+    var _spid=localStorage.getItem('_spid');
+    var _svm=localStorage.getItem('_svm');
+    if(_svm&&['list','card','pipeline'].indexOf(_svm)>=0)_viewMode=_svm;
+    if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing','tasks','changelog','proforma'].indexOf(_st)>=0)currentTab=_st;
+    if(_spid)_currentProvId=_spid;
+  }catch(e){}
+  if(!_st) currentTab=_isManager()?'manager':'home';
+  if(window.innerWidth<768) currentTab='home';
   loadMasterCenters().then(function(){
     _typeFilterBuilt=false;
     cleanupOrphanedEntries(false);
     var _dedup=wpDeduplicateEntries();if(_dedup>0){saveDBSync();console.info('[wp] dedup removed',_dedup,'duplicate week entries');}
     rebuildFilters();buildTypeFilter();
-    try{
-      var _st=localStorage.getItem('_st');
-      var _spid=localStorage.getItem('_spid');
-      var _svm=localStorage.getItem('_svm');
-      if(_svm&&['list','card','pipeline'].indexOf(_svm)>=0)_viewMode=_svm;
-      if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing','tasks','changelog','proforma'].indexOf(_st)>=0)currentTab=_st;
-      if(_spid)_currentProvId=_spid;
-    }catch(e){}
-    // Default new sessions to home tab
-    if(!_st) currentTab=_isManager()?'manager':'home';
-    // On mobile, always start at home
-    if(window.innerWidth<768) currentTab='home';
     switchTab(currentTab);
     _initOnboarding();
     var _clbtn=document.getElementById('tab_changelog');if(_clbtn)_clbtn.style.display=_isManager()?'':'none';

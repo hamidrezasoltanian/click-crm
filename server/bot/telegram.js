@@ -1655,6 +1655,7 @@ async function doSaveNote(chatId, sess, center, noteText) {
     blob.changeLog.push({ at: noteObj.at, by: sess.username, rkey, field: 'note', val: noteText.slice(0, 100) });
     await client.query("UPDATE app_data SET value = $1, updated_at = NOW() WHERE key = 'main'", [blob]);
     await client.query('COMMIT');
+    try { require('./routes/events').broadcast('db-updated', { by: sess.username + ':bot' }); } catch(_) {}
     await sendMsg(chatId,
       '✅ <b>یادداشت ثبت شد!</b>\n\n🏥 ' + center.name + '\n📝 ' + noteText.slice(0, 150),
       { reply_markup: menuFor(sess) }
@@ -1685,6 +1686,7 @@ async function doCreateTask(chatId, sess, title, priority, dueDate) {
        VALUES ($1, $2, $3, $3, $4, 'todo', $5, NOW(), false)`,
       [id, title, sess.username, priority, dueDate || null]
     );
+    try { require('./routes/events').broadcast('db-updated', { by: sess.username + ':bot' }); } catch(_) {}
     let text = '✅ <b>وظیفه ایجاد شد!</b>\n\n📌 ' + title + '\n⚡ اولویت: ' + (priLabel[priority] || '—');
     if (dueDate) text += '\n📅 مهلت: ' + dueDate;
     await sendMsg(chatId, text, { reply_markup: menuFor(sess) });
@@ -1759,6 +1761,7 @@ async function doSaveFollowup(chatId, sess, center, newDate) {
     blob.changeLog.push({ at: new Date().toISOString(), by: sess.username, rkey, field: 'followupDate', val: newDate });
     await client.query("UPDATE app_data SET value = $1, updated_at = NOW() WHERE key = 'main'", [blob]);
     await client.query('COMMIT');
+    try { require('./routes/events').broadcast('db-updated', { by: sess.username + ':bot' }); } catch(_) {}
     await sendMsg(chatId,
       '✅ <b>فالوآپ به‌روز شد!</b>\n\n🏥 ' + center.name + '\n📅 ' + oldDate + ' ← <b>' + newDate + '</b>',
       { reply_markup: menuFor(sess) }
@@ -2232,8 +2235,16 @@ async function sendDailyReport() {
             expertOverdue[ow] = (expertOverdue[ow] || 0) + 1;
           }
         });
-        // Today's done week entries: collect center names per expert
-        const weAll = blob.weekEntries || {};
+        // Today's done week entries: from SQL + blob merged
+        let weAll = {};
+        try {
+          const weRes2 = await query(
+            `SELECT value FROM week_entries WHERE value->>'scheduledDate' = $1 AND (value->>'done')::boolean = true`,
+            [todayStr]
+          );
+          weRes2.rows.forEach(function(r) { weAll[r.value.addedBy + '_' + r.value.rid] = r.value; });
+        } catch(_) {}
+        Object.assign(weAll, blob.weekEntries || {});  // merge blob entries
         Object.values(weAll).forEach(function(we) {
           if (!we.done || we.scheduledDate !== todayStr) return;
           const owner = we.addedBy || 'نامشخص';
