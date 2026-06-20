@@ -61,6 +61,7 @@
     <a href="/wms" class="tab-btn" title="انبار WMS" style="text-decoration:none"><span class="sb-icon">🏭</span><span class="sb-label">انبار</span></a>
     <button class="tab-btn" id="tab_support" onclick="switchTab('support')" title="پشتیبان فروش"><span class="sb-icon">🎧</span><span class="sb-label">پشتیبانی</span></button>
     <button class="tab-btn sb-manager-wrap" id="tab_hr" onclick="switchTab('hr')" title="منابع انسانی" style="display:none"><span class="sb-icon">👥</span><span class="sb-label">HR</span></button>
+    <button class="tab-btn sb-trade-wrap" id="tab_trade_kpi" onclick="switchTab('trade-kpi')" title="بازرگانی و KPI" style="display:none"><span class="sb-icon">🏭</span><span class="sb-label">بازرگانی</span></button>
     <div class="sb-divider sb-manager-wrap" style="display:none"></div>
     <div class="sb-section-label sb-manager-wrap" style="display:none">مدیریت</div>
     <button class="tab-btn sb-manager-wrap" id="tab_kpi" onclick="switchTab('kpi')" title="KPI" style="display:none"><span class="sb-icon">📊</span><span class="sb-label">KPI</span></button>
@@ -296,6 +297,7 @@
 <script src="/js/proforma.js?v=20260618a"></script>
 <script src="/js/support.js?v=20260619a"></script>
 <script src="/js/hr.js?v=20260619a"></script>
+<script src="/js/trade-kpi.js?v=20260620a"></script>
 
 <!-- JS -->
 
@@ -678,6 +680,11 @@
 <!-- HR PANEL -->
 <div id="hrPanel" style="display:none;padding:16px">
   <div id="hrRoot"></div>
+</div>
+
+<!-- TRADE KPI PANEL -->
+<div id="tradeKPIPanel" style="display:none;padding:16px">
+  <div id="tradeKPIRoot"></div>
 </div>
 
 <div id="centerContactPopup" class="contact-popup">

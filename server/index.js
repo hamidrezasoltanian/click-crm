@@ -74,6 +74,7 @@ app.use('/api/changelog', require('./routes/changelog'));
 app.use('/api/migrate', require('./routes/migrate'));
 app.use('/api/support', require('./routes/support'));
 app.use('/api/hr', require('./routes/hr'));
+app.use('/api/trade-kpi', require('./routes/trade-kpi'));
 
 // Health check
 app.get('/api/health', function (req, res) {

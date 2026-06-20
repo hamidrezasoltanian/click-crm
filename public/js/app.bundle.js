@@ -1135,6 +1135,8 @@ function switchTab(tab){
   var hrPanel=document.getElementById('hrPanel');if(hrPanel)hrPanel.style.display=(tab==='hr')?'':'none';
   if(tab==='support'&&typeof renderSupportPanel==='function')renderSupportPanel();
   if(tab==='hr'&&typeof renderHRPanel==='function')renderHRPanel();
+  var tradeKPIPanel=document.getElementById('tradeKPIPanel');if(tradeKPIPanel)tradeKPIPanel.style.display=(tab==='trade-kpi')?'':'none';
+  if(tab==='trade-kpi'&&typeof renderTradeKPIPanel==='function')renderTradeKPIPanel();
   // update mobile nav
   (function(){var tabs=['home','provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
   function _safeRender(fn, tabName) {
@@ -10520,6 +10522,7 @@ async function init(){
     if(authR.status===401){showLoginOverlay();return;}
     var authData=await authR.json();
     currentUser=authData.username||currentUser;
+    window._authUserRole=authData.role||'';
   }catch(e){
     showLoginOverlay();return;
   }
@@ -10536,11 +10539,25 @@ async function init(){
     var _spid=localStorage.getItem('_spid');
     var _svm=localStorage.getItem('_svm');
     if(_svm&&['list','card','pipeline'].indexOf(_svm)>=0)_viewMode=_svm;
-    if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing','tasks','changelog','proforma','support','hr'].indexOf(_st)>=0)currentTab=_st;
+    if(_st&&['home','provinces','weekplan','calendar','checklist','activity','kpi','manager','mtr','pricing','tasks','changelog','proforma','support','hr','trade-kpi'].indexOf(_st)>=0)currentTab=_st;
     if(_spid)_currentProvId=_spid;
   }catch(e){}
   if(!_st) currentTab=_isManager()?'manager':'home';
   if(window.innerWidth<768) currentTab='home';
+  if(_isManager()){
+    document.querySelectorAll('.sb-manager-wrap').forEach(function(el){el.style.display='';});
+  }
+  (function(){
+    var _ms=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
+    var _me=_ms.find(function(m){return m.id===currentUser;});
+    var _r=(_me?_me.role:'')||(window._authUserRole||'');
+    if(_r==='مدیر'||_r==='سوپر ادمین'||_r==='کارشناس بازرگانی'){
+      document.querySelectorAll('.sb-trade-wrap').forEach(function(el){el.style.display='';});
+    }
+    if(_r==='مدیر'||_r==='سوپر ادمین'){
+      document.querySelectorAll('.sb-manager-wrap').forEach(function(el){el.style.display='';});
+    }
+  })();
   loadMasterCenters().then(function(){
     _typeFilterBuilt=false;
     cleanupOrphanedEntries(false);

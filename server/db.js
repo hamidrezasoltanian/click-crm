@@ -771,6 +771,90 @@ async function initSchema() {
     )
   `);
 
+  // salary_amount column (super-admin only visibility)
+  await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS salary_amount DECIMAL(15,2)`).catch(()=>{});
+
+  // ════════════════════════════════════════
+  // TRADE KPI — بازرگانی
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS trade_tasks (
+      id           TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      category     TEXT DEFAULT 'other',
+      assigned_to  TEXT,
+      created_by   TEXT,
+      deadline     TEXT,
+      completed_at TEXT,
+      status       TEXT DEFAULT 'open',
+      priority     INT DEFAULT 2,
+      center_key   TEXT,
+      center_name  TEXT,
+      milestone_id TEXT,
+      stages       JSONB DEFAULT '[]',
+      notes        TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ttasks_assigned ON trade_tasks(assigned_to)`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_ttasks_status ON trade_tasks(status)`).catch(()=>{});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS trade_kpi_deductions (
+      id            TEXT PRIMARY KEY,
+      employee      TEXT NOT NULL,
+      month         TEXT NOT NULL,
+      indicator     TEXT NOT NULL,
+      points        INT NOT NULL,
+      reason        TEXT NOT NULL,
+      ref_task_id   TEXT,
+      registered_by TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tded_emp_month ON trade_kpi_deductions(employee,month)`).catch(()=>{});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS trade_kpi_monthly (
+      id                 TEXT PRIMARY KEY,
+      employee           TEXT NOT NULL,
+      month              TEXT NOT NULL,
+      score_customs      INT DEFAULT 100,
+      score_sla          INT DEFAULT 100,
+      score_traceability INT DEFAULT 100,
+      score_reporting    INT DEFAULT 100,
+      score_teamwork     INT DEFAULT 100,
+      avg_score          DECIMAL(5,2),
+      gate_passed        BOOLEAN,
+      hygiene_bonus      DECIMAL(15,2) DEFAULT 0,
+      finalized          BOOLEAN DEFAULT false,
+      finalized_at       TIMESTAMPTZ,
+      notes              TEXT,
+      created_at         TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(employee, month)
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS trade_milestones (
+      id           TEXT PRIMARY KEY,
+      employee     TEXT NOT NULL,
+      project_type TEXT NOT NULL,
+      title        TEXT NOT NULL,
+      description  TEXT,
+      metric_value DECIMAL(15,2),
+      metric_unit  TEXT,
+      bonus_amount DECIMAL(15,2),
+      status       TEXT DEFAULT 'pending',
+      achieved_at  TEXT,
+      approved_by  TEXT,
+      notes        TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tms_emp ON trade_milestones(employee)`).catch(()=>{});
+
   console.log('[DB] Schema initialized');
 }
 
