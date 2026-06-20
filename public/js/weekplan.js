@@ -794,6 +794,21 @@ function renderWpItem(entry,weekId){
   var rtype=entry.rtype||parsed.rtype||'center';var rid=entry.rid||parsed.rid||'?';
   var recKey=entry.recKey||(rtype+'_'+rid);
   var name=entry.centerName||entry._name||getRecLabel(recKey);var done=entry.done;
+  // اگر done=true ولی doneDate در این هفته نیست → data خراب قدیمی؛ reset
+  if(done&&weekId){
+    var _wsParts=weekId.split('/').map(Number);
+    if(_wsParts.length===3&&!isNaN(_wsParts[0])){
+      var _wsMs=jMs(_wsParts[0],_wsParts[1],_wsParts[2]);
+      var _weMs=_wsMs+6*24*60*60*1000;
+      var _dd=(entry.doneDate||'').split('/').map(Number);
+      var _ddOk=_dd.length===3&&!isNaN(_dd[0]);
+      var _ddMs=_ddOk?jMs(_dd[0],_dd[1],_dd[2]):0;
+      if(!_ddOk||_ddMs<_wsMs||_ddMs>_weMs){
+        done=false;
+        if(DB.weekEntries&&DB.weekEntries[k]){DB.weekEntries[k].done=false;DB.weekEntries[k].doneDate=null;}
+      }
+    }
+  }
   // نمایش ویژه پیگیری مطالبات
   if(rtype==='mtr'){
     var amtStr=entry.mtrAmount?Math.round(entry.mtrAmount).toLocaleString('fa')+' ت':'';

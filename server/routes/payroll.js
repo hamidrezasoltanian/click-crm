@@ -144,7 +144,7 @@ async function _calcMonth(month, callerUser) {
   const settingsRes = await query(`SELECT * FROM commission_settings WHERE id='default'`);
   const settings = settingsRes.rows[0] || { base_pct: 1.0, tier_threshold: 2000000000, tier_step_amount: 500000000, tier_step_pct: 0.1, kpi_threshold: 80, kpi_multiplier: 2.0 };
 
-  const users = (await query(`SELECT username, display_name, department FROM app_users WHERE active=true ORDER BY display_name`)).rows;
+  const users = (await query(`SELECT username, display_name, department, salary_amount FROM app_users WHERE active=true ORDER BY display_name`)).rows;
 
   // Fetch finalized records for this month to know which are already locked
   const finalizedRes = await query(`SELECT employee FROM payroll_records WHERE month=$1 AND finalized=true`, [month]);
@@ -172,8 +172,7 @@ async function _calcMonth(month, callerUser) {
     );
     const kpiBonus = parseFloat(kpiBonusRes.rows[0].kpi_bonus) || 0;
 
-    const empRes = await query(`SELECT salary_amount FROM employees WHERE username=$1 AND active=true LIMIT 1`, [u.username]);
-    const baseSalary = empRes.rows.length ? (parseFloat(empRes.rows[0].salary_amount) || 0) : 0;
+    const baseSalary = parseFloat(u.salary_amount) || 0;
 
     const { rate, amount: commissionAmount } = calcCommission(salesTotal, settings, kpiAbove);
     const totalPay = baseSalary + kpiBonus + commissionAmount;

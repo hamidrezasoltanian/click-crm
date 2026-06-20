@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await query(
-      'SELECT username, display_name, role, color, phone, active, department, direct_manager, permissions, commission_pct FROM app_users ORDER BY created_at'
+      'SELECT username, display_name, role, color, phone, active, department, direct_manager, permissions, commission_pct, salary_amount FROM app_users ORDER BY created_at'
     );
     return res.json(result.rows);
   } catch (e) {
@@ -77,7 +77,7 @@ router.put('/:username', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'دسترسی مجاز نیست' });
   }
 
-  const { display_name, role, color, phone, active, new_username, department, direct_manager, permissions, commission_pct } = req.body || {};
+  const { display_name, role, color, phone, active, new_username, department, direct_manager, permissions, commission_pct, salary_amount } = req.body || {};
 
   try {
     const existing = await query('SELECT username FROM app_users WHERE username = $1', [username]);
@@ -102,6 +102,11 @@ router.put('/:username', requireAuth, async (req, res) => {
       if (direct_manager !== undefined) { updates.push(`direct_manager = $${idx++}`); params.push(direct_manager); }
       if (permissions !== undefined) { updates.push(`permissions = $${idx++}`); params.push(JSON.stringify(permissions)); }
       if (commission_pct !== undefined) { updates.push(`commission_pct = $${idx++}`); params.push(commission_pct); }
+    }
+
+    // Only superadmin can set salary
+    if (req.user.role === 'سوپر ادمین' && salary_amount !== undefined) {
+      updates.push(`salary_amount = $${idx++}`); params.push(salary_amount);
     }
 
     // Only superadmin can rename username

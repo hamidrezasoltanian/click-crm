@@ -50,6 +50,10 @@ function _umUsers(){
       +'<td style="padding:9px 6px"><input id="um_phone_'+m.id+'" value="'+esc(m.phone||'')+'" placeholder="09XXXXXXXXX" dir="ltr" style="background:var(--bg-input);border:1px solid var(--border-input);border-radius:5px;padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text-primary);width:115px"></td>'
       +'<td style="padding:9px 6px"><input id="um_dept_'+m.id+'" value="'+esc(m.department||'')+'" placeholder="دپارتمان" style="background:var(--bg-input);border:1px solid var(--border-input);border-radius:5px;padding:5px 8px;font-size:11px;font-family:inherit;color:var(--text-primary);width:90px"></td>'
       +'<td style="padding:9px 6px"><select id="um_mgr_'+m.id+'" style="background:var(--bg-input);border:1px solid var(--border-input);border-radius:5px;padding:5px 7px;font-size:11px;font-family:inherit;color:var(--text-primary)"><option value="">— بدون مدیر —</option>'+umGetActive().map(function(u){return'<option value="'+esc(u.id)+'"'+(m.direct_manager===u.id?' selected':'')+'>'+esc(u.name)+'</option>';}).join('')+'</select></td>'
+      +(_isSuperAdmin()
+        ? '<td style="padding:9px 6px"><input id="um_salary_'+m.id+'" type="number" value="'+(m.salary_amount||0)+'" min="0" step="1000000" title="حقوق پایه (ریال)" style="background:#fefce8;border:1px solid #fcd34d;border-radius:5px;padding:5px 7px;font-size:11px;font-family:monospace;color:var(--text-primary);width:110px" dir="ltr"></td>'
+        + '<td style="padding:9px 6px"><input id="um_comm_'+m.id+'" type="number" value="'+(m.commission_pct||1)+'" min="0" max="100" step="0.1" title="نرخ پورسانت پایه (%)" style="background:#f0fdf4;border:1px solid #86efac;border-radius:5px;padding:5px 7px;font-size:11px;font-family:monospace;color:var(--text-primary);width:60px" dir="ltr"></td>'
+        : '')
       +'<td style="padding:9px 8px;text-align:center"><span style="font-size:11px;color:var(--text-muted)">🏥'+centers+'</span></td>'
       +'<td style="padding:9px 8px;text-align:center">'
         +'<span onclick="umToggleActive(\''+m.id+'\')" style="font-size:11px;background:'+statusBg+';color:'+statusTxt+';border-radius:20px;padding:3px 11px;cursor:pointer;font-weight:600;border:1px solid '+(active?'#86efac':'var(--border)')+'">'+( active?'● فعال':'○ غیرفعال')+'</span>'
@@ -73,6 +77,7 @@ function _umUsers(){
     +'<th style="padding:8px;text-align:right;font-size:11px;color:var(--text-muted);font-weight:600">موبایل</th>'
     +'<th style="padding:8px;text-align:right;font-size:11px;color:var(--text-muted);font-weight:600">دپارتمان</th>'
     +'<th style="padding:8px;text-align:right;font-size:11px;color:var(--text-muted);font-weight:600">مدیر مستقیم</th>'
+    +(_isSuperAdmin()?'<th style="padding:8px;text-align:right;font-size:11px;color:#92400e;font-weight:600">💛 حقوق (ریال)</th><th style="padding:8px;text-align:right;font-size:11px;color:#15803d;font-weight:600">پورسانت٪</th>':'')
     +'<th style="padding:8px;text-align:center;font-size:11px;color:var(--text-muted);font-weight:600">مراکز</th>'
     +'<th style="padding:8px;text-align:center;font-size:11px;color:var(--text-muted);font-weight:600">وضعیت</th>'
     +'<th style="padding:8px;font-size:11px;color:var(--text-muted);font-weight:600">عملیات</th>'
@@ -179,11 +184,15 @@ function umSaveUser(userId){
   if(newId&&newId!==userId&&USERS[newId]){showToast('⚠ این نام کاربری قبلاً وجود دارد');return;}
   var deptEl=document.getElementById('um_dept_'+userId);
   var mgrEl=document.getElementById('um_mgr_'+userId);
+  var salaryEl=document.getElementById('um_salary_'+userId);
+  var commEl=document.getElementById('um_comm_'+userId);
   var payload={display_name:newName,role:newRole,phone:newPhone};
   if(newColor)payload.color=newColor;
   if(newId&&newId!==userId)payload.new_username=newId;
   if(deptEl)payload.department=deptEl.value.trim();
   if(mgrEl)payload.direct_manager=mgrEl.value;
+  if(salaryEl)payload.salary_amount=parseFloat(salaryEl.value)||0;
+  if(commEl)payload.commission_pct=parseFloat(commEl.value)||1;
   fetch('/api/users/'+encodeURIComponent(userId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d;});})
     .then(function(d){
@@ -530,7 +539,8 @@ function umOpenPermissions(userId){
   var allowedProvs=perms.provinces||[];
   var modules=[
     ['provinces','استان‌ها/مراکز'],['weekplan','برنامه هفته'],['tasks','وظایف'],
-    ['calendar','تقویم'],['kpi','KPI مدیر'],['manager','بررسی مدیر'],
+    ['calendar','تقویم'],['checklist','چک‌لیست روزانه'],['activity','فعالیت‌ها'],
+    ['kpi','KPI مدیر'],['manager','بررسی مدیر'],
     ['mtr','مطالبات'],['pricing','قیمت‌گذاری'],['proforma','پیش‌فاکتور'],
     ['support','پشتیبانی'],['hr','منابع انسانی'],['trade-kpi','بازرگانی'],
     ['changelog','لاگ تغییرات']
@@ -586,7 +596,7 @@ function umPermSelectAll(select){
 }
 
 function umSavePermissions(userId){
-  var modules=['provinces','weekplan','tasks','calendar','kpi','manager','mtr','pricing','proforma','support','hr','trade-kpi','changelog'];
+  var modules=['provinces','weekplan','tasks','calendar','checklist','activity','kpi','manager','mtr','pricing','proforma','support','hr','trade-kpi','changelog'];
   var modPerms={};
   modules.forEach(function(mod){
     var radios=document.querySelectorAll('input[name="perm_'+mod+'"]');
@@ -612,7 +622,7 @@ function buildUSERS(){
       USERS={};
       _DEFAULT_MEMBERS=list.map(function(m){
         USERS[m.username]=m.display_name;
-        return{id:m.username,name:m.display_name,role:m.role,color:m.color,phone:m.phone||'',active:m.active,department:m.department||'',direct_manager:m.direct_manager||'',permissions:m.permissions||{}};
+        return{id:m.username,name:m.display_name,role:m.role,color:m.color,phone:m.phone||'',active:m.active,department:m.department||'',direct_manager:m.direct_manager||'',permissions:m.permissions||{},salary_amount:m.salary_amount||0,commission_pct:m.commission_pct||1};
       });
       // Also sync to DB.settings.members so legacy code works
       if(DB.settings)DB.settings.members=_DEFAULT_MEMBERS;
