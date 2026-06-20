@@ -6056,6 +6056,10 @@ function saveScheduleFromModal(eKey) {
         } else {
           DB.weekEntries[eKey].scheduledDate=dateVal;
           DB.weekEntries[eKey].actionType=actVal;
+          DB.weekEntries[eKey].done=false;
+          DB.weekEntries[eKey].doneDate=null;
+          DB.weekEntries[eKey].doneResult=null;
+          DB.weekEntries[eKey].doneNote=null;
         }
         if(_we2.rtype&&_we2.rid)setE(_we2.rtype,_we2.rid,'followupDate',dateVal);
         _wpYear=destWeek.jYear;
@@ -6070,6 +6074,10 @@ function saveScheduleFromModal(eKey) {
 
   DB.weekEntries[eKey].scheduledDate = dateVal;
   DB.weekEntries[eKey].actionType = actVal;
+  DB.weekEntries[eKey].done = false;
+  DB.weekEntries[eKey].doneDate = null;
+  DB.weekEntries[eKey].doneResult = null;
+  DB.weekEntries[eKey].doneNote = null;
   var we = DB.weekEntries[eKey];
   var rtype = we.rtype; var rid = we.rid;
   if(rtype && rid){setE(rtype, rid, 'followupDate', dateVal);}
