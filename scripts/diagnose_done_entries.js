@@ -58,12 +58,12 @@ async function main() {
     console.log('══════════════════════════════════════════════════');
 
     const { rows: blobRows } = await client.query(
-      "SELECT data FROM app_data WHERE key='main' LIMIT 1"
+      "SELECT value FROM app_data WHERE key='main' LIMIT 1"
     );
-    if (!blobRows.length || !blobRows[0].data) {
+    if (!blobRows.length || !blobRows[0].value) {
       console.log('blob یافت نشد.');
     } else {
-      const db = blobRows[0].data;
+      const db = blobRows[0].value;
       const we = db.weekEntries || {};
       const allKeys = Object.keys(we);
       const doneEntries = allKeys.filter(k => we[k] && we[k].done === true);
@@ -100,7 +100,7 @@ async function main() {
         });
         // ذخیره blob
         await client.query(
-          "UPDATE app_data SET data=$1, updated_at=NOW() WHERE key='main'",
+          "UPDATE app_data SET value=$1, updated_at=NOW() WHERE key='main'",
           [db]
         );
         console.log(`\n✅ ${fixedCount} آیتم در blob اصلاح شد.`);
