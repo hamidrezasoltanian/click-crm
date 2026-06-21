@@ -8,8 +8,9 @@ const faradis = require('../integrations/faradis');
 const router = express.Router();
 
 function requireSuperAdmin(req, res, next) {
-  if (req.user && req.user.role === 'سوپر ادمین') return next();
-  return res.status(403).json({ error: 'فقط سوپر ادمین دسترسی دارد' });
+  const role = req.user && req.user.role;
+  if (role === 'سوپر ادمین' || role === 'مدیر') return next();
+  return res.status(403).json({ error: 'فقط مدیر دسترسی دارد' });
 }
 
 function requireManager(req, res, next) {

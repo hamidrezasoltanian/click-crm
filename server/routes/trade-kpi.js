@@ -5,7 +5,7 @@ const { query } = require('../db');
 const { requireAuth } = require('../auth');
 
 function isManager(role) { return ['مدیر', 'سوپر ادمین'].includes(role); }
-function isSuperAdmin(role) { return role === 'سوپر ادمین'; }
+function isSuperAdmin(role) { return role === 'سوپر ادمین' || role === 'مدیر'; }
 function canAccessTrade(role) { return ['مدیر', 'سوپر ادمین', 'کارشناس بازرگانی'].includes(role); }
 function uid(prefix) { return (prefix || 't') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
 

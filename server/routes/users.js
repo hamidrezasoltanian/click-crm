@@ -72,7 +72,7 @@ router.post('/', requireManager, async (req, res) => {
 router.put('/:username', requireAuth, async (req, res) => {
   const { username } = req.params;
 
-  const isAdmin = req.user.role === 'مدیر' || req.user.role === 'سوپر ادمین';
+  const isAdmin = req.user.role === 'مدیر' || ['سوپر ادمین', 'مدیر'].includes(req.user.role);
   if (!isAdmin && req.user.username !== username) {
     return res.status(403).json({ error: 'دسترسی مجاز نیست' });
   }
@@ -105,13 +105,13 @@ router.put('/:username', requireAuth, async (req, res) => {
     }
 
     // Only superadmin can set salary
-    if (req.user.role === 'سوپر ادمین' && salary_amount !== undefined) {
+    if (['سوپر ادمین', 'مدیر'].includes(req.user.role) && salary_amount !== undefined) {
       updates.push(`salary_amount = $${idx++}`); params.push(salary_amount);
     }
 
     // Only superadmin can rename username
     let renamedUsername = null;
-    if (req.user.role === 'سوپر ادمین' && new_username && new_username !== username) {
+    if (['سوپر ادمین', 'مدیر'].includes(req.user.role) && new_username && new_username !== username) {
       if (!/^[a-zA-Z0-9._-]+$/.test(new_username)) {
         return res.status(400).json({ error: 'نام کاربری فقط حروف انگلیسی، اعداد و نقطه/خط تیره مجاز است' });
       }

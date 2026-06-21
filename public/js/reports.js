@@ -77,13 +77,13 @@
       { id: 'faradis',    icon: '🔌', label: 'فرادیس' },
     ];
 
-    var isSuperAdmin = typeof _isSuperAdmin === 'function' ? _isSuperAdmin() :
-      (typeof window._authUserRole !== 'undefined' && window._authUserRole === 'سوپر ادمین');
-    var isManagerOrAdmin = isSuperAdmin || (typeof _isManager === 'function' ? _isManager() : false);
+    var isManagerOrAdmin = (typeof _isManager === 'function' ? _isManager() : false) ||
+      (typeof window._authUserRole !== 'undefined' && ['سوپر ادمین','مدیر'].includes(window._authUserRole));
+    var isSuperAdmin = isManagerOrAdmin; // managers get all super-admin access
 
     var tabBtns = tabs.map(function (t) {
-      if (t.id === 'payroll' && !isSuperAdmin) return '';
-      if (t.id === 'faradis' && !isSuperAdmin) return '';
+      if (t.id === 'payroll' && !isManagerOrAdmin) return '';
+      if (t.id === 'faradis' && !isManagerOrAdmin) return '';
       if (t.id === 'targets' && !isManagerOrAdmin) return '';
       if (t.id === 'invoices' && !isManagerOrAdmin) return '';
       if (t.id === 'expert' && !isManagerOrAdmin) return '';
@@ -1052,8 +1052,8 @@
   var _payMonth = _tgtMonth;
 
   function _rPayroll(cont) {
-    var isSuperAdmin = typeof _isSuperAdmin === 'function' ? _isSuperAdmin() :
-      (typeof window._authUserRole !== 'undefined' && window._authUserRole === 'سوپر ادمین');
+    var isSuperAdmin = (typeof _isManager === 'function' ? _isManager() : false) ||
+      (typeof window._authUserRole !== 'undefined' && ['سوپر ادمین','مدیر'].includes(window._authUserRole));
 
     cont.innerHTML =
       '<div style="background:#fff;border-radius:12px;padding:20px;border:1px solid #e2e8f0;margin-bottom:16px">' +

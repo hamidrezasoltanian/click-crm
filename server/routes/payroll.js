@@ -7,8 +7,9 @@ const { requireAuth } = require('../auth');
 const router = express.Router();
 
 function requireSuperAdmin(req, res, next) {
-  if (req.user.role !== 'سوپر ادمین') return res.status(403).json({ error: 'فقط سوپر ادمین دسترسی دارد' });
-  next();
+  const role = req.user && req.user.role;
+  if (role === 'سوپر ادمین' || role === 'مدیر') return next();
+  return res.status(403).json({ error: 'فقط مدیر دسترسی دارد' });
 }
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
