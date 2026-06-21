@@ -125,12 +125,17 @@
 
     var empSel = '';
     if (_tkIsManager() && typeof USERS !== 'undefined') {
-      empSel = '<select onchange="window._tkSetEmployee(this.value)" style="' + _tkInputStyle() + '">' +
-        '<option value="">انتخاب کارشناس</option>';
-      Object.keys(USERS).forEach(function(uid) {
-        empSel += '<option value="' + uid + '"' + (uid === _tkEmployee ? ' selected' : '') + '>' + esc(USERS[uid] || uid) + '</option>';
-      });
-      empSel += '</select>';
+      var _tradeMembers = (typeof _DEFAULT_MEMBERS !== 'undefined' && _DEFAULT_MEMBERS.length)
+        ? _DEFAULT_MEMBERS.filter(function(m) { return m.role === 'کارشناس بازرگانی' && m.active !== false; })
+        : Object.keys(USERS).map(function(uid) { return { id: uid, name: USERS[uid] }; });
+      if (_tradeMembers.length) {
+        empSel = '<select onchange="window._tkSetEmployee(this.value)" style="' + _tkInputStyle() + '">' +
+          '<option value="">انتخاب کارشناس بازرگانی</option>';
+        _tradeMembers.forEach(function(m) {
+          empSel += '<option value="' + m.id + '"' + (m.id === _tkEmployee ? ' selected' : '') + '>' + esc(m.name || m.id) + '</option>';
+        });
+        empSel += '</select>';
+      }
     }
 
     var tabs = [

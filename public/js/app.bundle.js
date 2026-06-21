@@ -12413,9 +12413,12 @@ function renderKPIPanel(){
     console.error('KPI error:',err);return;
   }
 
-  var userOpts=Object.keys(USERS).map(function(u){
-    var _uc=window.umGetColor?umGetColor(u):'#0ea5e9';
-    return'<option value="'+u+'"'+(_kpiUser===u?' selected':'')+' data-color="'+_uc+'">'+USERS[u]+'</option>';
+  var _salesMembers=(_DEFAULT_MEMBERS||[]).filter(function(m){return m.role==='کارشناس فروش'&&m.active!==false;});
+  if(!_salesMembers.length)_salesMembers=Object.keys(USERS).map(function(u){return{id:u,name:USERS[u]};});
+  if(!_kpiUser||!_salesMembers.find(function(m){return m.id===_kpiUser;}))_kpiUser=(_salesMembers[0]||{}).id||_kpiUser;
+  var userOpts=_salesMembers.map(function(m){
+    var _uc=window.umGetColor?umGetColor(m.id):'#0ea5e9';
+    return'<option value="'+m.id+'"'+(_kpiUser===m.id?' selected':'')+' data-color="'+_uc+'">'+esc(m.name||m.id)+'</option>';
   }).join('');
   var monthOpts=prevJMonths(12).map(function(m){
     return'<option value="'+m+'"'+(_kpiMonth===m?' selected':'')+'>'+jMonthLabel(m)+'</option>';
