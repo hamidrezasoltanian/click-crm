@@ -2,7 +2,14 @@
 /* بازرگانی — KPI مبتنی بر هدف (۷ شاخص) */
 (function() {
 
-  var _tkTab = 'score';  // score | customs | report | admin | supplier | finance | team | warehouse
+  var _tkTab = 'score';  // score | kanban | customs | report | admin | supplier | finance | team | warehouse
+  var _tkAllTasks = [];
+  var _TK_COLS = [
+    { id: 'todo',    label: 'باید انجام شود', color: '#6366f1' },
+    { id: 'doing',   label: 'در حال انجام',   color: '#f59e0b' },
+    { id: 'waiting', label: 'منتظر',           color: '#8b5cf6' },
+    { id: 'done',    label: 'تکمیل شده',      color: '#10b981' },
+  ];
   var _tkEmployee = '';
   var _tkMonth = '';
   var _tkScore = null;
@@ -128,6 +135,7 @@
 
     var tabs = [
       { id: 'score',     icon: '📊', label: 'نمره KPI' },
+      { id: 'kanban',    icon: '📌', label: 'وظایف' },
       { id: 'customs',   icon: '📦', label: 'ترخیص' },
       { id: 'report',    icon: '📋', label: 'گزارش روزانه' },
       { id: 'admin',     icon: '📁', label: 'پیگیری اداری' },
@@ -190,7 +198,7 @@
     else if (_tkTab === 'supplier') promises.push(_tkAPI('GET', '/suppliers/' + emp + '/' + mon).catch(function() { return []; }));
     else if (_tkTab === 'finance') promises.push(_tkAPI('GET', '/finance/' + emp + '/' + mon).catch(function() { return []; }));
     else if (_tkTab === 'warehouse') promises.push(_tkAPI('GET', '/warehouse/' + emp + '/' + mon).catch(function() { return null; }));
-    else if (_tkTab === 'admin' || _tkTab === 'team') promises.push(_tkAPI('GET', '/tasks').catch(function() { return []; }));
+    else if (_tkTab === 'kanban' || _tkTab === 'admin' || _tkTab === 'team') promises.push(_tkAPI('GET', '/tasks').catch(function() { return []; }));
 
     Promise.all(promises).then(function(res) {
       _tkScore = res[0];
@@ -198,6 +206,7 @@
       var extra = res[2];
 
       if (_tkTab === 'score') _tkRenderScore(cont);
+      else if (_tkTab === 'kanban') _tkRenderKanban(cont, extra || []);
       else if (_tkTab === 'customs') _tkRenderCustoms(cont, extra || []);
       else if (_tkTab === 'report') _tkRenderReport(cont, extra || []);
       else if (_tkTab === 'supplier') _tkRenderSupplier(cont, extra || []);
@@ -333,6 +342,106 @@
         if (typeof showToast === 'function') showToast('✅ اهداف ذخیره شد');
         _tkLoadAndRender();
       })
+      .catch(function(e) { if (typeof showToast === 'function') showToast('خطا: ' + e.message); });
+  };
+
+  // ── Kanban وظایف بازرگانی ─────────────────────────────────────────────────
+  function _tkRenderKanban(cont, tasks) {
+    _tkAllTasks = tasks;
+    var cols = _TK_COLS;
+    var PRIORITY = { 1: { label: 'کم', color: '#10b981' }, 2: { label: 'متوسط', color: '#f59e0b' }, 3: { label: 'بالا', color: '#ef4444' } };
+
+    var addForm =
+      '<div style="background:#f8fafc;border-radius:12px;padding:14px;border:1px solid #e2e8f0;margin-bottom:16px">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+          '<div style="flex:2;min-width:180px"><label style="font-size:.75rem;color:#6b7280;display:block;margin-bottom:3px">عنوان وظیفه</label>' +
+          '<input id="tka_title" placeholder="عنوان وظیفه جدید..." style="' + _tkInputStyle('100%') + '"></div>' +
+          '<div><label style="font-size:.75rem;color:#6b7280;display:block;margin-bottom:3px">مهلت</label>' +
+          '<input id="tka_deadline" placeholder="۱۴۰۳/۰۷/۰۱" style="' + _tkInputStyle(120) + '"></div>' +
+          '<div><label style="font-size:.75rem;color:#6b7280;display:block;margin-bottom:3px">اولویت</label>' +
+          '<select id="tka_priority" style="' + _tkInputStyle(90) + '"><option value="1">کم</option><option value="2" selected>متوسط</option><option value="3">بالا</option></select></div>' +
+          '<button onclick="_tkAddTask()" style="' + _tkBtnStyle() + '">+ افزودن</button>' +
+        '</div>' +
+      '</div>';
+
+    var board = '<div style="display:grid;grid-template-columns:repeat(' + cols.length + ',1fr);gap:12px;overflow-x:auto">';
+    cols.forEach(function(col) {
+      var colTasks = tasks.filter(function(t) { return (t.status || 'todo') === col.id; });
+      var cards = colTasks.map(function(t) {
+        var p = PRIORITY[t.priority] || PRIORITY[2];
+        return '<div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #e2e8f0;margin-bottom:8px;cursor:pointer" onclick="_tkOpenTask(\'' + t.id + '\')">' +
+          '<div style="font-size:.85rem;font-weight:600;color:#1e293b;margin-bottom:6px">' + esc(t.title) + '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<span style="font-size:.72rem;color:' + p.color + ';background:' + p.color + '18;padding:2px 7px;border-radius:99px">' + p.label + '</span>' +
+            (t.deadline ? '<span style="font-size:.72rem;color:#9ca3af">' + t.deadline + '</span>' : '') +
+          '</div>' +
+          (t.assigned_to ? '<div style="font-size:.72rem;color:#6b7280;margin-top:4px">👤 ' + esc(typeof USERS!=='undefined'?USERS[t.assigned_to]||t.assigned_to:t.assigned_to) + '</div>' : '') +
+          '</div>';
+      }).join('');
+
+      board += '<div>' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:' + col.color + '"></div>' +
+          '<span style="font-size:.85rem;font-weight:600;color:#374151">' + col.label + '</span>' +
+          '<span style="margin-right:auto;font-size:.75rem;color:#9ca3af;background:#f1f5f9;border-radius:99px;padding:1px 7px">' + colTasks.length + '</span>' +
+        '</div>' +
+        '<div id="tkcol_' + col.id + '" style="min-height:80px">' + cards + '</div>' +
+        '</div>';
+    });
+    board += '</div>';
+
+    cont.innerHTML = '<div>' + addForm + board + '</div>';
+  }
+
+  window._tkAddTask = function() {
+    var title = (document.getElementById('tka_title') || {}).value.trim();
+    var deadline = (document.getElementById('tka_deadline') || {}).value.trim();
+    var priority = parseInt((document.getElementById('tka_priority') || {}).value) || 2;
+    if (!title) { if (typeof showToast === 'function') showToast('عنوان الزامی است'); return; }
+    _tkAPI('POST', '/tasks', { title, deadline: deadline || null, priority, status: 'todo', assigned_to: _tkEmployee || null, category: 'بازرگانی' })
+      .then(function() { _tkLoadAndRender(); })
+      .catch(function(e) { if (typeof showToast === 'function') showToast('خطا: ' + e.message); });
+  };
+
+  window._tkOpenTask = function(id) {
+    var t = _tkAllTasks.find(function(x) { return x.id === id; });
+    if (!t) return;
+    var cols = _TK_COLS;
+    var statusOpts = cols.map(function(c) {
+      return '<option value="' + c.id + '"' + (t.status === c.id ? ' selected' : '') + '>' + c.label + '</option>';
+    }).join('');
+    var body =
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+        '<div><label style="font-size:.8rem;color:#6b7280;display:block;margin-bottom:3px">عنوان</label>' +
+        '<input id="tke_title" value="' + esc(t.title) + '" style="' + _tkInputStyle('100%') + '"></div>' +
+        '<div style="display:flex;gap:8px">' +
+          '<div style="flex:1"><label style="font-size:.8rem;color:#6b7280;display:block;margin-bottom:3px">وضعیت</label>' +
+          '<select id="tke_status" style="' + _tkInputStyle('100%') + '">' + statusOpts + '</select></div>' +
+          '<div style="flex:1"><label style="font-size:.8rem;color:#6b7280;display:block;margin-bottom:3px">مهلت</label>' +
+          '<input id="tke_deadline" value="' + esc(t.deadline || '') + '" style="' + _tkInputStyle('100%') + '"></div>' +
+        '</div>' +
+        '<div><label style="font-size:.8rem;color:#6b7280;display:block;margin-bottom:3px">یادداشت</label>' +
+        '<textarea id="tke_note" rows="2" style="' + _tkTextareaStyle() + '">' + esc(t.note || '') + '</textarea></div>' +
+      '</div>';
+    var footer =
+      '<button onclick="_tkSaveTask(\'' + id + '\')" style="' + _tkBtnStyle() + '">ذخیره</button>' +
+      '<button onclick="_tkDeleteTask(\'' + id + '\')" style="padding:7px 14px;background:#fee2e2;color:#ef4444;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.85rem;margin-right:8px">حذف</button>';
+    if (typeof openModal === 'function') openModal('tkEditModal', esc(t.title), body, footer);
+  };
+
+  window._tkSaveTask = function(id) {
+    var title = (document.getElementById('tke_title') || {}).value.trim();
+    var status = (document.getElementById('tke_status') || {}).value;
+    var deadline = (document.getElementById('tke_deadline') || {}).value.trim();
+    var note = (document.getElementById('tke_note') || {}).value.trim();
+    _tkAPI('PUT', '/tasks/' + id, { title, status, deadline: deadline || null, note: note || null })
+      .then(function() { if (typeof closeModal === 'function') closeModal('tkEditModal'); _tkLoadAndRender(); })
+      .catch(function(e) { if (typeof showToast === 'function') showToast('خطا: ' + e.message); });
+  };
+
+  window._tkDeleteTask = function(id) {
+    _tkAPI('DELETE', '/tasks/' + id)
+      .then(function() { if (typeof closeModal === 'function') closeModal('tkEditModal'); _tkLoadAndRender(); })
       .catch(function(e) { if (typeof showToast === 'function') showToast('خطا: ' + e.message); });
   };
 

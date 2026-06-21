@@ -13,8 +13,26 @@ function isManagerRole(role) {
 // ── GET /api/hr/employees ────────────────────────────────────────────────────
 router.get('/employees', requireAuth, async function(req, res) {
   try {
+    // Auto-sync: create employee records for active app_users that don't have one
+    const users = await query(`SELECT username, display_name, role, department FROM app_users WHERE active = true`);
+    for (const u of users.rows) {
+      const ex = await query('SELECT id FROM employees WHERE username = $1', [u.username]);
+      if (ex.rows.length) continue;
+      const id = 'emp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+      const dept = u.department || (
+        u.role === 'کارشناس بازرگانی' ? 'بازرگانی' :
+        u.role === 'کارشناس فروش' ? 'فروش' :
+        u.role === 'مدیر' ? 'مدیریت' : 'عمومی');
+      await query(
+        `INSERT INTO employees (id, username, full_name, department, position, employment_type)
+         VALUES ($1,$2,$3,$4,$5,'full_time') ON CONFLICT DO NOTHING`,
+        [id, u.username, u.display_name, dept, u.role]
+      );
+    }
+
     const r = await query(
-      `SELECT e.*, u.display_name AS user_display_name, u.role AS user_role, u.color AS user_color
+      `SELECT e.*, u.display_name AS user_display_name, u.role AS user_role,
+              u.color AS user_color, u.department AS user_department
        FROM employees e
        LEFT JOIN app_users u ON u.username = e.username
        WHERE e.active = true
