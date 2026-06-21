@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var _rTab = 'sales'; // sales | pipeline | activity | competitor | coverage | payroll | targets | invoices | support | mission | faradis
+  var _rTab = 'sales'; // sales | pipeline | activity | competitor | coverage | targets | payroll | invoices | expert | support | mission | faradis
 
   var STATUS_LABELS = {
     draft: 'پیش‌نویس', sent: 'ارسال‌شده', approved: 'تأیید', rejected: 'رد', cancelled: 'لغو'
@@ -71,6 +71,7 @@
       { id: 'targets',    icon: '🎯', label: 'اهداف فروش' },
       { id: 'payroll',    icon: '💵', label: 'حقوق و پورسانت' },
       { id: 'invoices',   icon: '🧾', label: 'فاکتورها' },
+      { id: 'expert',     icon: '👤', label: 'گزارش کارشناس' },
       { id: 'support',    icon: '🎧', label: 'پشتیبانی' },
       { id: 'mission',    icon: '✈',  label: 'ماموریت' },
       { id: 'faradis',    icon: '🔌', label: 'فرادیس' },
@@ -85,6 +86,7 @@
       if (t.id === 'faradis' && !isSuperAdmin) return '';
       if (t.id === 'targets' && !isManagerOrAdmin) return '';
       if (t.id === 'invoices' && !isManagerOrAdmin) return '';
+      if (t.id === 'expert' && !isManagerOrAdmin) return '';
       return '<button onclick="window._rSetTab(\'' + t.id + '\')" id="rTab_' + t.id + '" ' +
         'style="padding:7px 14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.85rem;' +
         'background:' + (_rTab === t.id ? '#6366f1' : '#f1f5f9') + ';' +
@@ -122,6 +124,7 @@
     else if (_rTab === 'payroll')    _rPayroll(cont);
     else if (_rTab === 'targets')    _rTargets(cont);
     else if (_rTab === 'invoices')   _rInvoices(cont);
+    else if (_rTab === 'expert')     _rExpert(cont);
     else if (_rTab === 'support')    _rSupport(cont);
     else if (_rTab === 'mission')    _rMission(cont);
     else if (_rTab === 'faradis')    _rFaradis(cont);
@@ -619,86 +622,6 @@
     cont.innerHTML = html;
   }
 
-  // ── 6. حقوق تاریخی ─────────────────────────────────────────────────────────
-
-  function _rPayroll(cont) {
-    fetch('/api/reports/payroll-history?months=12')
-      .then(function (r) { return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d;}); })
-      .then(function (data) {
-        var rows = data.rows || [];
-        var monthTotals = data.monthTotals || [];
-
-        if (!rows.length) {
-          cont.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:40px">هنوز رکوردی نهایی نشده</p>';
-          return;
-        }
-
-        // Group by employee
-        var empMap = {};
-        rows.forEach(function (r) {
-          if (!empMap[r.employee]) empMap[r.employee] = { name: r.display_name || r.employee, months: {}, totalPay: 0 };
-          empMap[r.employee].months[r.month] = r;
-          empMap[r.employee].totalPay += r.total_pay;
-        });
-        var allMonths = [...new Set(rows.map(function(r){return r.month;}).sort())].reverse();
-        var emps = Object.keys(empMap).sort(function(a,b){return empMap[b].totalPay - empMap[a].totalPay;});
-
-        var grandTotal = monthTotals.reduce(function(s,r){return s+r.total;},0);
-        var grandComm  = monthTotals.reduce(function(s,r){return s+r.commission;},0);
-
-        var html = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">' +
-          _card('جمع حقوق کل', _fmtMoney(grandTotal), allMonths.length + ' ماه', '#6366f1') +
-          _card('جمع پورسانت کل', _fmtMoney(grandComm), 'کمیسیون', '#10b981') +
-          _card('ماه‌های ثبت‌شده', _fmtNum(allMonths.length), 'ماه نهایی', '#f59e0b') +
-          '</div>';
-
-        // Table per employee × month
-        var thMonths = allMonths.slice(0, 8).map(function(m){
-          return '<th style="padding:6px 8px;font-size:.78rem;text-align:center;background:#f8fafc;white-space:nowrap">' + m + '</th>';
-        }).join('');
-
-        var tbody = emps.map(function(e){
-          var emp = empMap[e];
-          var cells = allMonths.slice(0, 8).map(function(m){
-            var r = emp.months[m];
-            if (!r) return '<td style="padding:6px 8px;text-align:center;color:#d1d5db">—</td>';
-            return '<td style="padding:6px 8px;text-align:center;font-size:.8rem">' +
-              '<div style="font-weight:600;color:#6366f1">' + _fmtMoney(r.total_pay) + '</div>' +
-              '<div style="color:#9ca3af;font-size:.72rem">پورسانت: ' + _fmtMoney(r.commission_amount) + '</div>' +
-              (r.finalized ? '<div style="color:#10b981;font-size:.7rem">✅ نهایی</div>' : '<div style="color:#f59e0b;font-size:.7rem">⏳ موقت</div>') +
-              '</td>';
-          }).join('');
-          return '<tr style="border-bottom:1px solid #f1f5f9">' +
-            '<td style="padding:8px 12px;font-weight:600;white-space:nowrap">' + emp.name + '</td>' +
-            cells +
-            '<td style="padding:8px 12px;font-weight:700;color:#6366f1;white-space:nowrap">' + _fmtMoney(emp.totalPay) + '</td>' +
-            '</tr>';
-        }).join('');
-
-        html += _section('تاریخچه حقوق و پورسانت (۱۲ ماه)',
-          '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">' +
-          '<thead><tr><th style="padding:6px 12px;text-align:right;background:#f8fafc;font-size:.8rem">کارشناس</th>' +
-          thMonths + '<th style="padding:6px 8px;background:#f8fafc;font-size:.78rem">جمع</th></tr></thead>' +
-          '<tbody>' + tbody + '</tbody></table></div>');
-
-        // Monthly totals trend
-        if (monthTotals.length) {
-          var maxMonthTotal = Math.max.apply(null, monthTotals.map(function(r){return r.total;}).concat([1]));
-          html += _section('روند ماهانه هزینه حقوق',
-            monthTotals.slice().reverse().map(function(r){
-              var pct = Math.round((r.total / maxMonthTotal) * 100);
-              return _barRow(r.month, pct, '#6366f1',
-                _fmtMoney(r.total) + ' / ' + r.headcount + ' نفر');
-            }).join(''));
-        }
-
-        cont.innerHTML = html;
-      })
-      .catch(function(e){
-        cont.innerHTML = '<p style="color:#ef4444;text-align:center;padding:30px">خطا: ' + e.message + '</p>';
-      });
-  }
-
   // ── 7. پشتیبانی ────────────────────────────────────────────────────────────
 
   function _rSupport(cont) {
@@ -1144,9 +1067,13 @@
         '</div>' +
         '<div id="payCalcResult">برای محاسبه دکمه «محاسبه» را بزنید.</div>' +
       '</div>' +
-      '<div id="payHistorySection"><div style="text-align:center;padding:20px;color:#9ca3af">در حال بارگذاری تاریخچه...</div></div>';
+      '<div id="payHistorySection"><div style="text-align:center;padding:20px;color:#9ca3af">در حال بارگذاری تاریخچه...</div></div>' +
+      (isSuperAdmin
+        ? '<div id="paySettingsWrap"><div style="text-align:center;padding:20px;color:#9ca3af">در حال بارگذاری تنظیمات...</div></div>'
+        : '');
 
     _rPayHistory();
+    if (isSuperAdmin) _rPayrollSettings(cont);
   }
 
   window._payMonthChange = function(native) {
@@ -1425,5 +1352,240 @@
       })
       .catch(function(e){ if(typeof showToast==='function') showToast('❌ ' + e.message); });
   };
+
+  // ── تنظیمات پورسانت (سوپر ادمین) ──────────────────────────────────────────
+
+  function _rPayrollSettings(cont) {
+    fetch('/api/payroll/settings')
+      .then(function(r){ return r.json(); })
+      .then(function(s) {
+        var html = _section('⚙️ تنظیمات پورسانت',
+          '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:14px">' +
+            _settingField('commBasePct',    'نرخ پایه (٪)',                s.base_pct,      'number', '0.1') +
+            _settingField('commThreshold',  'آستانه پلکان (ریال)',         s.tier_threshold,'number', '100000000') +
+            _settingField('commStepAmt',    'هر پله (ریال)',               s.tier_step_amount,'number','100000000') +
+            _settingField('commStepPct',    'افزایش هر پله (٪)',           s.tier_step_pct, 'number', '0.05') +
+            _settingField('commKpiThr',     'آستانه KPI برای multiplier',  s.kpi_threshold, 'number', '1') +
+            _settingField('commKpiMul',     'ضریب KPI (x)',                s.kpi_multiplier,'number', '0.1') +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:#f8fafc;border-radius:8px;font-size:.8rem;color:#6b7280;margin-bottom:14px">' +
+            '💡 فرمول: اگر فروش > آستانه، به ازای هر پله نرخ + افزایش. اگر KPI > آستانه، افزایش × ضریب.' +
+          '</div>' +
+          '<button onclick="window._rSavePayrollSettings()" style="padding:8px 20px;background:#6366f1;color:white;border:none;border-radius:8px;font-family:inherit;font-size:.9rem;cursor:pointer;font-weight:600">💾 ذخیره تنظیمات</button>');
+        var wrap = document.getElementById('paySettingsWrap');
+        if (wrap) wrap.innerHTML = html;
+      })
+      .catch(function(e){ var w = document.getElementById('paySettingsWrap'); if(w) w.innerHTML = '<div style="color:#ef4444;padding:12px">خطا: ' + esc(e.message) + '</div>'; });
+  }
+
+  function _settingField(id, label, value, type, step) {
+    return '<div>' +
+      '<label style="display:block;font-size:.78rem;font-weight:600;color:#374151;margin-bottom:4px">' + label + '</label>' +
+      '<input type="' + type + '" id="' + id + '" value="' + (value||'') + '" step="' + (step||'1') + '" ' +
+        'style="width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:7px;font-family:inherit;font-size:.9rem;box-sizing:border-box" dir="ltr">' +
+    '</div>';
+  }
+
+  window._rSavePayrollSettings = function() {
+    var g = function(id){ return parseFloat((document.getElementById(id)||{}).value); };
+    var body = {
+      base_pct:         g('commBasePct'),
+      tier_threshold:   g('commThreshold'),
+      tier_step_amount: g('commStepAmt'),
+      tier_step_pct:    g('commStepPct'),
+      kpi_threshold:    g('commKpiThr'),
+      kpi_multiplier:   g('commKpiMul'),
+    };
+    for (var k in body) { if (isNaN(body[k])) { if(typeof showToast==='function') showToast('مقادیر را بررسی کنید'); return; } }
+    fetch('/api/payroll/settings', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    })
+      .then(function(r){ return r.json().then(function(d){ if (!r.ok) throw new Error(d.error); return d; }); })
+      .then(function(){ if(typeof showToast==='function') showToast('✅ تنظیمات پورسانت ذخیره شد'); })
+      .catch(function(e){ if(typeof showToast==='function') showToast('❌ ' + e.message); });
+  };
+
+  // ── گزارش عمیق کارشناس ────────────────────────────────────────────────────
+
+  var _expertId = '';
+  var _expertMonth = _tgtMonth;
+
+  function _rExpert(cont) {
+    fetch('/api/users')
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        var users = (data.users || data || []).filter(function(u){ return u.active !== false; });
+        var opts = users.map(function(u){
+          return '<option value="' + esc(u.username) + '"' + (_expertId === u.username ? ' selected' : '') + '>' +
+            esc(u.display_name || u.username) + ' — ' + esc(u.role||'') + '</option>';
+        }).join('');
+
+        cont.innerHTML =
+          '<div style="background:#fff;border-radius:12px;padding:20px;border:1px solid #e2e8f0;margin-bottom:16px">' +
+            '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">' +
+              '<h3 style="margin:0;font-size:1rem;font-weight:600;color:#1e293b">👤 گزارش کارشناس</h3>' +
+              '<select id="expertSelect" onchange="window._expertId=this.value" ' +
+                'style="padding:7px 12px;border:1px solid #e2e8f0;border-radius:7px;font-family:inherit;font-size:.85rem;min-width:180px">' +
+                '<option value="">— کارشناس را انتخاب کنید —</option>' + opts +
+              '</select>' +
+              '<input type="month" id="expertMonthInput" value="' + _tgtMonthToNative(_expertMonth) + '" ' +
+                'onchange="window._expertMonth=window._tgtMonthFromNative(this.value)" ' +
+                'style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;font-family:inherit;font-size:.85rem">' +
+              '<button onclick="window._rExpertLoad()" style="padding:7px 16px;background:#6366f1;color:white;border:none;border-radius:7px;font-family:inherit;font-size:.85rem;cursor:pointer;font-weight:600">📊 بارگذاری</button>' +
+            '</div>' +
+            '<div id="expertReport"><p style="text-align:center;color:#9ca3af;padding:30px">کارشناس و ماه را انتخاب کنید</p></div>' +
+          '</div>';
+
+        // expose for onchange callbacks
+        window._expertId = _expertId;
+        window._expertMonth = _expertMonth;
+        window._tgtMonthFromNative = _tgtMonthFromNative;
+      })
+      .catch(function(e){ cont.innerHTML = '<div style="color:#ef4444;padding:30px">خطا: ' + esc(e.message) + '</div>'; });
+  }
+
+  window._rExpertLoad = function() {
+    var expertId = (document.getElementById('expertSelect')||{}).value || window._expertId;
+    _expertId = expertId;
+    var month = window._expertMonth || _expertMonth;
+    _expertMonth = month;
+    if (!expertId) { if(typeof showToast==='function') showToast('کارشناس را انتخاب کنید'); return; }
+    var el = document.getElementById('expertReport');
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af">در حال بارگذاری...</div>';
+
+    Promise.all([
+      fetch('/api/payroll/actuals?month=' + encodeURIComponent(month)).then(function(r){return r.json();}),
+      fetch('/api/payroll/targets?month=' + encodeURIComponent(month)).then(function(r){return r.json();}),
+      fetch('/api/support?assigned_to=' + encodeURIComponent(expertId) + '&limit=100').then(function(r){return r.ok?r.json():[];}),
+      fetch('/api/tasks?owner=' + encodeURIComponent(expertId) + '&limit=100').then(function(r){return r.ok?r.json():{rows:[]};}),
+      fetch('/api/hr/leave?employee=' + encodeURIComponent(expertId)).then(function(r){return r.ok?r.json():[];}),
+      fetch('/api/hr/leave/balance/' + encodeURIComponent(expertId)).then(function(r){return r.ok?r.json():{annual_total:30,annual_used:0};}),
+    ]).then(function(res) {
+      var actuals   = res[0].reduce ? res[0] : (res[0].rows||[]);
+      var targets   = res[1].reduce ? res[1] : (res[1].rows||[]);
+      var tickets   = res[2].reduce ? res[2] : (res[2].rows||[]);
+      var taskData  = res[3].rows || res[3] || [];
+      var leaves    = res[4].reduce ? res[4] : (res[4].rows||[]);
+      var balance   = res[5] || {};
+
+      var myActual = actuals.find(function(a){ return a.employee === expertId; }) || {};
+      var myTarget = targets.find(function(t){ return t.employee === expertId; }) || {};
+      var salesAmt  = parseFloat(myActual.actual_amount||0);
+      var targetAmt = parseFloat(myTarget.target_amount||0);
+      var salesPct  = targetAmt > 0 ? Math.round(salesAmt/targetAmt*100) : null;
+      var salesColor = salesPct === null ? '#6b7280' : salesPct >= 100 ? '#10b981' : salesPct >= 70 ? '#f59e0b' : '#ef4444';
+
+      var tasks = Array.isArray(taskData) ? taskData : (taskData.tasks || []);
+      var myTasks = tasks.filter(function(t){ return t.owner === expertId || t.created_by === expertId; });
+      var doneTasks = myTasks.filter(function(t){ return t.done || t.status === 'done'; }).length;
+      var pendingTasks = myTasks.filter(function(t){ return !t.done && t.dueDate && t.dueDate < _todayApprox(); }).length;
+
+      var openTickets = tickets.filter(function(t){ return !['resolved','closed'].includes(t.status); }).length;
+      var resolvedTickets = tickets.filter(function(t){ return ['resolved','closed'].includes(t.status); }).length;
+
+      var pendingLeaves = leaves.filter(function(l){ return l.status === 'pending'; }).length;
+      var usedLeave = parseFloat(balance.annual_used||0);
+      var totalLeave = parseFloat(balance.annual_total||30);
+
+      var html =
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">' +
+          _card('فروش ماه', _fmtMoney(salesAmt),
+            salesPct !== null ? ('هدف: ' + _fmtMoney(targetAmt)) : 'هدف تعریف نشده', salesColor) +
+          (salesPct !== null ? _card('تحقق هدف', salesPct + '٪', myActual.proforma_count + ' فاکتور تأیید', salesColor) : '') +
+          _card('وظایف', doneTasks + ' / ' + myTasks.length,
+            pendingTasks > 0 ? pendingTasks + ' سررسید گذشته 🔴' : 'بدون تأخیر', pendingTasks > 0 ? '#ef4444' : '#10b981') +
+          _card('مرخصی', usedLeave + ' / ' + totalLeave + ' روز',
+            pendingLeaves > 0 ? pendingLeaves + ' درخواست معلق' : 'بدون معلق', '#f59e0b') +
+          _card('تیکت پشتیبانی', openTickets + ' باز',
+            resolvedTickets + ' بسته این ماه', '#6366f1') +
+        '</div>';
+
+      // Sales section
+      html += _section('💰 فروش ماه ' + month,
+        targetAmt > 0
+          ? '<div style="margin-bottom:10px">' + _barRow('تحقق هدف', Math.min(120, salesPct||0), salesColor, _fmtMoney(salesAmt) + ' از ' + _fmtMoney(targetAmt)) + '</div>'
+          : '<p style="color:#9ca3af;font-size:.83rem;margin:0 0 8px">هدف ماه تعریف نشده</p>' +
+        '<div style="font-size:.83rem;color:#374151">' +
+          '<span style="font-weight:600">' + _fmtMoney(salesAmt) + '</span> ریال پیش‌فاکتور تأیید‌شده' +
+          (myActual.proforma_count ? ' (' + myActual.proforma_count + ' مورد)' : '') +
+        '</div>');
+
+      // Tasks section
+      if (myTasks.length) {
+        var taskRows = myTasks.slice(0, 15).map(function(t){
+          var overdue = !t.done && t.dueDate && t.dueDate < _todayApprox();
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:6px 10px;font-size:.83rem">' + esc(t.title||'—') + '</td>' +
+            '<td style="padding:6px 10px;font-size:.78rem;color:#6b7280">' + esc(t.dueDate||'—') + '</td>' +
+            '<td style="padding:6px 10px">' +
+              (t.done
+                ? '<span style="color:#10b981;font-size:.75rem">✅ انجام شد</span>'
+                : overdue
+                  ? '<span style="color:#ef4444;font-size:.75rem">🔴 سررسید گذشته</span>'
+                  : '<span style="color:#f59e0b;font-size:.75rem">⏳ در انتظار</span>') +
+            '</td>' +
+          '</tr>';
+        }).join('');
+        html += _section('📌 وظایف (' + myTasks.length + ')',
+          '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">' +
+          '<thead><tr style="background:#f8fafc">' +
+            '<th style="padding:6px 10px;text-align:right;font-size:.78rem">عنوان</th>' +
+            '<th style="padding:6px 10px;text-align:right;font-size:.78rem">سررسید</th>' +
+            '<th style="padding:6px 10px;text-align:right;font-size:.78rem">وضعیت</th>' +
+          '</tr></thead><tbody>' + taskRows + '</tbody></table></div>');
+      }
+
+      // Leave section
+      if (leaves.length) {
+        var leaveRows = leaves.slice(0, 10).map(function(l){
+          var stColor = {approved:'#10b981', rejected:'#ef4444', pending:'#f59e0b'}[l.status]||'#6b7280';
+          var stLabel = {approved:'تأیید', rejected:'رد', pending:'معلق'}[l.status]||l.status;
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:6px 10px;font-size:.83rem">' + esc(l.from_date) + ' تا ' + esc(l.to_date) + '</td>' +
+            '<td style="padding:6px 10px;font-size:.78rem">' + esc(l.days) + ' روز</td>' +
+            '<td style="padding:6px 10px">' +
+              '<span style="padding:2px 8px;border-radius:10px;font-size:.75rem;background:' + stColor + '20;color:' + stColor + '">' + stLabel + '</span>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+        html += _section('🏖 مرخصی (مانده: ' + (totalLeave - usedLeave) + ' روز)',
+          '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">' +
+          '<tbody>' + leaveRows + '</tbody></table></div>');
+      }
+
+      // Support tickets
+      if (tickets.length) {
+        var ticketRows = tickets.slice(0, 10).map(function(t){
+          var stColor = {open:'#ef4444', in_progress:'#f59e0b', waiting:'#6366f1', resolved:'#10b981', closed:'#9ca3af'}[t.status]||'#6b7280';
+          var stLabel = {open:'باز', in_progress:'در حال انجام', waiting:'انتظار مشتری', resolved:'حل شده', closed:'بسته'}[t.status]||t.status;
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:6px 10px;font-size:.83rem">' + esc(t.title||'—') + '</td>' +
+            '<td style="padding:6px 10px;font-size:.78rem;color:#6b7280">' + esc(t.center_name||'—') + '</td>' +
+            '<td style="padding:6px 10px">' +
+              '<span style="padding:2px 8px;border-radius:10px;font-size:.75rem;background:' + stColor + '20;color:' + stColor + '">' + stLabel + '</span>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+        html += _section('🎧 تیکت‌های پشتیبانی (' + tickets.length + ')',
+          '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">' +
+          '<tbody>' + ticketRows + '</tbody></table></div>');
+      }
+
+      el.innerHTML = html;
+    }).catch(function(e){
+      el.innerHTML = '<div style="color:#ef4444;padding:20px">خطا: ' + esc(e.message) + '</div>';
+    });
+  };
+
+  function _todayApprox() {
+    var d = new Date();
+    var jy = d.getFullYear() - 621;
+    var jm = d.getMonth() + 1;
+    var jd = d.getDate();
+    return jy + '/' + String(jm).padStart(2,'0') + '/' + String(jd).padStart(2,'0');
+  }
 
 })();
