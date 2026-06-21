@@ -217,4 +217,30 @@ router.get('/leave/balance/:employee', requireAuth, async function(req, res) {
   }
 });
 
+// ── POST /api/hr/import-users — auto-create employees from app_users ─────────
+router.post('/import-users', requireAuth, async function(req, res) {
+  try {
+    if (!isManagerRole(req.user.role)) return res.status(403).json({ error: 'فقط مدیر' });
+    const users = await query(`SELECT username, display_name, role, active FROM app_users WHERE active = true`);
+    let imported = 0;
+    for (const u of users.rows) {
+      const existing = await query('SELECT id FROM employees WHERE username = $1', [u.username]);
+      if (existing.rows.length) continue;
+      const id = 'emp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+      const dept = u.role === 'کارشناس بازرگانی' ? 'بازرگانی' :
+                   u.role === 'کارشناس فروش' ? 'فروش' :
+                   u.role === 'مدیر' ? 'مدیریت' : 'عمومی';
+      await query(
+        `INSERT INTO employees (id, username, full_name, department, position, employment_type)
+         VALUES ($1,$2,$3,$4,$5,'full_time')`,
+        [id, u.username, u.display_name, dept, u.role]
+      );
+      imported++;
+    }
+    res.json({ ok: true, imported });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

@@ -71,7 +71,11 @@
     if (!cont) return;
 
     if (!employees || !employees.length) {
-      cont.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280"><div style="font-size:2.5rem;margin-bottom:8px">👤</div><p>هنوز کارمندی ثبت نشده</p></div>';
+      cont.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280">' +
+        '<div style="font-size:2.5rem;margin-bottom:8px">👤</div>' +
+        '<p>هنوز کارمندی ثبت نشده</p>' +
+        '<button onclick="window._hrImportUsers()" style="margin-top:8px;padding:9px 20px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.9rem">📥 وارد کردن از کاربران اپ</button>' +
+        '</div>';
       return;
     }
 
@@ -510,5 +514,15 @@
       '.btn-pill.active{background:#6366f1;color:#fff}';
     document.head.appendChild(style);
   }
+
+  window._hrImportUsers = function() {
+    fetch('/api/hr/import-users', { method: 'POST' })
+      .then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.error || r.status); return d; }); })
+      .then(function(d) {
+        if (typeof showToast === 'function') showToast('✅ ' + d.imported + ' کارمند وارد شد');
+        _hrLoadEmployees();
+      })
+      .catch(function(e) { if (typeof showToast === 'function') showToast('خطا: ' + e.message); });
+  };
 
 })();
