@@ -898,6 +898,58 @@ async function initSchema() {
     )
   `);
 
+  // Faradis accounting integration cache
+  await query(`
+    CREATE TABLE IF NOT EXISTS faradis_sales_cache (
+      id            BIGSERIAL PRIMARY KEY,
+      factor_id     INT NOT NULL,
+      factor_num    TEXT,
+      factor_date   INT,              -- Jalali YYYYMMDD
+      jalali_month  TEXT,             -- 'YYYY/MM'
+      marketer_num  TEXT,
+      visitor_num   TEXT,
+      crm_username  TEXT,             -- mapped from marketer/visitor
+      company_id    INT,
+      company_name  TEXT,
+      company_code  TEXT,
+      total_amount  DECIMAL(15,2) DEFAULT 0,
+      sub_total     DECIMAL(15,2) DEFAULT 0,
+      discount      DECIMAL(15,2) DEFAULT 0,
+      tax           DECIMAL(15,2) DEFAULT 0,
+      synced_at     TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(factor_id)
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS faradis_marketer_map (
+      id            SERIAL PRIMARY KEY,
+      marketer_num  TEXT,
+      visitor_num   TEXT,
+      crm_username  TEXT NOT NULL,
+      notes         TEXT,
+      created_by    TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(marketer_num, visitor_num)
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS faradis_sync_log (
+      id            SERIAL PRIMARY KEY,
+      jalali_month  TEXT NOT NULL,
+      rows_fetched  INT DEFAULT 0,
+      rows_inserted INT DEFAULT 0,
+      status        TEXT DEFAULT 'ok',   -- ok | error
+      error_msg     TEXT,
+      triggered_by  TEXT,
+      synced_at     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await query(`CREATE INDEX IF NOT EXISTS idx_faradis_sales_month ON faradis_sales_cache(jalali_month)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_faradis_sales_username ON faradis_sales_cache(crm_username)`);
+
   console.log('[DB] Schema initialized');
 }
 

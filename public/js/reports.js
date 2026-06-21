@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var _rTab = 'sales'; // sales | pipeline | activity | competitor | coverage | payroll | support | mission
+  var _rTab = 'sales'; // sales | pipeline | activity | competitor | coverage | payroll | support | mission | faradis
 
   var STATUS_LABELS = {
     draft: 'پیش‌نویس', sent: 'ارسال‌شده', approved: 'تأیید', rejected: 'رد', cancelled: 'لغو'
@@ -71,6 +71,7 @@
       { id: 'payroll',    icon: '💵', label: 'حقوق تاریخی' },
       { id: 'support',    icon: '🎧', label: 'پشتیبانی' },
       { id: 'mission',    icon: '✈',  label: 'ماموریت' },
+      { id: 'faradis',    icon: '🔌', label: 'فرادیس' },
     ];
 
     var isSuperAdmin = typeof _isSuperAdmin === 'function' ? _isSuperAdmin() :
@@ -78,6 +79,7 @@
 
     var tabBtns = tabs.map(function (t) {
       if (t.id === 'payroll' && !isSuperAdmin) return '';
+      if (t.id === 'faradis' && !isSuperAdmin) return '';
       return '<button onclick="window._rSetTab(\'' + t.id + '\')" id="rTab_' + t.id + '" ' +
         'style="padding:7px 14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.85rem;' +
         'background:' + (_rTab === t.id ? '#6366f1' : '#f1f5f9') + ';' +
@@ -115,6 +117,7 @@
     else if (_rTab === 'payroll')    _rPayroll(cont);
     else if (_rTab === 'support')    _rSupport(cont);
     else if (_rTab === 'mission')    _rMission(cont);
+    else if (_rTab === 'faradis')    _rFaradis(cont);
   }
 
   // ── 1. فروش ────────────────────────────────────────────────────────────────
@@ -820,5 +823,154 @@
 
     cont.innerHTML = html;
   }
+
+  // ── 9. فرادیس — اتصال به نرم‌افزار حسابداری ───────────────────────────────
+
+  function _rFaradis(cont) {
+    // Current month in YYYY-MM Jalali
+    var today = new Date();
+    var jd = typeof g2j === 'function' ? g2j(today.getFullYear(), today.getMonth()+1, today.getDate()) : [1403,1,1];
+    var defaultMonth = jd[0] + '-' + String(jd[1]).padStart(2,'0');
+
+    cont.innerHTML =
+      '<div id="faradisStatus" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;background:#f1f5f9;font-size:.85rem;color:#64748b">در حال بررسی اتصال...</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px">' +
+        '<label style="font-size:.85rem;color:#374151">ماه (YYYY-MM):</label>' +
+        '<input id="faradisMonth" type="text" value="' + defaultMonth + '" ' +
+          'style="border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;font-family:inherit;font-size:.85rem;width:110px">' +
+        '<button onclick="_rFaradisSync()" ' +
+          'style="padding:6px 14px;background:#6366f1;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:inherit;font-size:.85rem">🔄 همگام‌سازی از فرادیس</button>' +
+        '<button onclick="_rFaradisLoad()" ' +
+          'style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:inherit;font-size:.85rem">📥 نمایش داده‌های ذخیره‌شده</button>' +
+      '</div>' +
+      '<div id="faradisContent"></div>' +
+      '<div style="margin-top:20px">' + _section('نگاشت بازاریاب‌ها (Marketer Map)',
+        '<div id="faradisMap"><div style="color:#9ca3af;font-size:.85rem">در حال بارگذاری...</div></div>' +
+        '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+          '<input id="fmMarketerNum" placeholder="MarketerNum" style="border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;font-family:inherit;font-size:.82rem;width:130px">' +
+          '<input id="fmVisitorNum" placeholder="VisitorNum" style="border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;font-family:inherit;font-size:.82rem;width:130px">' +
+          '<input id="fmUsername" placeholder="نام کاربری CRM" style="border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;font-family:inherit;font-size:.82rem;width:180px">' +
+          '<button onclick="_rFaradisAddMap()" style="padding:5px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.82rem">+ افزودن</button>' +
+        '</div>') + '</div>';
+
+    // Check connection status
+    fetch('/api/faradis/status')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var el = document.getElementById('faradisStatus');
+        if (!el) return;
+        if (d.connected) {
+          el.style.background = '#d1fae5'; el.style.color = '#065f46';
+          el.textContent = '✅ اتصال به فرادیس برقرار است — ' + (d.serverTime || '');
+        } else {
+          el.style.background = '#fee2e2'; el.style.color = '#991b1b';
+          el.textContent = '❌ خطا در اتصال: ' + (d.message || 'نامشخص');
+        }
+      })
+      .catch(function(e){
+        var el = document.getElementById('faradisStatus');
+        if (el) { el.style.background='#fee2e2'; el.style.color='#991b1b'; el.textContent='❌ ' + e.message; }
+      });
+
+    // Load marketer map
+    _rFaradisLoadMap();
+  }
+
+  window._rFaradisSync = function() {
+    var month = (document.getElementById('faradisMonth') || {}).value || '';
+    if (!/^\d{4}-\d{2}$/.test(month)) { showToast && showToast('فرمت ماه باید YYYY-MM باشد'); return; }
+    var btn = document.querySelector('[onclick="_rFaradisSync()"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'در حال دریافت...'; }
+
+    fetch('/api/faradis/sync/' + month, { method: 'POST' })
+      .then(function(r){ return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d;}); })
+      .then(function(d){
+        if (typeof showToast === 'function') showToast('✅ همگام‌سازی کامل: ' + d.fetched + ' فاکتور دریافت، ' + d.inserted + ' ذخیره شد', 4000);
+        _rFaradisLoad();
+      })
+      .catch(function(e){ if (typeof showToast === 'function') showToast('❌ خطا: ' + e.message, 4000); })
+      .finally(function(){
+        var btn2 = document.querySelector('[onclick="_rFaradisSync()"]');
+        if (btn2) { btn2.disabled = false; btn2.textContent = '🔄 همگام‌سازی از فرادیس'; }
+      });
+  };
+
+  window._rFaradisLoad = function() {
+    var month = (document.getElementById('faradisMonth') || {}).value || '';
+    var url = '/api/faradis/sales' + (month ? '?month=' + month : '');
+    var cont = document.getElementById('faradisContent');
+    if (!cont) return;
+    cont.innerHTML = '<div style="color:#9ca3af;font-size:.85rem">در حال بارگذاری...</div>';
+
+    fetch(url)
+      .then(function(r){ return r.json().then(function(d){if(!r.ok)throw new Error(d.error||r.status);return d;}); })
+      .then(function(data){
+        var rows = data.rows || [];
+        if (!rows.length) { cont.innerHTML = '<div style="color:#9ca3af;font-size:.85rem;padding:20px">داده‌ای برای این ماه یافت نشد. ابتدا همگام‌سازی کنید.</div>'; return; }
+        var maxAmt = Math.max.apply(null, rows.map(function(r){return r.total_amount||0;})) || 1;
+        var html = _section('فروش ماه ' + (data.month||'') + ' از فرادیس',
+          '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">' +
+            _card('تعداد کارشناس', rows.length, 'نفر', '#6366f1') +
+            _card('جمع فروش', _fmtMoney(rows.reduce(function(s,r){return s+(r.total_amount||0);},0)), 'ریال', '#10b981') +
+            _card('تعداد فاکتور', rows.reduce(function(s,r){return s+(r.invoice_count||0);},0), 'فاکتور', '#f59e0b') +
+          '</div>' +
+          rows.map(function(row){
+            var pct = Math.round(((row.total_amount||0) / maxAmt) * 100);
+            return _barRow(
+              esc(row.display_name || row.crm_username || 'نامشخص'),
+              pct, '#6366f1',
+              _fmtMoney(row.total_amount) + (row.invoice_count ? ' (' + row.invoice_count + ' فاکتور)' : '')
+            );
+          }).join(''));
+        cont.innerHTML = html;
+      })
+      .catch(function(e){ cont.innerHTML = '<div style="color:#ef4444;font-size:.85rem;padding:20px">خطا: ' + esc(e.message) + '</div>'; });
+  };
+
+  function _rFaradisLoadMap() {
+    var el = document.getElementById('faradisMap');
+    if (!el) return;
+    fetch('/api/faradis/map')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var rows = d.rows || [];
+        if (!rows.length) { el.innerHTML = '<div style="color:#9ca3af;font-size:.83rem">هنوز نگاشتی تعریف نشده</div>'; return; }
+        el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.82rem">' +
+          '<tr style="background:#f8fafc"><th style="padding:6px;text-align:right">MarketerNum</th><th style="padding:6px;text-align:right">VisitorNum</th><th style="padding:6px;text-align:right">کاربر CRM</th><th style="padding:6px;text-align:right">نام</th><th></th></tr>' +
+          rows.map(function(r){
+            return '<tr style="border-top:1px solid #f1f5f9">' +
+              '<td style="padding:6px">' + esc(r.marketer_num||'—') + '</td>' +
+              '<td style="padding:6px">' + esc(r.visitor_num||'—') + '</td>' +
+              '<td style="padding:6px">' + esc(r.crm_username) + '</td>' +
+              '<td style="padding:6px;color:#6b7280">' + esc(r.display_name||'') + '</td>' +
+              '<td style="padding:6px"><button onclick="_rFaradisDelMap(' + r.id + ')" style="border:none;background:none;cursor:pointer;color:#ef4444;font-size:.8rem">حذف</button></td>' +
+              '</tr>';
+          }).join('') + '</table>';
+      })
+      .catch(function(){ if (el) el.innerHTML = '<div style="color:#9ca3af;font-size:.83rem">خطا در بارگذاری</div>'; });
+  }
+
+  window._rFaradisAddMap = function() {
+    var mNum = (document.getElementById('fmMarketerNum')||{}).value.trim();
+    var vNum = (document.getElementById('fmVisitorNum')||{}).value.trim();
+    var uname = (document.getElementById('fmUsername')||{}).value.trim();
+    if (!uname) { if (typeof showToast==='function') showToast('نام کاربری CRM الزامی است'); return; }
+    if (!mNum && !vNum) { if (typeof showToast==='function') showToast('حداقل MarketerNum یا VisitorNum را وارد کنید'); return; }
+
+    fetch('/api/faradis/map', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ marketer_num: mNum||null, visitor_num: vNum||null, crm_username: uname })
+    })
+      .then(function(r){ return r.json().then(function(d){if(!r.ok)throw new Error(d.error);return d;}); })
+      .then(function(){ _rFaradisLoadMap(); })
+      .catch(function(e){ if (typeof showToast==='function') showToast('❌ ' + e.message); });
+  };
+
+  window._rFaradisDelMap = function(id) {
+    fetch('/api/faradis/map/' + id, { method: 'DELETE' })
+      .then(function(){ _rFaradisLoadMap(); })
+      .catch(function(e){ if (typeof showToast==='function') showToast('❌ ' + e.message); });
+  };
 
 })();

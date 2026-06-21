@@ -77,6 +77,7 @@ app.use('/api/hr', require('./routes/hr'));
 app.use('/api/trade-kpi', require('./routes/trade-kpi'));
 app.use('/api/payroll', require('./routes/payroll'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/faradis', require('./routes/faradis'));
 
 // Health check
 app.get('/api/health', function (req, res) {
