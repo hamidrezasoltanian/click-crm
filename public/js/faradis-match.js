@@ -91,13 +91,19 @@ function _fmBuildShell() {
     +     '<button id="fmSyncFactorsBtn" onclick="window._fmDoSyncFactors()" style="'
     +       'padding:6px 14px;border-radius:7px;border:none;background:#059669;color:#fff;'
     +       'cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">📊 دریافت فاکتورها</button>'
+    +     '<button onclick="window._fdSyncAll && window._fdSyncAll()" style="'
+    +       'padding:6px 14px;border-radius:7px;border:none;background:#7c3aed;color:#fff;'
+    +       'cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">🔄 Sync همه</button>'
     +     '<div id="fmStatusBar" style="font-size:12px;color:var(--text-muted)">در حال بارگذاری…</div>'
     +   '</div>'
     + '</div>'
-    + '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">'
+    + '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px;flex-wrap:wrap">'
     +   _fmTabBtn('pending','⏳ در انتظار')
     +   _fmTabBtn('approved','✅ تایید شده')
     +   _fmTabBtn('search','🔍 جستجو')
+    +   _fmTabBtn('team','👥 تیم فروش')
+    +   _fmTabBtn('inventory','📦 موجودی')
+    +   _fmTabBtn('mapping','🗺 نگاشت')
     + '</div>'
     + '<div id="fmTabContent"></div>'
     + '</div>';
@@ -118,7 +124,7 @@ window._fmSwitchTab = _fmSwitchTab;
 function _fmSwitchTab(tab) {
   _fmState.tab = tab;
   // Update tab button styles
-  ['pending','approved','search'].forEach(function(t) {
+  ['pending','approved','search','team','inventory','mapping'].forEach(function(t) {
     var btn = document.getElementById('fmTabBtn_' + t);
     if (!btn) return;
     var active = t === tab;
@@ -141,6 +147,30 @@ function _fmSwitchTab(tab) {
     _fmLoadLinks();
   } else if (tab === 'search') {
     _fmRenderSearch();
+  } else if (tab === 'team') {
+    content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">در حال بارگذاری...</div>';
+    if (typeof window.renderFdTeamSales === 'function') {
+      window.renderFdTeamSales('fmTabContent');
+    } else {
+      content.innerHTML = '<div style="padding:20px;color:#ef4444">ماژول faradis-data.js بارگذاری نشده</div>';
+    }
+  } else if (tab === 'inventory') {
+    content.innerHTML = '<div style="margin-bottom:12px;display:flex;gap:8px">'
+      + '<button onclick="window._fdSyncInventory && window._fdSyncInventory()" style="padding:6px 14px;border-radius:7px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-family:inherit;font-size:12px">🔄 Sync موجودی فرادیس</button>'
+      + '<button onclick="window._fdSyncStuffs && window._fdSyncStuffs()" style="padding:6px 14px;border-radius:7px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-family:inherit;font-size:12px">🔄 Sync محصولات</button>'
+      + '</div><div id="fdInventoryContainer"></div>';
+    if (typeof window.renderFdInventory === 'function') {
+      window.renderFdInventory('fdInventoryContainer');
+    } else {
+      document.getElementById('fdInventoryContainer').innerHTML = '<div style="padding:20px;color:#ef4444">ماژول faradis-data.js بارگذاری نشده</div>';
+    }
+  } else if (tab === 'mapping') {
+    content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">در حال بارگذاری...</div>';
+    if (typeof window.renderFdFollowers === 'function') {
+      window.renderFdFollowers('fmTabContent');
+    } else {
+      content.innerHTML = '<div style="padding:20px;color:#ef4444">ماژول faradis-data.js بارگذاری نشده</div>';
+    }
   }
 }
 
@@ -558,6 +588,7 @@ function _fmRenderApproved() {
     + '<th style="padding:8px 10px;border-bottom:2px solid var(--border)">روش</th>'
     + '<th style="padding:8px 10px;border-bottom:2px solid var(--border)">اطمینان</th>'
     + '<th style="padding:8px 10px;border-bottom:2px solid var(--border)">تایید کننده</th>'
+    + '<th style="padding:8px 10px;border-bottom:2px solid var(--border)">اطلاعات</th>'
     + '<th style="padding:8px 10px;border-bottom:2px solid var(--border)">حذف</th>'
     + '</tr></thead><tbody>';
   links.forEach(function(l) {
@@ -569,9 +600,7 @@ function _fmRenderApproved() {
       + '<td style="padding:8px 10px">' + _fmEsc(l.matched_by === 'manual' ? 'دستی' : 'خودکار') + '</td>'
       + '<td style="padding:8px 10px"><span style="background:' + _fmConfColor(l.confidence) + ';color:#fff;border-radius:8px;padding:2px 7px;font-size:11px">' + l.confidence + '٪</span></td>'
       + '<td style="padding:8px 10px;font-size:11px">' + _fmEsc(l.confirmed_by || '') + '</td>'
-      + '<td style="padding:8px 10px"><button onclick="window._fmDeleteLink(' + l.id + ')" style="'
-      + 'padding:3px 10px;border-radius:5px;border:1px solid #ef4444;background:none;color:#ef4444;'
-      + 'cursor:pointer;font-family:inherit;font-size:11px">🗑</button></td>'
+      + '<td style="padding:8px 10px">'      + '<button onclick="window._fdShowCenterProducts && window._fdShowCenterProducts(\'' + l.crm_center_key + '\', this)" style="'      + 'padding:3px 8px;border-radius:5px;border:1px solid #6366f1;background:none;color:#6366f1;'      + 'cursor:pointer;font-family:inherit;font-size:11px;margin-left:4px">📦 محصولات</button>'      + '<button onclick="window._fdShowEnrichment && window._fdShowEnrichment(\'' + l.crm_center_key + '\', this)" style="'      + 'padding:3px 8px;border-radius:5px;border:1px solid #059669;background:none;color:#059669;'      + 'cursor:pointer;font-family:inherit;font-size:11px">📋 اطلاعات</button>'      + '</td>'      + '<td style="padding:8px 10px"><button onclick="window._fmDeleteLink(' + l.id + ')" style="'      + 'padding:3px 10px;border-radius:5px;border:1px solid #ef4444;background:none;color:#ef4444;'      + 'cursor:pointer;font-family:inherit;font-size:11px">🗑</button></td>'
       + '</tr>';
   });
   html += '</tbody></table></div>';
