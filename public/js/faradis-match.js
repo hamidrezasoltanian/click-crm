@@ -672,6 +672,10 @@ function _fmBuildSearchResults(data) {
       + (c.state_name ? '<span> / ' + _fmEsc(c.state_name) + '</span>' : '')
       + '</div>'
       + (c.address ? '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">آدرس: ' + _fmEsc(c.address) + '</div>' : '')
+      + '<button onclick="window._fmShowFactors(' + c.company_num + ',this)" style="'
+      + 'padding:4px 10px;border-radius:5px;border:1px solid #6366f1;background:none;color:#6366f1;'
+      + 'cursor:pointer;font-family:inherit;font-size:11px;margin-top:6px">📊 تاریخچه فروش</button>'
+      + '<div class="fm-factor-detail" style="display:none"></div>'
       + '</div>'
       + '<div style="font-size:10px;color:var(--text-muted);text-align:left;flex-shrink:0;margin-right:8px">'
       + '<div>شناسه: ' + c.company_num + '</div>'
@@ -681,6 +685,66 @@ function _fmBuildSearchResults(data) {
   html += '</div>';
   return html;
 }
+
+// ── Sync factors from Faradis ─────────────────────────────────────────────
+
+window._fmDoSyncFactors = function() {
+  var btn = document.getElementById('fmSyncFactorsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ در حال دریافت…'; }
+  fetch('/api/faradis-match/sync-factors', { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (btn) { btn.disabled = false; btn.textContent = '📊 دریافت فاکتورها'; }
+      if (d.error) { if (typeof showToast === 'function') showToast('❌ ' + d.error, 4000); return; }
+      if (typeof showToast === 'function') showToast('✅ ' + d.count + ' فاکتور از فرادیس دریافت شد');
+      _fmLoadStatus();
+    })
+    .catch(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '📊 دریافت فاکتورها'; }
+      if (typeof showToast === 'function') showToast('❌ خطا: ' + e.message, 4000);
+    });
+};
+
+// ── Factor history handler ────────────────────────────────────────────────
+
+window._fmShowFactors = function(companyNum, btn) {
+  var detail = btn.nextElementSibling;
+  if (!detail) return;
+  if (detail.style.display !== 'none') { detail.style.display = 'none'; btn.textContent = '📊 تاریخچه فروش'; return; }
+  btn.textContent = '⏳';
+  detail.style.display = '';
+  detail.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:6px">در حال بارگذاری…</div>';
+  fetch('/api/faradis-match/factors/' + companyNum)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      btn.textContent = '📊 تاریخچه فروش';
+      if (d.error) { detail.innerHTML = '<div style="color:#ef4444;font-size:11px">' + _fmEsc(d.error) + '</div>'; return; }
+      var monthly = d.monthly || [];
+      if (monthly.length === 0) { detail.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:6px">فاکتوری یافت نشد</div>'; return; }
+      var html = '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:6px">'
+        + '<thead><tr style="background:var(--bg-raised)">'
+        + '<th style="padding:4px 8px;text-align:right;border-bottom:1px solid var(--border)">ماه</th>'
+        + '<th style="padding:4px 8px;text-align:right;border-bottom:1px solid var(--border)">فاکتور فروش</th>'
+        + '<th style="padding:4px 8px;text-align:right;border-bottom:1px solid var(--border)">پیش‌فاکتور</th>'
+        + '<th style="padding:4px 8px;text-align:right;border-bottom:1px solid var(--border)">تعداد</th>'
+        + '</tr></thead><tbody>';
+      monthly.forEach(function(m) {
+        var inv = parseFloat(m.invoiced || 0);
+        html += '<tr style="border-bottom:1px solid var(--border)">'
+          + '<td style="padding:4px 8px">' + _fmEsc(m.jalali_month) + '</td>'
+          + '<td style="padding:4px 8px;font-weight:600">' + (inv > 0 ? (inv/1000000).toFixed(1) + 'M' : '—') + '</td>'
+          + '<td style="padding:4px 8px">' + (parseFloat(m.quoted||0) > 0 ? (parseFloat(m.quoted)/1000000).toFixed(1) + 'M' : '—') + '</td>'
+          + '<td style="padding:4px 8px">' + (parseInt(m.invoice_count||0) + parseInt(m.quote_count||0)) + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+      detail.innerHTML = html;
+    })
+    .catch(function(e) {
+      btn.textContent = '📊 تاریخچه فروش';
+      detail.innerHTML = '<div style="color:#ef4444;font-size:11px">خطا: ' + _fmEsc(e.message) + '</div>';
+    });
+};
 
 // ── Utility ───────────────────────────────────────────────────────────────
 
