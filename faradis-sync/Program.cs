@@ -69,7 +69,7 @@ namespace FaradisSync
                     SyncTable("phones",       GetPhonesQ(),      new[] { "RowNum", "Phone" },       gc);
                     SyncTable("addresses",    GetAddressesQ(),   new[] { "CompanyNum" },            gc);
                     SyncTable("followers",    GetFollowersQ(),   new[] { "CompanyNum", "UserName" },gc);
-                    SyncTable("factors",      GetFactorsQ(),     new[] { "FactorID" },              gc);
+                    SyncTable("factors",      GetFactorsQ(),     new[] { "FactorNum" },             gc);
                     SyncTable("factor_rows",  GetFactorRowsQ(),  new[] { "FactorRowNum" },          gc);
 
                     SaveHashes();
@@ -187,27 +187,29 @@ namespace FaradisSync
                 CONSTRAINT PK_followers PRIMARY KEY (CompanyNum, UserName)
             )");
 
-            Exec(conn, @"IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='factors')
-            CREATE TABLE factors (
-                FactorID    INT            PRIMARY KEY,
-                FactorNum   NVARCHAR(100),
-                FactorDate  INT,
-                MarketerNum INT,
+            // جداول factors و factor_rows را با schema صحیح بازسازی کن
+            Exec(conn, "IF OBJECT_ID('factor_rows','U') IS NOT NULL DROP TABLE factor_rows");
+            Exec(conn, "IF OBJECT_ID('factors','U') IS NOT NULL DROP TABLE factors");
+
+            Exec(conn, @"CREATE TABLE factors (
+                FactorNum   BIGINT         PRIMARY KEY,
+                FactorCode  NVARCHAR(100),
+                FactorDate  DATETIME2,
+                MarketerNum BIGINT,
                 VisitorNum  INT,
-                CompanyID   INT,
-                Discount    DECIMAL(18,2),
-                Tax         DECIMAL(18,2),
-                FactorType  INT,
-                Deleted     BIT
+                CompanyNum  BIGINT,
+                DiscountAll DECIMAL(18,2),
+                TaxAll      DECIMAL(18,2),
+                FactorType  TINYINT,
+                IsDelete    BIT
             )");
 
-            Exec(conn, @"IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='factor_rows')
-            CREATE TABLE factor_rows (
-                FactorRowNum INT            PRIMARY KEY,
-                FactorID     INT,
+            Exec(conn, @"CREATE TABLE factor_rows (
+                FactorRowNum BIGINT         PRIMARY KEY,
+                FactorNum    BIGINT,
                 TotalPrice   DECIMAL(18,2),
-                Qty          DECIMAL(18,4),
-                UnitPrice    DECIMAL(18,2)
+                Count1       DECIMAL(18,4),
+                Price        DECIMAL(18,2)
             )");
 
             Print("OK", ConsoleColor.Green);
@@ -389,23 +391,23 @@ namespace FaradisSync
             INNER JOIN Users u ON cu.UserName = u.UserName";
 
         static string GetFactorsQ() => @"
-            SELECT FactorID, FactorNum, FactorDate,
-                   MarketerNum, VisitorNum, CompanyID,
-                   COALESCE(Discount, 0) AS Discount,
-                   COALESCE(Tax, 0) AS Tax,
+            SELECT FactorNum, FactorCode, FactorDate,
+                   MarketerNum, VisitorNum, CompanyNum,
+                   COALESCE(DiscountAll, 0) AS DiscountAll,
+                   COALESCE(TaxAll, 0) AS TaxAll,
                    FactorType,
-                   COALESCE(Deleted, 0) AS Deleted
+                   COALESCE(IsDelete, 0) AS IsDelete
             FROM Factor
-            WHERE FactorType = 1";
+            WHERE FactorType = 1 AND COALESCE(IsDelete, 0) = 0";
 
         static string GetFactorRowsQ() => @"
-            SELECT fr.FactorRowNum, fr.FactorID,
+            SELECT fr.FactorRowNum, fr.FactorNum,
                    COALESCE(fr.TotalPrice, 0) AS TotalPrice,
-                   COALESCE(fr.Qty, 0) AS Qty,
-                   COALESCE(fr.UnitPrice, 0) AS UnitPrice
+                   COALESCE(fr.Count1, 0) AS Count1,
+                   COALESCE(fr.Price, 0) AS Price
             FROM FactorRow fr
-            INNER JOIN Factor f ON f.FactorID = fr.FactorID
-            WHERE f.FactorType = 1 AND COALESCE(f.Deleted, 0) = 0";
+            INNER JOIN Factor f ON f.FactorNum = fr.FactorNum
+            WHERE f.FactorType = 1 AND COALESCE(f.IsDelete, 0) = 0";
 
         // ─── کمکی ────────────────────────────────────────────────────────────
         static List<Dictionary<string, object>> ReadSrc(string query)
