@@ -1171,6 +1171,15 @@ async function initSchema() {
     )
   `);
 
+  // Cache of CRM centers pushed from frontend (avoids dependency on centers_master)
+  await query(`
+    CREATE TABLE IF NOT EXISTS crm_centers_cache (
+      center_key TEXT PRIMARY KEY,
+      center_name TEXT NOT NULL,
+      synced_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   console.log('[DB] Schema initialized');
 }
 

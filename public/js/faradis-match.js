@@ -26,9 +26,55 @@ window.renderFaradisMatchPanel = function() {
   var el = document.getElementById('faradisMatchPanel');
   if (!el) return;
   el.innerHTML = _fmBuildShell();
+  _fmSyncCRMCenters();  // push frontend center list to backend cache
   _fmLoadStatus();
   _fmSwitchTab(_fmState.tab);
 };
+
+// ── Sync CRM centers from frontend to backend ─────────────────────────────
+
+function _fmSyncCRMCenters() {
+  try {
+    var centers = [];
+    // Collect all provinces and their centers
+    if (typeof getAllProvinces === 'function') {
+      var provs = getAllProvinces();
+      provs.forEach(function(prov) {
+        if (!prov || !prov.id) return;
+        var provCenters = [];
+        if (typeof getProvCenters === 'function') {
+          provCenters = getProvCenters(prov.id) || [];
+        }
+        provCenters.forEach(function(c) {
+          if (!c) return;
+          var key = c.key || c.id;
+          var name = c.name || c.n || '';
+          if (!key || !name) return;
+          centers.push({ key: String(key), name: String(name) });
+        });
+      });
+    }
+    // Also try window._CENTERS (Tehran master list)
+    if (typeof window._CENTERS !== 'undefined' && Array.isArray(window._CENTERS)) {
+      window._CENTERS.forEach(function(c) {
+        if (!c) return;
+        var id = c.id || c.key;
+        var name = c.name || c.n || '';
+        if (!id || !name) return;
+        var key = String(id).startsWith('c_') ? String(id) : 'c_' + String(id);
+        centers.push({ key: key, name: String(name) });
+      });
+    }
+    if (centers.length === 0) return;
+    fetch('/api/faradis-match/sync-crm-centers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ centers: centers }),
+    }).catch(function(){});  // fire-and-forget, ignore errors
+  } catch (e) {
+    // non-critical, ignore
+  }
+}
 
 // ── Shell HTML ────────────────────────────────────────────────────────────
 
@@ -547,14 +593,16 @@ window._fmLinksMore = function() {
 function _fmRenderSearch() {
   var content = document.getElementById('fmTabContent');
   if (!content) return;
-  content.innerHTML = '<div style="max-width:600px">'
-    + '<div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text-primary)">🔍 جستجو در مشتریان فرادیس</div>'
+  content.innerHTML = '<div style="max-width:700px">'
+    + '<div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text-primary)">🔍 مرور مشتریان فرادیس</div>'
     + '<div style="display:flex;gap:8px;margin-bottom:14px">'
-    + '<input id="fmSearchQ" type="text" placeholder="نام مشتری فرادیس را وارد کنید…" oninput="window._fmDoSearch()" value="' + _fmEscAttr(_fmState.searchQ) + '" '
+    + '<input id="fmSearchQ" type="text" placeholder="جستجو بر اساس نام، تلفن، کد…" oninput="window._fmDoSearch()" value="' + _fmEscAttr(_fmState.searchQ) + '" '
     + 'style="flex:1;padding:10px 14px;border:1px solid var(--border-input);border-radius:7px;font-family:inherit;font-size:13px;background:var(--bg-input);color:var(--text-primary)">'
     + '</div>'
-    + '<div id="fmSearchResults">' + (_fmState.searchResults.length ? _fmBuildSearchResults(_fmState.searchResults) : '') + '</div>'
+    + '<div id="fmSearchResults"><div style="text-align:center;padding:20px;color:var(--text-muted)">⏳ در حال بارگذاری…</div></div>'
     + '</div>';
+  // Auto-load first 50 customers
+  _fmDoSearchOrAll(_fmState.searchQ || '');
   var inp = document.getElementById('fmSearchQ');
   if (inp) inp.focus();
 }
@@ -564,21 +612,25 @@ window._fmDoSearch = function() {
   if (!inp) return;
   var q = inp.value.trim();
   _fmState.searchQ = q;
-  if (!q) {
-    var res = document.getElementById('fmSearchResults');
-    if (res) res.innerHTML = '';
-    _fmState.searchResults = [];
-    return;
-  }
-  fetch('/api/faradis-match/search?q=' + encodeURIComponent(q))
+  _fmDoSearchOrAll(q);
+};
+
+function _fmDoSearchOrAll(q) {
+  var url = q
+    ? '/api/faradis-match/search?q=' + encodeURIComponent(q)
+    : '/api/faradis-match/search?q=&limit=50';
+  fetch(url)
     .then(function(r){ return r.json(); })
     .then(function(data) {
       _fmState.searchResults = Array.isArray(data) ? data : [];
       var res = document.getElementById('fmSearchResults');
       if (res) res.innerHTML = _fmBuildSearchResults(_fmState.searchResults);
     })
-    .catch(function(){});
-};
+    .catch(function(e) {
+      var res = document.getElementById('fmSearchResults');
+      if (res) res.innerHTML = '<div style="color:#ef4444;padding:12px">خطا: ' + _fmEsc(e.message) + '</div>';
+    });
+}
 
 function _fmBuildSearchResults(data) {
   if (!data || data.length === 0) return '<div style="font-size:13px;color:var(--text-muted);padding:12px">نتیجه‌ای یافت نشد</div>';

@@ -84,12 +84,19 @@ function computeConfidence(crmName, customer) {
 
 async function loadCRMCenters() {
   const centers = [];
+  const seenKeys = new Set();
+
+  function addCenter(key, name) {
+    if (!key || !name || seenKeys.has(key)) return;
+    seenKeys.add(key);
+    centers.push({ key, name });
+  }
+
+  // 1. Primary: centers_master table (populated when admin uploads center list)
   try {
-    // Tehran centers
     const tehranRow = await query(`SELECT data FROM centers_master WHERE key = 'CENTERS'`);
     if (tehranRow.rows.length) {
       let data = tehranRow.rows[0].data;
-      // data might be array or { list:[], data:[] } or object of objects
       let arr = null;
       if (Array.isArray(data)) arr = data;
       else if (data && Array.isArray(data.list)) arr = data.list;
@@ -102,7 +109,7 @@ async function loadCRMCenters() {
           const name = c.name || c.n || '';
           if (!id || !name) continue;
           const key = String(id).startsWith('c_') ? String(id) : 'c_' + String(id);
-          centers.push({ key, name });
+          addCenter(key, name);
         }
       }
     }
@@ -110,11 +117,9 @@ async function loadCRMCenters() {
     console.error('[faradis-match] error loading CENTERS:', e.message);
   }
   try {
-    // Province centers
     const pcRow = await query(`SELECT data FROM centers_master WHERE key = 'PC_RAW'`);
     if (pcRow.rows.length) {
       let data = pcRow.rows[0].data;
-      // PC_RAW is typically { "provId": [{...},...] }
       if (data && typeof data === 'object' && !Array.isArray(data)) {
         for (const [provId, provCenters] of Object.entries(data)) {
           if (!Array.isArray(provCenters)) continue;
@@ -124,7 +129,7 @@ async function loadCRMCenters() {
             if (!name) return;
             const rid = c.id != null ? String(c.id) : (provId + '||' + idx);
             const key = rid.includes('||') ? 'pc_' + rid : 'pc_' + provId + '||' + rid;
-            centers.push({ key, name });
+            addCenter(key, name);
           });
         }
       }
@@ -132,8 +137,68 @@ async function loadCRMCenters() {
   } catch (e) {
     console.error('[faradis-match] error loading PC_RAW:', e.message);
   }
+
+  // 2. Fallback: crm_centers_cache (pushed from browser by frontend)
+  if (centers.length === 0) {
+    try {
+      const cacheRows = await query('SELECT center_key, center_name FROM crm_centers_cache ORDER BY center_key');
+      for (const r of cacheRows.rows) {
+        addCenter(r.center_key, r.center_name);
+      }
+      if (centers.length > 0) {
+        console.log('[faradis-match] loaded', centers.length, 'CRM centers from crm_centers_cache');
+      }
+    } catch (e) {
+      console.error('[faradis-match] error loading crm_centers_cache:', e.message);
+    }
+  }
+
+  // 3. Last resort: center_contacts table (has center_name when admin saved contacts)
+  if (centers.length === 0) {
+    try {
+      const ccRows = await query(
+        'SELECT center_key, center_name FROM center_contacts WHERE center_name IS NOT NULL AND center_name != \'\' ORDER BY center_key'
+      );
+      for (const r of ccRows.rows) {
+        addCenter(r.center_key, r.center_name);
+      }
+      if (centers.length > 0) {
+        console.log('[faradis-match] loaded', centers.length, 'CRM centers from center_contacts');
+      }
+    } catch (e) {
+      console.error('[faradis-match] error loading center_contacts:', e.message);
+    }
+  }
+
   return centers;
 }
+
+// ── POST /api/faradis-match/sync-crm-centers ─────────────────────────────
+// Called by frontend to push its in-memory center list to backend cache
+
+router.post('/sync-crm-centers', requireAuth, requireManager, async function(req, res) {
+  try {
+    const { centers } = req.body || {};
+    if (!Array.isArray(centers) || centers.length === 0) {
+      return res.status(400).json({ error: 'centers آرایه‌ای از {key, name} الزامی است' });
+    }
+    let count = 0;
+    for (const c of centers) {
+      if (!c.key || !c.name) continue;
+      await query(
+        `INSERT INTO crm_centers_cache (center_key, center_name, synced_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (center_key) DO UPDATE SET center_name=$2, synced_at=NOW()`,
+        [String(c.key), String(c.name).slice(0, 300)]
+      );
+      count++;
+    }
+    res.json({ ok: true, count });
+  } catch (e) {
+    console.error('[faradis-match] sync-crm-centers error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── POST /api/faradis-match/sync-customers ────────────────────────────────
 
@@ -315,15 +380,26 @@ router.post('/reject', requireAuth, requireManager, async function(req, res) {
 router.get('/search', requireAuth, requireManager, async function(req, res) {
   try {
     const q = (req.query.q || '').trim();
-    if (!q) return res.json([]);
-    const rows = await query(
-      `SELECT company_num, company_name, company_code, phone, mobile, state_name, city_name, address, type_name
-       FROM faradis_customers_cache
-       WHERE company_name ILIKE $1
-       ORDER BY company_name
-       LIMIT 10`,
-      ['%' + q + '%']
-    );
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    let rows;
+    if (!q) {
+      rows = await query(
+        `SELECT company_num, company_name, company_code, phone, mobile, state_name, city_name, address, type_name
+         FROM faradis_customers_cache
+         ORDER BY company_name
+         LIMIT $1`,
+        [limit]
+      );
+    } else {
+      rows = await query(
+        `SELECT company_num, company_name, company_code, phone, mobile, state_name, city_name, address, type_name
+         FROM faradis_customers_cache
+         WHERE company_name ILIKE $1 OR phone ILIKE $1 OR mobile ILIKE $1 OR company_code ILIKE $1
+         ORDER BY company_name
+         LIMIT $2`,
+        ['%' + q + '%', limit]
+      );
+    }
     res.json(rows.rows);
   } catch (e) {
     console.error('[faradis-match] search error:', e.message);
