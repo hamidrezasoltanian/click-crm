@@ -88,6 +88,9 @@ function _fmBuildShell() {
     +     '<button id="fmSyncBtn" onclick="window._fmDoSync()" style="'
     +       'padding:6px 14px;border-radius:7px;border:none;background:#6366f1;color:#fff;'
     +       'cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">🔄 دریافت مشتریان فرادیس</button>'
+    +     '<button id="fdSyncAllBtn" onclick="window._fdSyncAll()" style="'
+    +       'padding:6px 14px;border-radius:7px;border:none;background:#374151;color:#fff;'
+    +       'cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">🔄 Sync همه</button>'
     +     '<button id="fmSyncFactorsBtn" onclick="window._fmDoSyncFactors()" style="'
     +       'padding:6px 14px;border-radius:7px;border:none;background:#059669;color:#fff;'
     +       'cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">📊 دریافت فاکتورها</button>'
@@ -170,8 +173,7 @@ function _fmSwitchTab(tab) {
       window.renderFdFollowers('fmTabContent');
     } else {
       content.innerHTML = '<div style="padding:20px;color:#ef4444">ماژول faradis-data.js بارگذاری نشده</div>';
-    }
-  }
+    }  }
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────
@@ -600,7 +602,15 @@ function _fmRenderApproved() {
       + '<td style="padding:8px 10px">' + _fmEsc(l.matched_by === 'manual' ? 'دستی' : 'خودکار') + '</td>'
       + '<td style="padding:8px 10px"><span style="background:' + _fmConfColor(l.confidence) + ';color:#fff;border-radius:8px;padding:2px 7px;font-size:11px">' + l.confidence + '٪</span></td>'
       + '<td style="padding:8px 10px;font-size:11px">' + _fmEsc(l.confirmed_by || '') + '</td>'
-      + '<td style="padding:8px 10px">'      + '<button onclick="window._fdShowCenterProducts && window._fdShowCenterProducts(\'' + l.crm_center_key + '\', this)" style="'      + 'padding:3px 8px;border-radius:5px;border:1px solid #6366f1;background:none;color:#6366f1;'      + 'cursor:pointer;font-family:inherit;font-size:11px;margin-left:4px">📦 محصولات</button>'      + '<button onclick="window._fdShowEnrichment && window._fdShowEnrichment(\'' + l.crm_center_key + '\', this)" style="'      + 'padding:3px 8px;border-radius:5px;border:1px solid #059669;background:none;color:#059669;'      + 'cursor:pointer;font-family:inherit;font-size:11px">📋 اطلاعات</button>'      + '</td>'      + '<td style="padding:8px 10px"><button onclick="window._fmDeleteLink(' + l.id + ')" style="'      + 'padding:3px 10px;border-radius:5px;border:1px solid #ef4444;background:none;color:#ef4444;'      + 'cursor:pointer;font-family:inherit;font-size:11px">🗑</button></td>'
+      + '<td style="padding:8px 10px">'
+      + '<button onclick="window._fdShowCenterProducts && window._fdShowCenterProducts(\'' + _fmEscAttr(l.crm_center_key) + '\',this)" style="padding:3px 8px;border-radius:5px;border:1px solid #6366f1;background:none;color:#6366f1;cursor:pointer;font-family:inherit;font-size:10px">📦 محصولات</button>'
+      + '<div style="display:none"></div>'
+      + '<button onclick="window._fdShowEnrichment && window._fdShowEnrichment(\'' + _fmEscAttr(l.crm_center_key) + '\',this)" style="padding:3px 8px;border-radius:5px;border:1px solid #059669;background:none;color:#059669;cursor:pointer;font-family:inherit;font-size:10px">📋 اطلاعات</button>'
+      + '<div style="display:none"></div>'
+      + '</td>'
+      + '<td style="padding:8px 10px"><button onclick="window._fmDeleteLink(' + l.id + ')" style="'
+      + 'padding:3px 10px;border-radius:5px;border:1px solid #ef4444;background:none;color:#ef4444;'
+      + 'cursor:pointer;font-family:inherit;font-size:11px">🗑</button></td>'
       + '</tr>';
   });
   html += '</tbody></table></div>';
@@ -795,5 +805,21 @@ function _fmConfColor(conf) {
   if (conf >= 40) return '#d97706';
   return '#6b7280';
 }
+
+window._fdSyncInventory = function() {
+  fetch('/api/faradis-data/sync-inventory', { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (typeof showToast === 'function') showToast(d.ok ? '✅ ' + d.count + ' ردیف موجودی' : '❌ ' + d.error, 4000);
+      if (d.ok && typeof renderFdInventory === 'function') renderFdInventory('fdInventoryContainer');
+    }).catch(function(e){ if (typeof showToast === 'function') showToast('❌ ' + e.message, 4000); });
+};
+window._fdSyncStuffs = function() {
+  fetch('/api/faradis-data/sync-stuffs', { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (typeof showToast === 'function') showToast(d.ok ? '✅ ' + d.count + ' محصول' : '❌ ' + d.error, 4000);
+    }).catch(function(e){ if (typeof showToast === 'function') showToast('❌ ' + e.message, 4000); });
+};
 
 })(); // end IIFE
