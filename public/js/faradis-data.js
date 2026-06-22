@@ -419,4 +419,179 @@ window._fdShowReceivable = function(crmKey, btn) {
     .catch(function(e){ btn.textContent = '💰 مطالبه'; detail.innerHTML = '<div style="font-size:11px;color:#ef4444;padding:4px">' + _fdEsc(e.message) + '</div>'; });
 };
 
+// ── Commission tab ────────────────────────────────────────────────────────
+
+window.renderFdCommissions = function(containerId) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+
+  // Build month selector + user filter + table
+  var todayJ = typeof todayStr === 'function' ? todayStr().slice(0,7) : '';
+  el.innerHTML = '<div id="fdCommFilters" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">'
+    + '<label style="font-size:12px;color:var(--text-secondary)">ماه:</label>'
+    + '<input id="fdCommMonth" type="text" placeholder="مثلاً 1403/06" value="' + _fdEsc(todayJ) + '" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;width:100px">'
+    + '<select id="fdCommUser" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px"><option value="">همه بازاریاب‌ها</option></select>'
+    + '<button onclick="window._fdLoadCommissions()" style="padding:5px 14px;border-radius:6px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-family:inherit;font-size:12px">🔍 نمایش</button>'
+    + '<button onclick="window._fdShowCommSettings()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:none;cursor:pointer;font-family:inherit;font-size:12px">⚙️ نرخ پورسانت</button>'
+    + '</div>'
+    + '<div id="fdCommSummaryBox" style="margin-bottom:12px"></div>'
+    + '<div id="fdCommTable">در حال بارگذاری…</div>';
+
+  // Load users for dropdown
+  fetch('/api/faradis-data/user-commission-pct')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var sel = document.getElementById('fdCommUser');
+      if (!sel || !d.ok) return;
+      (d.users || []).forEach(function(u) {
+        var opt = document.createElement('option');
+        opt.value = u.username;
+        opt.textContent = (u.name || u.username) + ' (' + u.commission_pct + '٪)';
+        sel.appendChild(opt);
+      });
+    }).catch(function(){});
+
+  window._fdLoadCommissions();
+};
+
+window._fdLoadCommissions = function() {
+  var monthEl = document.getElementById('fdCommMonth');
+  var userEl  = document.getElementById('fdCommUser');
+  var tableEl = document.getElementById('fdCommTable');
+  var summEl  = document.getElementById('fdCommSummaryBox');
+  if (!tableEl) return;
+
+  var month = monthEl ? monthEl.value.trim() : '';
+  var username = userEl ? userEl.value : '';
+
+  var url = '/api/faradis-data/commissions?';
+  if (month)    url += 'month=' + encodeURIComponent(month) + '&';
+  if (username) url += 'username=' + encodeURIComponent(username) + '&';
+
+  tableEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted)">در حال بارگذاری…</div>';
+
+  // Also load monthly summary
+  var sumUrl = '/api/faradis-data/commission-summary?' + (month ? 'month=' + encodeURIComponent(month) : '');
+
+  Promise.all([fetch(url).then(function(r){return r.json();}), fetch(sumUrl).then(function(r){return r.json();})])
+    .then(function(results) {
+      var d = results[0], s = results[1];
+
+      // Summary cards
+      if (summEl && s.ok) {
+        var sumRows = (s.rows || []).filter(function(r){ return r.crm_username; });
+        var totalComm = sumRows.reduce(function(a,r){ return a + Number(r.commission_amount||0); }, 0);
+        var totalSales = sumRows.reduce(function(a,r){ return a + Number(r.total_sales||0); }, 0);
+        var sumHtml = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">';
+        sumHtml += '<div style="padding:10px 16px;background:var(--bg-raised);border-radius:8px;border:1px solid var(--border)">'
+          + '<div style="font-size:11px;color:var(--text-muted)">جمع فروش</div>'
+          + '<div style="font-size:16px;font-weight:700;color:#6366f1">' + _fdFmt(totalSales) + ' ﷼</div></div>';
+        sumHtml += '<div style="padding:10px 16px;background:var(--bg-raised);border-radius:8px;border:1px solid var(--border)">'
+          + '<div style="font-size:11px;color:var(--text-muted)">جمع پورسانت</div>'
+          + '<div style="font-size:16px;font-weight:700;color:#059669">' + _fdFmt(totalComm) + ' ﷼</div></div>';
+        sumRows.forEach(function(r) {
+          if (!r.crm_username) return;
+          sumHtml += '<div style="padding:10px 16px;background:var(--bg-raised);border-radius:8px;border:1px solid var(--border)">'
+            + '<div style="font-size:11px;color:var(--text-muted)">' + _fdEsc(r.crm_name || r.crm_username) + ' — ' + r.effective_pct + '٪</div>'
+            + '<div style="font-size:14px;font-weight:700;color:#059669">' + _fdFmt(r.commission_amount) + ' ﷼</div>'
+            + '<div style="font-size:10px;color:var(--text-muted)">' + r.invoice_count + ' فاکتور · ' + _fdFmt(r.total_sales) + '</div>'
+            + '</div>';
+        });
+        sumHtml += '</div>';
+        summEl.innerHTML = sumHtml;
+      }
+
+      // Per-invoice table
+      if (!d.ok) { tableEl.innerHTML = '<div style="padding:16px;color:#ef4444">خطا: ' + _fdEsc(d.error||'') + '</div>'; return; }
+      var rows = d.rows || [];
+      if (!rows.length) { tableEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">فاکتوری یافت نشد</div>'; return; }
+
+      var html = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">' + rows.length + ' فاکتور</div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+        + '<thead><tr style="background:var(--bg-raised)">'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:right">تاریخ</th>'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:right">مشتری</th>'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:right">مرکز CRM</th>'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:right">بازاریاب</th>'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:left">مبلغ فاکتور</th>'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:center">نرخ</th>'
+        + '<th style="padding:7px 8px;border-bottom:2px solid var(--border);text-align:left">پورسانت</th>'
+        + '</tr></thead><tbody>';
+
+      rows.forEach(function(r) {
+        var hasMarketer = r.crm_username;
+        var marketerCell = hasMarketer
+          ? '<span style="font-weight:600">' + _fdEsc(r.crm_name || r.crm_username) + '</span>'
+            + '<div style="font-size:10px;color:var(--text-muted)">' + r.commission_pct + '٪</div>'
+          : '<span style="color:var(--text-muted);font-size:10px">نگاشت نشده</span>';
+        var crmCell = r.crm_center_name
+          ? '<span style="background:#6366f120;color:#6366f1;padding:1px 5px;border-radius:3px;font-size:10px">' + _fdEsc(r.crm_center_name) + '</span>'
+          : '<span style="color:var(--text-muted);font-size:10px">—</span>';
+        var commCell = hasMarketer
+          ? '<b style="color:#059669">' + _fdFmt(r.commission_amount) + '</b>'
+          : '<span style="color:var(--text-muted)">—</span>';
+
+        html += '<tr style="border-bottom:1px solid var(--border)">'
+          + '<td style="padding:7px 8px">' + _fdEsc(r.jalali_date || '') + '</td>'
+          + '<td style="padding:7px 8px"><div>' + _fdEsc(r.company_name || '') + '</div></td>'
+          + '<td style="padding:7px 8px">' + crmCell + '</td>'
+          + '<td style="padding:7px 8px">' + marketerCell + '</td>'
+          + '<td style="padding:7px 8px;text-align:left;direction:ltr">' + _fdFmt(r.total_amount) + '</td>'
+          + '<td style="padding:7px 8px;text-align:center">' + (hasMarketer ? r.commission_pct + '٪' : '—') + '</td>'
+          + '<td style="padding:7px 8px;text-align:left;direction:ltr">' + commCell + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      tableEl.innerHTML = html;
+    })
+    .catch(function(e){ if(tableEl) tableEl.innerHTML = '<div style="padding:16px;color:#ef4444">' + _fdEsc(e.message) + '</div>'; });
+};
+
+// Settings modal for commission rates
+window._fdShowCommSettings = function() {
+  fetch('/api/faradis-data/user-commission-pct')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.ok) return;
+      var rows = d.users || [];
+      var body = '<div style="font-size:13px;margin-bottom:12px;color:var(--text-secondary)">نرخ پورسانت هر بازاریاب را تنظیم کنید:</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        + '<thead><tr style="background:var(--bg-raised)">'
+        + '<th style="padding:8px;border-bottom:2px solid var(--border);text-align:right">نام</th>'
+        + '<th style="padding:8px;border-bottom:2px solid var(--border);text-align:right">نقش</th>'
+        + '<th style="padding:8px;border-bottom:2px solid var(--border);text-align:center">پورسانت ٪</th>'
+        + '<th style="padding:8px;border-bottom:2px solid var(--border)"></th>'
+        + '</tr></thead><tbody>';
+      rows.forEach(function(u) {
+        body += '<tr style="border-bottom:1px solid var(--border)" id="fdcrow_' + _fdEsc(u.username) + '">'
+          + '<td style="padding:8px">' + _fdEsc(u.name || u.username) + '</td>'
+          + '<td style="padding:8px;color:var(--text-muted)">' + _fdEsc(u.role || '') + '</td>'
+          + '<td style="padding:8px;text-align:center"><input type="number" step="0.1" min="0" max="20" value="' + u.commission_pct + '" id="fdcpct_' + _fdEsc(u.username) + '" style="width:70px;text-align:center;padding:4px;border:1px solid var(--border);border-radius:5px;font-family:inherit"></td>'
+          + '<td style="padding:8px"><button onclick="window._fdSaveCommPct(\'' + _fdEsc(u.username) + '\')" style="padding:3px 10px;border-radius:5px;border:none;background:#059669;color:#fff;cursor:pointer;font-family:inherit;font-size:12px">ذخیره</button></td>'
+          + '</tr>';
+      });
+      body += '</tbody></table>';
+      if (typeof openModal === 'function') {
+        openModal('fdCommSettingsModal', '⚙️ نرخ پورسانت بازاریاب‌ها', body, '', { lg: true });
+      } else {
+        alert(body);
+      }
+    }).catch(function(e){ if(typeof showToast==='function') showToast('❌ ' + e.message, 3000); });
+};
+
+window._fdSaveCommPct = function(username) {
+  var inp = document.getElementById('fdcpct_' + username);
+  if (!inp) return;
+  var pct = parseFloat(inp.value);
+  if (isNaN(pct) || pct < 0 || pct > 100) { if(typeof showToast==='function') showToast('نرخ معتبر نیست', 3000); return; }
+  fetch('/api/faradis-data/user-commission-pct', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: username, pct: pct })
+  }).then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (typeof showToast === 'function') showToast(d.ok ? '✅ ذخیره شد' : '❌ ' + (d.error||'خطا'), 3000);
+    }).catch(function(e){ if(typeof showToast==='function') showToast('❌ ' + e.message, 3000); });
+};
+
 })();

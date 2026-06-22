@@ -475,4 +475,136 @@ router.get('/purchases-summary', requireAuth, requireManager, async function(req
   } catch(e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── Commission calculation endpoints ─────────────────────────────────────
+
+// GET /commissions?month=1403/06&username=X
+// Returns per-invoice commissions for a month (or all months if no month param)
+router.get('/commissions', requireAuth, requireManager, async function(req, res) {
+  try {
+    const { month, username } = req.query;
+    let where = ['1=1'];
+    const params = [];
+    if (month) { params.push(month); where.push(`f.jalali_month = $${params.length}`); }
+    if (username) { params.push(username); where.push(`mm.crm_username = $${params.length}`); }
+
+    const r = await query(`
+      SELECT
+        f.factor_num,
+        f.jalali_date,
+        f.jalali_month,
+        f.company_num,
+        f.company_name,
+        f.total_amount,
+        f.marketer_num,
+        f.visitor_num,
+        mm.crm_username,
+        au.name             AS crm_name,
+        COALESCE(au.commission_pct, 1.0) AS commission_pct,
+        ROUND(f.total_amount * COALESCE(au.commission_pct, 1.0) / 100.0, 0) AS commission_amount,
+        cfl.crm_center_key,
+        cfl.crm_center_name
+      FROM faradis_factors_cache f
+      LEFT JOIN faradis_marketer_map mm
+        ON mm.marketer_num = f.marketer_num AND mm.visitor_num = COALESCE(f.visitor_num,'')
+      LEFT JOIN app_users au ON au.username = mm.crm_username
+      LEFT JOIN center_faradis_link cfl ON cfl.faradis_company_num = f.company_num
+      WHERE ${where.join(' AND ')} AND f.factor_type = 1
+      ORDER BY f.jalali_date DESC
+      LIMIT 2000
+    `, params);
+    res.json({ ok: true, rows: r.rows });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
+// GET /commission-summary?month=1403/06
+// Returns per-user commission summary with tiered rate applied to monthly total
+router.get('/commission-summary', requireAuth, requireManager, async function(req, res) {
+  try {
+    const { month } = req.query;
+
+    // Get commission settings (tiered rules)
+    const cs = await query(`SELECT * FROM commission_settings WHERE id='default'`);
+    const settings = cs.rows[0] || { base_pct: 1.0, tier_threshold: 2000000000, tier_step_amount: 500000000, tier_step_pct: 0.1 };
+
+    // Aggregate per user per month
+    let where = 'f.factor_type = 1';
+    const params = [];
+    if (month) { params.push(month); where += ` AND f.jalali_month = $${params.length}`; }
+
+    const r = await query(`
+      SELECT
+        mm.crm_username,
+        au.name         AS crm_name,
+        COALESCE(au.commission_pct, 1.0) AS flat_pct,
+        f.jalali_month,
+        COUNT(f.factor_num)  AS invoice_count,
+        SUM(f.total_amount)  AS total_sales
+      FROM faradis_factors_cache f
+      LEFT JOIN faradis_marketer_map mm
+        ON mm.marketer_num = f.marketer_num AND mm.visitor_num = COALESCE(f.visitor_num,'')
+      LEFT JOIN app_users au ON au.username = mm.crm_username
+      WHERE ${where}
+      GROUP BY mm.crm_username, au.name, au.commission_pct, f.jalali_month
+      ORDER BY f.jalali_month DESC, total_sales DESC
+    `, params);
+
+    // Apply tiered calculation on top of flat rate
+    const rows = r.rows.map(function(row) {
+      const total = Number(row.total_sales) || 0;
+      let rate = Number(row.flat_pct) || Number(settings.base_pct) || 1.0;
+      // Tiered addition if total exceeds threshold
+      if (total > Number(settings.tier_threshold)) {
+        const steps = Math.ceil((total - Number(settings.tier_threshold)) / Number(settings.tier_step_amount));
+        rate += steps * Number(settings.tier_step_pct);
+      }
+      const commission = Math.round(total * rate / 100);
+      return Object.assign({}, row, { effective_pct: rate, commission_amount: commission });
+    });
+
+    res.json({ ok: true, rows: rows, settings: settings });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
+// GET /commission-settings
+router.get('/commission-settings', requireAuth, requireManager, async function(req, res) {
+  try {
+    const r = await query(`SELECT * FROM commission_settings WHERE id='default'`);
+    res.json({ ok: true, settings: r.rows[0] || {} });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
+// PUT /commission-settings  (super admin only)
+router.put('/commission-settings', requireAuth, async function(req, res) {
+  if (!req.user || req.user.role !== 'سوپر ادمین') return res.status(403).json({ error: 'فقط سوپر ادمین' });
+  try {
+    const { base_pct, tier_threshold, tier_step_amount, tier_step_pct, kpi_threshold, kpi_multiplier } = req.body;
+    await query(`
+      INSERT INTO commission_settings (id, base_pct, tier_threshold, tier_step_amount, tier_step_pct, kpi_threshold, kpi_multiplier, updated_by, updated_at)
+      VALUES ('default',$1,$2,$3,$4,$5,$6,$7,NOW())
+      ON CONFLICT(id) DO UPDATE SET
+        base_pct=$1, tier_threshold=$2, tier_step_amount=$3, tier_step_pct=$4,
+        kpi_threshold=$5, kpi_multiplier=$6, updated_by=$7, updated_at=NOW()
+    `, [base_pct, tier_threshold, tier_step_amount, tier_step_pct, kpi_threshold, kpi_multiplier, req.user.username]);
+    res.json({ ok: true });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
+// GET /user-commission-pct  — list all users with their pct
+router.get('/user-commission-pct', requireAuth, requireManager, async function(req, res) {
+  try {
+    const r = await query(`SELECT username, name, role, COALESCE(commission_pct,1.0) AS commission_pct FROM app_users ORDER BY name`);
+    res.json({ ok: true, users: r.rows });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
+// PUT /user-commission-pct  { username, pct }
+router.put('/user-commission-pct', requireAuth, requireManager, async function(req, res) {
+  try {
+    const { username, pct } = req.body;
+    if (!username || pct === undefined) return res.json({ ok: false, error: 'username and pct required' });
+    await query(`UPDATE app_users SET commission_pct=$1 WHERE username=$2`, [pct, username]);
+    res.json({ ok: true });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
 module.exports = router;

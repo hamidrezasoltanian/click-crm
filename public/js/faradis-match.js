@@ -108,6 +108,7 @@ function _fmBuildShell() {
     +   _fmTabBtn('inventory','📦 موجودی')
     +   _fmTabBtn('mapping','🗺 نگاشت')
     +   _fmTabBtn('receivables','💰 مطالبات')
+    +   _fmTabBtn('commissions','💼 پورسانت')
     + '</div>'
     + '<div id="fmTabContent"></div>'
     + '</div>';
@@ -128,7 +129,7 @@ window._fmSwitchTab = _fmSwitchTab;
 function _fmSwitchTab(tab) {
   _fmState.tab = tab;
   // Update tab button styles
-  ['pending','approved','search','team','inventory','mapping','receivables'].forEach(function(t) {
+  ['pending','approved','search','team','inventory','mapping','receivables','commissions'].forEach(function(t) {
     var btn = document.getElementById('fmTabBtn_' + t);
     if (!btn) return;
     var active = t === tab;
@@ -181,6 +182,13 @@ function _fmSwitchTab(tab) {
       + '</div><div id="fdReceivablesContainer"></div>';
     if (typeof window.renderFdReceivables === 'function') {
       window.renderFdReceivables('fdReceivablesContainer');
+    }
+  } else if (tab === 'commissions') {
+    content.innerHTML = '<div id="fdCommissionsContainer"></div>';
+    if (typeof window.renderFdCommissions === 'function') {
+      window.renderFdCommissions('fdCommissionsContainer');
+    } else {
+      content.innerHTML = '<div style="padding:20px;color:#ef4444">ماژول faradis-data.js بارگذاری نشده</div>';
     }
   }
 }
