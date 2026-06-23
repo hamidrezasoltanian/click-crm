@@ -175,15 +175,32 @@ function isConfigured() {
 
 async function fetchCustomers() {
   const p = await getPool();
-  const r = await p.request().query(`
-    SELECT CompanyNum, CompanyName, CompanyCode,
-           COALESCE(Phone1,'') AS Phone1, COALESCE(Mobile1,'') AS Mobile1,
-           COALESCE(StateName1,'') AS StateName1, COALESCE(CityName1,'') AS CityName1,
-           LEFT(COALESCE(Address1,''), 500) AS Address1, COALESCE(TypeName,'') AS TypeName
-    FROM VCompany
-    ORDER BY CompanyNum
-  `);
-  return r.recordset;
+  // Try extended fields first — PersonName, Phone2, Mobile2, Email, Fax, NationalCode
+  try {
+    const r = await p.request().query(`
+      SELECT CompanyNum, CompanyName, CompanyCode,
+             COALESCE(PersonName,'') AS PersonName,
+             COALESCE(Phone1,'') AS Phone1, COALESCE(Phone2,'') AS Phone2,
+             COALESCE(Mobile1,'') AS Mobile1, COALESCE(Mobile2,'') AS Mobile2,
+             COALESCE(FaxNum,'') AS FaxNum,
+             COALESCE(Email,'') AS Email,
+             COALESCE(NationalCode,'') AS NationalCode,
+             COALESCE(StateName1,'') AS StateName1, COALESCE(CityName1,'') AS CityName1,
+             LEFT(COALESCE(Address1,''), 500) AS Address1, COALESCE(TypeName,'') AS TypeName
+      FROM VCompany ORDER BY CompanyNum
+    `);
+    return r.recordset;
+  } catch(e) {
+    // Fallback: basic fields only (older Faradis versions)
+    const r = await p.request().query(`
+      SELECT CompanyNum, CompanyName, CompanyCode,
+             COALESCE(Phone1,'') AS Phone1, COALESCE(Mobile1,'') AS Mobile1,
+             COALESCE(StateName1,'') AS StateName1, COALESCE(CityName1,'') AS CityName1,
+             LEFT(COALESCE(Address1,''), 500) AS Address1, COALESCE(TypeName,'') AS TypeName
+      FROM VCompany ORDER BY CompanyNum
+    `);
+    return r.recordset;
+  }
 }
 
 async function fetchFactors() {

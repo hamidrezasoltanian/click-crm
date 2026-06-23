@@ -628,7 +628,10 @@ router.get('/center-persons/:crm_key', requireAuth, requireManager, async functi
 
     // All entries with same name = the contacts/persons under this company
     const r = await query(
-      `SELECT company_num, company_code, phone, mobile, address, city_name, state_name
+      `SELECT company_num, company_code,
+              person_name, phone, phone2, mobile, mobile2,
+              fax, email, national_code,
+              address, city_name, state_name, type_name
        FROM faradis_customers_cache
        WHERE company_name = $1
        ORDER BY company_num`,

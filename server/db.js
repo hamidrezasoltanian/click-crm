@@ -880,6 +880,14 @@ async function initSchema() {
   await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS salary_amount DECIMAL(15,2) DEFAULT 0`).catch(()=>{});
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS department VARCHAR(100) DEFAULT ''`).catch(()=>{});
 
+  // Faradis customers cache — add extended contact fields (safe migration)
+  await query(`ALTER TABLE faradis_customers_cache ADD COLUMN IF NOT EXISTS person_name TEXT DEFAULT ''`).catch(()=>{});
+  await query(`ALTER TABLE faradis_customers_cache ADD COLUMN IF NOT EXISTS phone2 TEXT DEFAULT ''`).catch(()=>{});
+  await query(`ALTER TABLE faradis_customers_cache ADD COLUMN IF NOT EXISTS mobile2 TEXT DEFAULT ''`).catch(()=>{});
+  await query(`ALTER TABLE faradis_customers_cache ADD COLUMN IF NOT EXISTS fax TEXT DEFAULT ''`).catch(()=>{});
+  await query(`ALTER TABLE faradis_customers_cache ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`).catch(()=>{});
+  await query(`ALTER TABLE faradis_customers_cache ADD COLUMN IF NOT EXISTS national_code TEXT DEFAULT ''`).catch(()=>{});
+
   await query(`
     CREATE TABLE IF NOT EXISTS commission_settings (
       id              TEXT PRIMARY KEY DEFAULT 'default',
@@ -1136,8 +1144,14 @@ async function initSchema() {
       company_num BIGINT PRIMARY KEY,
       company_name TEXT,
       company_code TEXT,
+      person_name TEXT DEFAULT '',
       phone TEXT,
+      phone2 TEXT DEFAULT '',
       mobile TEXT,
+      mobile2 TEXT DEFAULT '',
+      fax TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      national_code TEXT DEFAULT '',
       state_name TEXT,
       city_name TEXT,
       address TEXT,

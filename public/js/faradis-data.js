@@ -321,31 +321,72 @@ window._fdShowEnrichment = function(crmKey, btn) {
       }
       var persons = d.persons || [];
       if (!persons.length) {
-        detail.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px">اطلاعاتی یافت نشد</div>';
+        detail.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px">اطلاعاتی یافت نشد (ابتدا sync کنید)</div>';
         return;
       }
       var html = '<div style="font-size:11px;color:var(--text-secondary);padding:4px 0">';
-      html += '<div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">' + _fdEsc(d.company_name) + '</div>';
+      html += '<div style="font-weight:700;color:var(--text-primary);margin-bottom:8px;font-size:12px">'
+        + _fdEsc(d.company_name)
+        + '<span style="font-size:10px;font-weight:400;color:var(--text-muted);margin-right:8px">'
+        + persons.length + ' مخاطب در فرادیس</span></div>';
       persons.forEach(function(p, pi) {
         var phones = [];
-        if (p.phone) phones.push(p.phone);
-        if (p.mobile) phones.push(p.mobile);
+        if (p.phone)   phones.push(p.phone);
+        if (p.phone2)  phones.push(p.phone2);
+        if (p.mobile)  phones.push(p.mobile);
+        if (p.mobile2) phones.push(p.mobile2);
+        phones = phones.filter(Boolean);
         var locParts = [p.city_name, p.state_name].filter(Boolean);
-        html += '<div style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-bottom:6px;background:var(--bg-raised)">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">';
+
+        html += '<div style="border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:8px;background:var(--bg-raised)">';
+
+        // Header row: name + import button
+        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">';
         html += '<div>';
-        if (p.company_code) html += '<span style="font-size:10px;color:var(--text-muted)">کد: ' + _fdEsc(p.company_code) + '</span> ';
-        if (locParts.length) html += '<span style="font-size:10px;color:var(--text-muted)">' + _fdEsc(locParts.join(' / ')) + '</span>';
-        html += '</div>';
-        if (phones.length) {
-          html += '<button onclick="window._fdImportContact(\'' + _fdEsc(crmKey) + '\',' + pi + ',' + JSON.stringify(phones) + ')" '
-            + 'style="padding:2px 8px;border-radius:4px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-family:inherit;font-size:10px">📥 وارد کردن</button>';
+        if (p.person_name) {
+          html += '<div style="font-weight:700;font-size:12px;color:var(--text-primary)">' + _fdEsc(p.person_name) + '</div>';
+        }
+        if (p.type_name) {
+          html += '<div style="font-size:10px;color:#6366f1;font-weight:600">' + _fdEsc(p.type_name) + '</div>';
+        }
+        if (p.company_code) {
+          html += '<div style="font-size:10px;color:var(--text-muted)">کد: ' + _fdEsc(p.company_code) + '</div>';
         }
         html += '</div>';
         if (phones.length) {
-          html += '<div style="margin-top:4px">' + phones.map(function(ph){ return '<span style="background:#f0f9ff;border-radius:3px;padding:1px 6px;margin-left:4px;font-family:monospace;font-size:11px;direction:ltr;display:inline-block">' + _fdEsc(ph) + '</span>'; }).join('') + '</div>';
+          html += '<button onclick="window._fdImportContact(\'' + _fdEsc(crmKey) + '\',' + pi + ','
+            + JSON.stringify(phones) + ',' + JSON.stringify(p.person_name || '') + ')" '
+            + 'style="padding:3px 10px;border-radius:5px;border:none;background:#6366f1;color:#fff;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap;flex-shrink:0">📥 وارد کردن</button>';
         }
-        if (p.address) html += '<div style="margin-top:3px;font-size:10px;color:var(--text-muted)">' + _fdEsc(p.address.slice(0,80)) + '</div>';
+        html += '</div>';
+
+        // Phones row
+        if (phones.length) {
+          html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">';
+          phones.forEach(function(ph) {
+            html += '<span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;direction:ltr;display:inline-block;color:#1e40af">'
+              + _fdEsc(ph) + '</span>';
+          });
+          html += '</div>';
+        }
+
+        // Email / Fax / NationalCode
+        var extras = [];
+        if (p.email)         extras.push('📧 ' + _fdEsc(p.email));
+        if (p.fax)           extras.push('📠 ' + _fdEsc(p.fax));
+        if (p.national_code) extras.push('کد ملی: ' + _fdEsc(p.national_code));
+        if (extras.length) {
+          html += '<div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">' + extras.join(' &nbsp;|&nbsp; ') + '</div>';
+        }
+
+        // Location + address
+        if (locParts.length) {
+          html += '<div style="font-size:10px;color:var(--text-muted)">📍 ' + _fdEsc(locParts.join(' / ')) + '</div>';
+        }
+        if (p.address) {
+          html += '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">' + _fdEsc(p.address.slice(0, 100)) + '</div>';
+        }
+
         html += '</div>';
       });
       html += '</div>';
@@ -621,7 +662,7 @@ window._fdSaveCommPct = function(username) {
 
 
 // Import a Faradis contact (phone/mobile) into CRM center contacts
-window._fdImportContact = function(crmKey, personIndex, phones) {
+window._fdImportContact = function(crmKey, personIndex, phones, personName) {
   // Parse CRM key to rtype/rid
   var rtype, rid;
   if (crmKey.startsWith('c_')) { rtype = 'center'; rid = crmKey.slice(2); }
@@ -629,14 +670,24 @@ window._fdImportContact = function(crmKey, personIndex, phones) {
   else { if(typeof showToast==='function') showToast('کلید مرکز نامعتبر', 3000); return; }
 
   if (typeof _getContacts === 'undefined' || typeof _saveContacts === 'undefined') {
-    if (typeof showToast === 'function') showToast('لطفاً ابتدا مودال مرکز را باز کنید', 3000);
+    if (typeof showToast === 'function') showToast('لطفاً ابتدا مودال مرکز را باز کنید تا مخاطبین لود شوند', 3000);
     return;
   }
   var contacts = _getContacts(rtype, rid);
-  var validPhones = (phones || []).filter(function(p){ return p && p.trim(); });
-  contacts.push({ name: '', title: 'مخاطب فرادیس ' + (personIndex + 1), phones: validPhones });
+  var validPhones = (phones || []).filter(function(p){ return p && String(p).trim(); });
+  var name = personName && personName.trim() ? personName.trim() : '';
+  var title = 'فرادیس';
+  // Avoid duplicate import
+  var alreadyExists = contacts.some(function(c) {
+    return c.title === title && c.name === name;
+  });
+  if (alreadyExists) {
+    if (typeof showToast === 'function') showToast('این مخاطب قبلاً وارد شده', 2000);
+    return;
+  }
+  contacts.push({ name: name, title: title, phones: validPhones });
   _saveContacts(rtype, rid, contacts);
-  if (typeof showToast === 'function') showToast('✅ مخاطب اضافه شد — در مودال مرکز قابل ویرایش است', 3000);
+  if (typeof showToast === 'function') showToast('✅ ' + (name || 'مخاطب') + ' اضافه شد', 2000);
 };
 
 })();

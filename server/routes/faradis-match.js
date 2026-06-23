@@ -237,14 +237,21 @@ router.post('/sync-customers', requireAuth, requireManager, async function(req, 
     for (const c of customers) {
       await query(
         `INSERT INTO faradis_customers_cache
-           (company_num, company_name, company_code, phone, mobile, state_name, city_name, address, type_name, synced_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+           (company_num, company_name, company_code,
+            person_name, phone, phone2, mobile, mobile2, fax, email, national_code,
+            state_name, city_name, address, type_name, synced_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
          ON CONFLICT (company_num) DO UPDATE SET
-           company_name=$2, company_code=$3, phone=$4, mobile=$5,
-           state_name=$6, city_name=$7, address=$8, type_name=$9, synced_at=NOW()`,
+           company_name=$2, company_code=$3,
+           person_name=$4, phone=$5, phone2=$6, mobile=$7, mobile2=$8,
+           fax=$9, email=$10, national_code=$11,
+           state_name=$12, city_name=$13, address=$14, type_name=$15, synced_at=NOW()`,
         [
           c.CompanyNum, c.CompanyName || '', c.CompanyCode || '',
-          c.Phone1 || '', c.Mobile1 || '',
+          c.PersonName || '',
+          c.Phone1 || '', c.Phone2 || '',
+          c.Mobile1 || '', c.Mobile2 || '',
+          c.FaxNum || '', c.Email || '', c.NationalCode || '',
           c.StateName1 || '', c.CityName1 || '',
           c.Address1 || '', c.TypeName || '',
         ]
