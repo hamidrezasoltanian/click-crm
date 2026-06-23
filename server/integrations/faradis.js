@@ -363,9 +363,16 @@ async function fetchReceivablesSummary() {
   }).filter(r => r.balance !== 0); // only non-zero balances
 }
 
+// Raw SQL query — for schema exploration and ad-hoc queries
+async function rawQuery(sql) {
+  const p = await getPool();
+  const r = await p.request().query(sql);
+  return r.recordset;
+}
+
 module.exports = {
   getPool, fetchSalesByMonth, fetchMarketerSummary, fetchSalesTrend,
   testConnection, isConfigured, fetchCustomers, fetchFactors,
   fetchStuffs, fetchFactorRows, fetchInventory, fetchFollowers,
-  fetchReturns, fetchPurchases, fetchReceivablesSummary,
+  fetchReturns, fetchPurchases, fetchReceivablesSummary, rawQuery,
 };

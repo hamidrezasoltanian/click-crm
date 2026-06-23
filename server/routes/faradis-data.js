@@ -641,4 +641,69 @@ router.get('/center-persons/:crm_key', requireAuth, requireManager, async functi
   }
 });
 
+// GET /api/faradis-data/schema-explore
+// Explores Faradis DB structure: VCompany columns + person-related tables
+router.get('/schema-explore', requireAuth, requireManager, async function(req, res) {
+  if (!faradis.isConfigured()) return res.json({ ok: false, error: 'Faradis not configured' });
+  try {
+    const result = {};
+
+    // 1. VCompany columns
+    try {
+      const cols = await faradis.rawQuery(`
+        SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'VCompany'
+        ORDER BY ORDINAL_POSITION
+      `);
+      result.vcompany_columns = cols;
+    } catch(e) { result.vcompany_columns_error = e.message; }
+
+    // 2. Sample VCompany row (first 2 rows to see structure)
+    try {
+      const sample = await faradis.rawQuery(`SELECT TOP 2 * FROM VCompany`);
+      result.vcompany_sample = sample;
+    } catch(e) { result.vcompany_sample_error = e.message; }
+
+    // 3. Look for person/contact tables
+    try {
+      const tables = await faradis.rawQuery(`
+        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_TYPE='BASE TABLE'
+          AND (TABLE_NAME LIKE '%erson%' OR TABLE_NAME LIKE '%ontact%'
+            OR TABLE_NAME LIKE '%epresent%' OR TABLE_NAME LIKE '%amayan%'
+            OR TABLE_NAME LIKE '%elegate%' OR TABLE_NAME LIKE '%hakhes%')
+        ORDER BY TABLE_NAME
+      `);
+      result.person_tables = tables;
+    } catch(e) { result.person_tables_error = e.message; }
+
+    // 4. Check Company table columns (base table, not view)
+    try {
+      const companyCols = await faradis.rawQuery(`
+        SELECT COLUMN_NAME, DATA_TYPE
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'Company'
+        ORDER BY ORDINAL_POSITION
+      `);
+      result.company_columns = companyCols;
+    } catch(e) { result.company_columns_error = e.message; }
+
+    // 5. Count: how many rows in VCompany vs distinct company names
+    try {
+      const counts = await faradis.rawQuery(`
+        SELECT COUNT(*) AS total_rows,
+               COUNT(DISTINCT CompanyName) AS distinct_names,
+               COUNT(DISTINCT CompanyNum) AS distinct_nums
+        FROM VCompany
+      `);
+      result.vcompany_counts = counts;
+    } catch(e) { result.vcompany_counts_error = e.message; }
+
+    res.json({ ok: true, ...result });
+  } catch(e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
