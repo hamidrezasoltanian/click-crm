@@ -668,18 +668,37 @@ router.get('/schema-explore', requireAuth, requireManager, async function(req, r
       result.vcompany_sample = sample;
     } catch(e) { result.vcompany_sample_error = e.message; }
 
-    // 3. Look for person/contact tables
+    // 3. All tables — to find real names for followers/inventory/stuffs
+    try {
+      const tables = await faradis.rawQuery(`
+        SELECT TABLE_NAME, TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES
+        ORDER BY TABLE_TYPE, TABLE_NAME
+      `);
+      result.all_tables = tables;
+    } catch(e) { result.all_tables_error = e.message; }
+
+    // 4b. Look for person/follower/marketer tables specifically
     try {
       const tables = await faradis.rawQuery(`
         SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_TYPE='BASE TABLE'
-          AND (TABLE_NAME LIKE '%erson%' OR TABLE_NAME LIKE '%ontact%'
-            OR TABLE_NAME LIKE '%epresent%' OR TABLE_NAME LIKE '%amayan%'
-            OR TABLE_NAME LIKE '%elegate%' OR TABLE_NAME LIKE '%hakhes%')
+        WHERE TABLE_NAME LIKE '%ollow%' OR TABLE_NAME LIKE '%arket%'
+           OR TABLE_NAME LIKE '%isit%' OR TABLE_NAME LIKE '%azary%'
+           OR TABLE_NAME LIKE '%erson%' OR TABLE_NAME LIKE '%tore%'
+           OR TABLE_NAME LIKE '%nbar%' OR TABLE_NAME LIKE '%nvent%'
+           OR TABLE_NAME LIKE '%tuff%' OR TABLE_NAME LIKE '%nit%'
         ORDER BY TABLE_NAME
       `);
-      result.person_tables = tables;
-    } catch(e) { result.person_tables_error = e.message; }
+      result.relevant_tables = tables;
+    } catch(e) { result.relevant_tables_error = e.message; }
+
+    // 4c. Stuff table columns (to find unit column name)
+    try {
+      const stuffCols = await faradis.rawQuery(`
+        SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'Stuff' ORDER BY ORDINAL_POSITION
+      `);
+      result.stuff_columns = stuffCols;
+    } catch(e) { result.stuff_columns_error = e.message; }
 
     // 4. Check Company table columns (base table, not view)
     try {
