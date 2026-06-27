@@ -1906,6 +1906,7 @@ function _submitQCL(rtype,rid,modalId){
   if(!result&&!note){showToast('نتیجه یا یادداشت را وارد کنید');return;}
   var txt=(result?'نتیجه: '+result+(note?'\n'+note:''):note);
   if(txt){
+    if(!DB.notes)DB.notes={};
     if(!DB.notes[rtype+'_'+rid])DB.notes[rtype+'_'+rid]=[];
     DB.notes[rtype+'_'+rid].unshift({text:txt,by:currentUser,at:new Date().toISOString(),tags:[]});
   }
@@ -4462,7 +4463,7 @@ function openCenterModal(rtype,id){
       var tagChips=allTags.length
         ?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px" id="mnoteTagRow_'+id+'">'
           +allTags.map(function(t){
-            return '<span onclick="_noteToggleTag(\''+id+'\','+t.id+')" data-tagid="'+t.id+'" '
+            return '<span onclick="_noteToggleTag(\''+id+'\',\''+t.id+'\')" data-tagid="'+t.id+'" '
               +'style="cursor:pointer;padding:2px 8px;border-radius:9px;font-size:10px;font-weight:600;border:1.5px solid var(--border);color:var(--text-secondary);background:var(--bg-raised);transition:all .15s" '
               +'class="note-tag-chip">'+esc(t.name)+'</span>';
           }).join('')
@@ -4731,9 +4732,9 @@ function _noteToggleTag(modalId, tagId){
   var row=document.getElementById('mnoteTagRow_'+modalId);
   if(!row)return;
   row.querySelectorAll('.note-tag-chip').forEach(function(chip){
-    var tid=parseInt(chip.dataset.tagid);
+    var tid=chip.dataset.tagid;
     var sel=arr.indexOf(tid)>=0;
-    var t=(DB.tags||[]).find(function(x){return x.id===tid;});
+    var t=(DB.tags||[]).find(function(x){return String(x.id)===String(tid);});
     var col=t?(t.color||'#6366f1'):'#6366f1';
     chip.style.background=sel?col:'var(--bg-raised)';
     chip.style.color=sel?'#fff':'var(--text-secondary)';
