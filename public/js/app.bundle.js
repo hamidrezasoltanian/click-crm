@@ -2713,7 +2713,9 @@ function renderProvList(){
   var rows=filtProvs.map(function(p){
     var e=getE('pc',p.id);
     var owner=e.owner||p.owner||'';
-    var ownerName=owner?(USERS[owner]||owner):'بدون مسئول';
+    var _owMem=_DEFAULT_MEMBERS&&_DEFAULT_MEMBERS.find(function(m){return m.id===owner;});
+    var _owInactive=_owMem&&_owMem.active===false;
+    var ownerName=owner?((USERS[owner]||owner)+(_owInactive?' ⚠️ (غیرفعال)':'')):'بدون مسئول';
     var ownerColor=owner&&typeof umGetColor==='function'?umGetColor(owner):'#e2e8f0';
     var isMyProv=(owner===currentUser);
     var dimmed=false; // پنهان نمی‌کنیم، فقط highlight می‌کنیم
@@ -2928,7 +2930,7 @@ function renderProvTable(){
       +'<td style="white-space:nowrap"><span class="owner-dot" data-uid="'+encodeURIComponent(e.owner||r.owner||'')+'"></span>'
       +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'owner\',this.value);var _d=this.previousElementSibling;if(_d)_d.style.background=window.umGetColor?umGetColor(this.value):\'#e2e8f0\'">'
       +'<option value="">—</option>'
-        +Object.keys(USERS).map(function(u){return'<option value="'+u+'"'+((e.owner||r.owner||'')==u?' selected':'')+'>'+USERS[u]+'</option>';}).join('')+'</select></td>'
+        +(function(){var _act=typeof umGetActive==='function'?umGetActive():[];return _act.map(function(m){return'<option value="'+m.id+'"'+((e.owner||r.owner||'')==m.id?' selected':'')+'>'+m.name+'</option>';}).join('');})()+'</select></td>'
       +'<td><select class="st-sel '+sc+'" onchange="onStatus(\''+rtype+'\',\''+r.id+'\',this)">'
         +STATUS_LIST.map(function(s,i){return'<option class="'+STATUS_CLS[i]+'"'+(s===st?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'
         +'<span class="st-print">'+st+'</span></td>'
@@ -4405,7 +4407,7 @@ function openCenterModal(rtype,id){
     +'<span class="owner-dot" data-uid="'+encodeURIComponent(e.owner||r.owner||'')+'"></span>'
     +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'owner\',this.value);var _d=this.previousElementSibling;if(_d)_d.style.background=window.umGetColor?umGetColor(this.value):\'#e2e8f0\'">'
     +'<option value="">—</option>'
-    +Object.keys(USERS).map(function(u){return'<option value="'+u+'"'+((e.owner||r.owner||'')==u?' selected':'')+'>'+USERS[u]+'</option>';}).join('')+'</select></div>'
+    +(function(){var _act=typeof umGetActive==='function'?umGetActive():[];return _act.map(function(m){return'<option value="'+m.id+'"'+((e.owner||r.owner||'')==m.id?' selected':'')+'>'+m.name+'</option>';}).join('');})()+'</select></div>'
     +(function(){var _typeOpts=[''].concat(TYPE_LIST);var _curType=e.type||r.type||'';return'<div><label>نوع مرکز</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)">'+_typeOpts.map(function(t){return'<option value="'+t+'"'+(_curType===t?' selected':'')+'>'+(t||'-- نوع --')+'</option>';}).join('')+'</select></div>';})()
     +'</div><div class="m-2col">'
     +'<div><label>وضعیت</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'status\',this.value)">'
@@ -5180,10 +5182,11 @@ function wpBuildOwnerFilter(){
   var sel=document.getElementById('wpOwnerFilter');
   if(!sel)return;
   sel.innerHTML='<option value="">همه کارشناسان</option>';
-  Object.keys(USERS).forEach(function(uid){
-    if(uid==='guest')return;
+  var _wbActives=typeof umGetActive==='function'?umGetActive():[];
+  _wbActives.forEach(function(m){
+    if(m.id==='guest')return;
     var opt=document.createElement('option');
-    opt.value=uid;opt.textContent=USERS[uid];sel.appendChild(opt);
+    opt.value=m.id;opt.textContent=m.name;sel.appendChild(opt);
   });
   var filterRow=sel.closest?sel.closest('.wp-filter-row'):null;
   if(!_isManager()){
@@ -9739,7 +9742,7 @@ function renderManagerPanel(){
     +'<th style="padding:8px 10px;text-align:center">نرخ تبدیل</th>'
     +'</tr></thead><tbody>';
 
-  members.filter(function(m){return m.id!=='guest';}).forEach(function(m,i){
+  members.filter(function(m){return m.id!=='guest'&&m.active!==false;}).forEach(function(m,i){
     var s=stats[m.id]||{contracted:0,meetings:0,proposals:0,firstContact:0,overdue:0,followupToday:0,totalAssigned:0,stalled:0};
     var conv=s.totalAssigned>0?Math.round((s.contracted/s.totalAssigned)*100):0;
     var bg=i%2===0?'var(--bg-card)':'var(--bg-raised)';

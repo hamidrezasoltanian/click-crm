@@ -151,6 +151,20 @@ function toJalali(date) {
   return jy + '/' + String(jm).padStart(2,'0') + '/' + String(jd).padStart(2,'0');
 }
 
+// Days between two Jalali dates (a - b) via Gregorian epoch conversion
+function jalaliToMs(jy, jm, jd) {
+  const leap = jy % 4 === 3 || (jy % 4 === 0 && jy % 128 !== 0);
+  const jDaysInMonth = [31,31,31,31,31,31,30,30,30,30,30, leap?30:29];
+  let days = (jy - 1) * 365 + Math.floor((jy - 1) / 4) - Math.floor((jy - 1) / 100) + Math.floor((jy - 1) / 400);
+  for (let i = 0; i < jm - 1; i++) days += jDaysInMonth[i];
+  days += jd;
+  // Jalali epoch offset: 1/1/1 Jalali = March 22, 622 CE ≈ 226899 days before Unix epoch
+  return (days - 2440588 + 1948440 - 226899) * 86400000;
+}
+function jalaliDaysDiff(jy1,jm1,jd1, jy2,jm2,jd2) {
+  return Math.floor((jalaliToMs(jy1,jm1,jd1) - jalaliToMs(jy2,jm2,jd2)) / 86400000);
+}
+
 // ── Keyboards ─────────────────────────────────────────────────────────────
 const MENU_KB = {
   keyboard: [
@@ -2185,37 +2199,56 @@ async function handleTeamReport(chatId, sess) {
     }
   } catch(e) {}
 
-  // Collect all experts
-  const allExperts = new Set([
-    ...weRows.map(function(r){ return r.expert; }),
-    ...Object.keys(overdueByOwner),
-    ...Object.keys(tasksByOwner),
-  ].filter(Boolean));
+  // Load ALL active experts from DB so nobody is silently skipped
+  let activeExperts = [];
+  try {
+    const r = await query(
+      `SELECT username, display_name FROM app_users WHERE active = true AND role NOT IN ('مدیر','سوپر ادمین','admin','manager') ORDER BY display_name`
+    );
+    activeExperts = r.rows;
+  } catch(e) {}
+
+  // Fallback: union from activity data if DB query failed
+  if (!activeExperts.length) {
+    const seen = new Set([
+      ...weRows.map(function(r){ return r.expert; }),
+      ...Object.keys(overdueByOwner),
+      ...Object.keys(tasksByOwner),
+    ].filter(Boolean));
+    activeExperts = Array.from(seen).map(function(u){ return {username:u, display_name:u}; });
+  }
+
+  // Build display_name lookup
+  const displayName = {};
+  activeExperts.forEach(function(u){ displayName[u.username] = u.display_name; });
+
+  const weByExpert = {};
+  weRows.forEach(function(r){ weByExpert[r.expert] = r; });
 
   let text = '👥 <b>گزارش تیم — ' + todayStr + '</b>\n\n';
 
-  if (!allExperts.size) {
-    text += 'هیچ فعالیتی برای امروز ثبت نشده.';
+  if (!activeExperts.length) {
+    text += 'هیچ کارشناس فعالی یافت نشد.';
   } else {
-    const weByExpert = {};
-    weRows.forEach(function(r){ weByExpert[r.expert] = r; });
-
-    Array.from(allExperts).sort().forEach(function(exp) {
-      const we    = weByExpert[exp] || { total: 0, done: 0 };
-      const ov    = overdueByOwner[exp] || 0;
-      const tasks = tasksByOwner[exp] || 0;
-      const notifs = notifByUser[exp] || 0;
+    activeExperts.forEach(function(u) {
+      const exp  = u.username;
+      const name = u.display_name || exp;
+      const we   = weByExpert[exp] || { total: 0, done: 0 };
+      const ov   = overdueByOwner[exp] || 0;
+      const tasks= tasksByOwner[exp] || 0;
+      const notifs= notifByUser[exp] || 0;
 
       const pct = we.total > 0 ? Math.round(we.done / we.total * 100) : 0;
       const bar = we.total > 0
         ? '▓'.repeat(Math.round(pct / 20)) + '░'.repeat(5 - Math.round(pct / 20))
         : '─────';
 
-      text += '👤 <b>' + exp + '</b>\n';
+      text += '👤 <b>' + name + '</b>\n';
       text += '  ' + bar + ' ' + we.done + '/' + we.total + ' امروز';
       if (ov)     text += ' | ⚠️' + ov + ' معوق';
-      if (tasks)  text += ' | 📋' + tasks;
+      if (tasks)  text += ' | 📋' + tasks + ' وظیفه';
       if (notifs) text += ' | 🔔' + notifs;
+      if (we.total === 0 && !ov && !tasks) text += ' | 💤 بدون برنامه';
       text += '\n';
     });
   }
@@ -2250,9 +2283,10 @@ async function handleOverdueReport(chatId, sess) {
     if (e.status === 'lost' || e.status === 'inactive') return;
     const owner = e.owner || 'نامشخص';
     if (!byOwner[owner]) byOwner[owner] = [];
-    const daysLate = Math.floor(
-      (new Date(todayStr.replace(/\//g,'-')) - new Date(e.followupDate.replace(/\//g,'-'))) / 86400000
-    );
+    // Approximate days late from Jalali string (good enough for display)
+    const _fdParts = e.followupDate.split('/').map(Number);
+    const _tdParts = todayStr.split('/').map(Number);
+    const daysLate = jalaliDaysDiff(_tdParts[0],_tdParts[1],_tdParts[2],_fdParts[0],_fdParts[1],_fdParts[2]);
     byOwner[owner].push({ daysLate, date: e.followupDate });
   });
 
