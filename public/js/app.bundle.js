@@ -1994,7 +1994,7 @@ function _renderExpertDash(el){
       var potScore=(5-parseInt(item.pot||4))*20; // P1=80, P2=60, P3=40, P4=20
       var daysOver=0;
       if(item.fd&&item.fd<today2){
-        var diff=Math.round((new Date()-new Date(item.fd.split('/').join('-')))/86400000);
+        var _fdp=item.fd.split('/').map(Number);var diff=Math.round((Date.now()-jMs(_fdp[0],_fdp[1],_fdp[2]))/86400000);
         daysOver=Math.min(diff,60);
       } else if(!item.fd){
         daysOver=30; // no date = treat as somewhat overdue
@@ -2257,7 +2257,7 @@ function renderHome(){
           var pot=parseInt(e.potential!==undefined?e.potential:r.potential||4);
           if(pot>3)return;
           var fd=e.followupDate||'';
-          var daysOver=fd&&fd<today?Math.floor((new Date()-new Date(fd.replace(/\//g,'-')))/86400000):0;
+          var daysOver=fd&&fd<today?(function(){var _p=fd.split('/').map(Number);return Math.floor((Date.now()-jMs(_p[0],_p[1],_p[2]))/86400000);}()):0;
           var potScore=(5-pot)*20;
           var stScore={'بدون تماس':5,'تماس اولیه':10,'ملاقات انجام شد':15,'پیشنهاد ارسال شد':12}[st]||0;
           var score=potScore+daysOver*0.5+stScore;

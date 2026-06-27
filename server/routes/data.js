@@ -509,8 +509,12 @@ router.post('/centers/merge', requireManager, async (req, res) => {
       }
     } else {
       // Province center: remove from PC_RAW
+      if (!sourceId.includes('||')) {
+        return res.status(400).json({ error: 'Invalid province center ID format' });
+      }
       const provId = sourceId.split('||')[0]; // e.g. "p1"
-      const rowNum = parseInt(sourceId.split('||')[1]);
+      const rowNum = parseInt(sourceId.split('||')[1], 10);
+      if (isNaN(rowNum)) return res.status(400).json({ error: 'Invalid row number in center ID' });
       const pname  = PROV_ID_TO_NAME[provId];
       const arr    = pname ? (PC_RAW[pname] || []) : [];
       if (arr.length) {
