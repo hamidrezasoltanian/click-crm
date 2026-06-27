@@ -4340,6 +4340,14 @@ function openCenterModal(rtype,id){
   }
   var centers=getProvCenters(prov||'tehran');
   var r=centers.find(function(x){return String(x.id)===String(id);});
+  if(!r&&prov){
+    getAllProvinces().some(function(p){
+      if(p.id===prov)return false;
+      var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
+      if(c){r=c;prov=p.id;return true;}
+      return false;
+    });
+  }
   if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);});}
   if(!r){showToast('مرکز یافت نشد');return;}
   var e=getE(rtype,r.id);
@@ -8449,6 +8457,7 @@ function qsSearch(q){
   // مراکز استانی از cache
   _buildPCCache();
   Object.keys(_PC_CACHE||{}).forEach(function(provId){
+    if(provId==='tehran')return;
     (_PC_CACHE[provId]||[]).forEach(function(c){
       if(fNorm(c.name||'').indexOf(qn)>=0){
         var e=getE('pc',c.id);
