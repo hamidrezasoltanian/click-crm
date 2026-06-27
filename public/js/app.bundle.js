@@ -173,6 +173,8 @@ function _saveDBNow(){
           // Merge: local edits + weekEntries win over server (preserve unsaved work)
           var merged=Object.assign({},DB,d);
           merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
+          // Don't let server revive locally-deleted entries
+          (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
           merged.edits=Object.assign({},d.edits||{},DB.edits||{});
           // Preserve local read=true for notifications on 409 retry
           if(DB.notifications&&d.notifications){
@@ -8357,7 +8359,8 @@ function qsSearch(q){
   (CENTERS||[]).forEach(function(c){
     if(fNorm(c.name||'').indexOf(qn)>=0){
       var e=getE('center',c.id);
-      results.push({type:'مرکز تهران',icon:'🏥',name:c.name,sub:e.status||'بدون تماس',action:"switchTab('provinces');closeQS()"});
+      var _qsCid=String(c.id).replace(/\'/g,"\\'");var _qsCrt='center';
+      results.push({type:'مرکز تهران',icon:'🏥',name:c.name,sub:e.status||'بدون تماس',action:"openCenterModal('"+_qsCrt+"','"+_qsCid+"');closeQS()"});
     }
   });
   // مراکز استانی از cache
@@ -8366,7 +8369,8 @@ function qsSearch(q){
     (_PC_CACHE[provId]||[]).forEach(function(c){
       if(fNorm(c.name||'').indexOf(qn)>=0){
         var e=getE('pc',c.id);
-        results.push({type:'مرکز استانی',icon:'🏢',name:c.name,sub:e.status||'بدون تماس',action:"switchTab('provinces');closeQS()"});
+        var _qsPcid=String(c.id).replace(/\'/g,"\\'");
+        results.push({type:'مرکز استانی',icon:'🏢',name:c.name,sub:e.status||'بدون تماس',action:"openCenterModal('pc','"+_qsPcid+"');closeQS()"});
       }
     });
   });
@@ -8377,7 +8381,8 @@ function qsSearch(q){
     if(ertype==='center'&&_qsMainIds.has(String(c.id)))return;
     if(fNorm(c.name||'').indexOf(qn)>=0){
       var e=getE(ertype,c.id);
-      results.push({type:'مرکز اضافه‌شده',icon:'➕',name:c.name,sub:e.status||'بدون تماس',action:"switchTab('provinces');closeQS()"});
+      var _qsExid=String(c.id).replace(/\'/g,"\\'");var _qsExrt=ertype;
+      results.push({type:'مرکز اضافه‌شده',icon:'➕',name:c.name,sub:e.status||'بدون تماس',action:"openCenterModal('"+_qsExrt+"','"+_qsExid+"');closeQS()"});
     }
   });
   // برنامه هفته
