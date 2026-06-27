@@ -19,6 +19,7 @@
     filterLastContact: '',
     filterScheduled: 'unscheduled',
     filterProvId: '',
+    filterLead: '',
     sortBy: 'priority',
     visibleCount: 80,
   };
@@ -121,6 +122,7 @@
             name: e.nameOverride || c.name || c.id,
             potential: potential,
             status: e.status || '',
+            lead: e.lead || c.lead || 'سرنخ',
             followupDate: fd,
             isOverdue: _isOverdue(fd),
             daysSince: daysSince,
@@ -183,6 +185,11 @@
     // province
     if (_wpState.filterProvId) {
       centers = centers.filter(function(c) { return c.provId === _wpState.filterProvId; });
+    }
+
+    // lead
+    if (_wpState.filterLead) {
+      centers = centers.filter(function(c) { return c.lead === _wpState.filterLead; });
     }
 
     // sort
@@ -363,6 +370,10 @@
       '<option value="unscheduled"'+(_wpState.filterScheduled==='unscheduled'?' selected':'')+'>بدون برنامه این بازه</option>' +
       '<option value="scheduled"'+(_wpState.filterScheduled==='scheduled'?' selected':'')+'>دارای برنامه</option>';
 
+    var LEAD_VALS = (typeof LEAD_LIST !== 'undefined') ? LEAD_LIST : ['مشتری','لید','فرصت','سرنخ','ندارد','بدون مصرف'];
+    var leadOpts = '<option value="">همه سرنخ‌ها</option>' +
+      LEAD_VALS.map(function(l) { return '<option value="'+esc(l)+'"'+(_wpState.filterLead===l?' selected':'')+'>'+esc(l)+'</option>'; }).join('');
+
     var provOpts = '<option value="">همه استان‌ها</option>' +
       Object.keys(provSet).map(function(pid) {
         return '<option value="'+esc(pid)+'"'+(_wpState.filterProvId===pid?' selected':'')+'>'+esc(provSet[pid])+'</option>';
@@ -384,6 +395,7 @@
         sel('wpFContact', _wpState.filterLastContact, "window._wpSetFilter('lastcontact',this.value)", contactOpts) +
         sel('wpFSched', _wpState.filterScheduled, "window._wpSetFilter('scheduled',this.value)", scheduledOpts) +
         sel('wpFProv', _wpState.filterProvId, "window._wpSetFilter('prov',this.value)", provOpts) +
+        sel('wpFLead', _wpState.filterLead, "window._wpSetFilter('lead',this.value)", leadOpts) +
         '<div style="display:flex;align-items:center;gap:5px;margin-right:auto">' +
           '<span style="font-size:.75rem;color:#6b7280;white-space:nowrap">مرتب بر اساس:</span>' +
           sel('wpSort', _wpState.sortBy, "window._wpSetFilter('sort',this.value)", sortOpts) +
@@ -580,6 +592,7 @@
     if (key === 'lastcontact')  _wpState.filterLastContact = val;
     if (key === 'scheduled')    _wpState.filterScheduled = val;
     if (key === 'prov')         _wpState.filterProvId = val;
+    if (key === 'lead')         _wpState.filterLead = val;
     if (key === 'sort')         _wpState.sortBy = val;
     _wpState.visibleCount = 80;
     _wpRenderList(_computeRange());

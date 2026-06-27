@@ -5217,7 +5217,7 @@ function renderWeekPlan(){
 }
 // ════════════════════════ WP FULL CENTER LIST ════════════════════
 var _wpFclOpen = true;
-var _wpFclFilters = {q:'', owner:'', prov:''};
+var _wpFclFilters = {q:'', owner:'', prov:'', lead:''};
 
 function renderWpFullCenterList() {
   var el = document.getElementById('wpFullCenterList');
@@ -5292,6 +5292,7 @@ function renderWpFullCenterList() {
         provId:p.id, provName:p.name||'',
         owner:owner, ownerName:owner?(USERS[owner]||owner):'—',
         status:e.status||'بدون تماس',
+        lead:e.lead||c.lead||'سرنخ',
         followupDate:e.followupDate||''
       });
     });
@@ -5301,16 +5302,19 @@ function renderWpFullCenterList() {
   var q = fNorm(_wpFclFilters.q||'');
   var ownerF = _wpFclFilters.owner||'';
   var provF = _wpFclFilters.prov||'';
+  var leadF = _wpFclFilters.lead||'';
 
   var filtU = unschedEntries.filter(function(c){
     if (ownerF && c.owner!==ownerF) return false;
     if (provF && c.provId!==provF) return false;
+    if (leadF && c.lead!==leadF) return false;
     if (q && fNorm(c.name).indexOf(q)<0 && fNorm(c.ownerName).indexOf(q)<0 && fNorm(c.provName).indexOf(q)<0) return false;
     return true;
   });
   var filtC = allCenters.filter(function(c){
     if (ownerF && c.owner!==ownerF) return false;
     if (provF && c.provId!==provF) return false;
+    if (leadF && c.lead!==leadF) return false;
     if (q && fNorm(c.name).indexOf(q)<0 && fNorm(c.ownerName).indexOf(q)<0 && fNorm(c.provName).indexOf(q)<0) return false;
     return true;
   });
@@ -5321,6 +5325,8 @@ function renderWpFullCenterList() {
     + members.map(function(m){return '<option value="'+m.id+'"'+(ownerF===m.id?' selected':'')+'>'+esc(m.name)+'</option>';}).join('');
   var provOpts = '<option value="">همه استان‌ها</option>'
     + getAllProvinces().map(function(p){return '<option value="'+p.id+'"'+(provF===p.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('');
+  var leadOpts = '<option value="">همه سرنخ‌ها</option>'
+    + (typeof LEAD_LIST!=='undefined'?LEAD_LIST:['مشتری','لید','فرصت','سرنخ','ندارد','بدون مصرف']).map(function(l){return '<option value="'+esc(l)+'"'+(leadF===l?' selected':'')+'>'+esc(l)+'</option>';}).join('');
 
   var todaySt = todayStr();
 
@@ -5411,7 +5417,8 @@ function renderWpFullCenterList() {
     +'<input type="text" placeholder="🔍 جستجو مرکز / استان / کارشناس..." value="'+esc(_wpFclFilters.q)+'" oninput="_wpFclFilters.q=this.value;renderWpFullCenterList()">'
     +'<select onchange="_wpFclFilters.owner=this.value;renderWpFullCenterList()">'+ownerOpts+'</select>'
     +'<select onchange="_wpFclFilters.prov=this.value;renderWpFullCenterList()">'+provOpts+'</select>'
-    +'<button onclick="_wpFclFilters={q:\'\',owner:\'\',prov:\'\'};renderWpFullCenterList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;font-size:11px;color:var(--text-muted)">✕ پاک</button>'
+    +'<select onchange="_wpFclFilters.lead=this.value;renderWpFullCenterList()">'+leadOpts+'</select>'
+    +'<button onclick="_wpFclFilters={q:\'\',owner:\'\',prov:\'\',lead:\'\'};renderWpFullCenterList()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;font-size:11px;color:var(--text-muted)">✕ پاک</button>'
     +'</div>'
     +'<div class="wp-fcl-table-wrap" style="max-height:520px;overflow-y:auto">'
     +'<table class="wp-fcl-table"><thead><tr>'
