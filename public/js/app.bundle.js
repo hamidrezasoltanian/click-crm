@@ -8364,7 +8364,7 @@ function gSearchQuery(q){
       }
     });
     var _gsAllowedProvs=(window._myPermissions&&window._myPermissions.provinces&&window._myPermissions.provinces.length)?window._myPermissions.provinces:null;
-    Object.keys(_PC_CACHE||{}).forEach(function(pv){if(res.length>=12)return;if(_gsAllowedProvs&&_gsAllowedProvs.indexOf(pv)<0)return;(_PC_CACHE[pv]||[]).forEach(function(c){
+    Object.keys(_PC_CACHE||{}).forEach(function(pv){if(pv==='tehran')return;if(res.length>=12)return;if(_gsAllowedProvs&&_gsAllowedProvs.indexOf(pv)<0)return;(_PC_CACHE[pv]||[]).forEach(function(c){
       if(res.length>=12)return;
       var name=c.name||c.center_name||'';
       if(fNorm(name).indexOf(qn)!==-1){
