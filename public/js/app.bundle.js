@@ -4229,7 +4229,7 @@ document.addEventListener('click', function(ev) {
   if (popup && popup.classList.contains('show') && !popup.contains(ev.target)) hideContactPopup();
 });
 function openCenterAudit(centerKey, centerName) {
-  var rtype=centerKey.split('_')[0], rid=centerKey.split('_')[1];
+  var _ckParts=centerKey.split('_');var rtype=_ckParts[0], rid=_ckParts.slice(1).join('_');
   var events=[];
   // changeLog
   (DB.changeLog||[]).filter(function(h){return h.rkey===centerKey;}).forEach(function(h){
@@ -4337,6 +4337,11 @@ function openCenterModal(rtype,id){
       }
       return false;
     });
+  }
+  // For PC centers: ID encodes the province (format: 'provId||n') — use it directly
+  if(rtype==='pc'&&typeof id==='string'&&id.indexOf('||')>=0){
+    var _pcProv=id.split('||')[0];
+    if(_pcProv&&_pcProv!==prov){prov=_pcProv;}
   }
   var centers=getProvCenters(prov||'tehran');
   var r=centers.find(function(x){return String(x.id)===String(id);});
