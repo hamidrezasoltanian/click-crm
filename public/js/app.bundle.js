@@ -6740,6 +6740,12 @@ function openDailyMonitor(){
     if(!byOwner[o])byOwner[o]=[];
     byOwner[o].push(en);
   });
+  // Add all active non-manager experts so they appear even with 0 schedule
+  (typeof umGetActive==='function'?umGetActive():[]).forEach(function(m){
+    if(m.id==='guest')return;
+    if(m.role==='مدیر'||m.role==='سوپر ادمین')return;
+    if(!byOwner[m.id])byOwner[m.id]=[];
+  });
 
   var totalScheduled=todayEntries.length;
   var totalDone=todayEntries.filter(function(en){return en.done;}).length;
@@ -6759,7 +6765,7 @@ function openDailyMonitor(){
     +'</div>'
     +'</div>';
 
-  if(totalScheduled>0){
+  if(Object.keys(byOwner).length>0){
     // Per-expert breakdown table
     body+='<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:16px">'
       +'<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">👥 عملکرد کارشناسان</div>'
@@ -6772,7 +6778,14 @@ function openDailyMonitor(){
       +'<th style="padding:8px 10px;text-align:center;color:#f59e0b">سررسید گذشته</th>'
       +'<th style="padding:8px 10px;text-align:center">اقدام</th>'
       +'</tr></thead><tbody>';
-    Object.keys(byOwner).sort().forEach(function(ow,idx){
+    // Sort: experts with entries first, then by name
+    var _dmOwnerList=Object.keys(byOwner).filter(function(ow){return ow!=='__none__';}).sort(function(a,b){
+      var aHas=byOwner[a].length>0?1:0,bHas=byOwner[b].length>0?1:0;
+      if(aHas!==bHas)return bHas-aHas;
+      return (USERS[a]||a).localeCompare(USERS[b]||b,'fa');
+    });
+    if(byOwner['__none__']&&byOwner['__none__'].length>0)_dmOwnerList.push('__none__');
+    _dmOwnerList.forEach(function(ow,idx){
       var entries=byOwner[ow];
       var owName=ow==='__none__'?'بدون مسئول':(USERS[ow]||ow);
       var owDone=entries.filter(function(en){return en.done;}).length;
@@ -6780,25 +6793,26 @@ function openDailyMonitor(){
       var owOverdue=(overdueByOwner[ow]||[]).length;
       var owColor=(window.umGetColor?umGetColor(ow):'#94a3b8');
       var bg=idx%2===0?'var(--bg-card)':'var(--bg-raised)';
-      body+='<tr style="background:'+bg+';border-bottom:1px solid #f1f5f9">'
+      var noSchedule=entries.length===0&&!owOverdue;
+      body+='<tr style="background:'+bg+';border-bottom:1px solid #f1f5f9;'+(noSchedule?'opacity:.65':'')+'">'
         +'<td style="padding:8px 10px;font-weight:600"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:'+owColor+'"></span>'+esc(owName)+'</span></td>'
         +'<td style="padding:8px 10px;text-align:center">'
       +'<button onclick="event.stopPropagation();openExpertReport(\''+ow+'\')" style="font-size:10px;padding:2px 8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;cursor:pointer;font-family:inherit">📊 گزارش</button>'
       +'</td>'
-      +'<td style="text-align:center;padding:8px">'+entries.length+'</td>'
+      +'<td style="text-align:center;padding:8px">'+(noSchedule?'<span style="color:var(--text-muted);font-size:11px">💤 بدون برنامه</span>':entries.length)+'</td>'
         +'<td style="text-align:center;padding:8px"><span style="background:#dcfce7;color:#166534;border-radius:10px;padding:2px 8px;font-weight:700">'+owDone+'</span></td>'
         +'<td style="text-align:center;padding:8px"><span style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-weight:700">'+owNotDone+'</span></td>'
         +'<td style="text-align:center;padding:8px"><span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 8px;font-weight:700">'+owOverdue+'</span></td>'
         +'<td style="text-align:center;padding:8px">'
-        +(ow!=='__none__'&&owNotDone>0?'<button onclick="sendReminderToExpert(\''+ow+'\')" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;padding:3px 10px;cursor:pointer;font-size:10px;font-family:inherit">📩 یادآوری</button>':'<span style="color:var(--text-muted);font-size:11px">✔ کامل</span>')
+        +(ow!=='__none__'&&owNotDone>0?'<button onclick="sendReminderToExpert(\''+ow+'\')" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;padding:3px 10px;cursor:pointer;font-size:10px;font-family:inherit">📩 یادآوری</button>':'<span style="color:var(--text-muted);font-size:11px">'+(noSchedule?'—':'✔ کامل')+'</span>')
         +'</td>'
         +'</tr>';
     });
     body+='</tbody></table></div></div>';
 
-    // Collapsible per-expert detail sections
+    // Collapsible per-expert detail sections (only experts with actual entries)
     body+='<div style="font-weight:700;font-size:13px;margin-bottom:8px">📍 جزئیات مراکز</div>';
-    Object.keys(byOwner).sort().forEach(function(ow){
+    Object.keys(byOwner).filter(function(ow){return byOwner[ow].length>0;}).sort().forEach(function(ow){
       var entries=byOwner[ow];
       var owName=ow==='__none__'?'بدون مسئول':(USERS[ow]||ow);
       var owColor=(window.umGetColor?umGetColor(ow):'#94a3b8');
@@ -6824,7 +6838,7 @@ function openDailyMonitor(){
       body+='</div></div>';
     });
   } else {
-    body+='<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:10px">📋</div><div>هیچ مرکزی برای امروز برنامه‌ریزی نشده</div></div>';
+    body+='<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:10px">📋</div><div>هیچ کارشناس فعالی یافت نشد</div></div>';
   }
 
   var foot='<button class="btn-secondary" onclick="closeModal(\'dmModal\')">بستن</button>'
@@ -9668,9 +9682,9 @@ function renderManagerPanel(){
   var el=document.getElementById('managerPanel');if(!el)return;
   var today=todayStr();
   var members=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
-  // compute stats per member
+  // compute stats per member (active only — inactive owner centers won't be counted)
   var stats={};
-  members.forEach(function(m){
+  members.filter(function(m){return m.active!==false;}).forEach(function(m){
     stats[m.id]={name:m.name,role:m.role||'',contracted:0,meetings:0,proposals:0,firstContact:0,overdue:0,followupToday:0,totalAssigned:0,stalled:0};
   });
   // scan all edits

@@ -2076,13 +2076,15 @@ async function handleMyStats(chatId, sess) {
   const todayStr = toJalali(new Date());
   const weekStart = toJalali(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
 
-  // Today's entries
+  // Today's entries — handles both legacy JSONB value column and direct columns
   let todayTotal = 0, todayDone = 0;
   try {
     const r = await query(
       `SELECT COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE (value->>'done')::boolean = true)::int AS done
-       FROM week_entries WHERE value->>'addedBy' = $1 AND value->>'scheduledDate' = $2`,
+              COUNT(*) FILTER (WHERE done = true OR (value->>'done')::boolean = true)::int AS done
+       FROM week_entries
+       WHERE COALESCE(added_by, value->>'addedBy') = $1
+         AND COALESCE(scheduled_date, value->>'scheduledDate') = $2`,
       [sess.username, todayStr]
     );
     todayTotal = r.rows[0]?.total || 0;
@@ -2094,7 +2096,9 @@ async function handleMyStats(chatId, sess) {
   try {
     const r = await query(
       `SELECT COUNT(*)::int AS cnt FROM week_entries
-       WHERE value->>'addedBy' = $1 AND (value->>'done')::boolean = true AND value->>'doneDate' >= $2`,
+       WHERE COALESCE(added_by, value->>'addedBy') = $1
+         AND (done = true OR (value->>'done')::boolean = true)
+         AND COALESCE(done_date, value->>'doneDate') >= $2`,
       [sess.username, weekStart]
     );
     weekDone = r.rows[0]?.cnt || 0;
@@ -2156,15 +2160,16 @@ async function handleTeamReport(chatId, sess) {
   }
   const todayStr = toJalali(new Date());
 
-  // Today's entries per expert
+  // Today's entries per expert — handles both legacy JSONB value column and direct columns
   let weRows = [];
   try {
     const r = await query(
-      `SELECT value->>'addedBy' AS expert,
+      `SELECT COALESCE(added_by, value->>'addedBy') AS expert,
               COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE (value->>'done')::boolean = true)::int AS done
-       FROM week_entries WHERE value->>'scheduledDate' = $1
-       GROUP BY value->>'addedBy' ORDER BY value->>'addedBy'`,
+              COUNT(*) FILTER (WHERE done = true OR (value->>'done')::boolean = true)::int AS done
+       FROM week_entries
+       WHERE COALESCE(scheduled_date, value->>'scheduledDate') = $1
+       GROUP BY COALESCE(added_by, value->>'addedBy') ORDER BY 1`,
       [todayStr]
     );
     weRows = r.rows;
@@ -2344,16 +2349,23 @@ async function handleWeeklyKPI(chatId, sess) {
   (blob.visitLog  || []).filter(function(l){ return l.at && l.at >= weekAgo; }).forEach(function(l){ inc(l.by || l.user, 'visits'); });
   (blob.salesLog  || []).filter(function(l){ return l.at && l.at >= weekAgo; }).forEach(function(l){ inc(l.by || l.user, 'sales'); });
 
-  // Week entries done this week
+  // Week entries done this week — handles both legacy JSONB value column and direct columns
   let weDone = {};
   try {
     const r = await query(
-      `SELECT value->>'addedBy' AS expert, COUNT(*)::int AS cnt
+      `SELECT COALESCE(added_by, value->>'addedBy') AS expert, COUNT(*)::int AS cnt
        FROM week_entries
-       WHERE (value->>'done')::boolean = true AND updated_at >= NOW() - INTERVAL '7 days'
-       GROUP BY value->>'addedBy'`
+       WHERE (done = true OR (value->>'done')::boolean = true) AND updated_at >= NOW() - INTERVAL '7 days'
+       GROUP BY COALESCE(added_by, value->>'addedBy')`
     );
-    r.rows.forEach(function(row){ weDone[row.expert] = row.cnt; });
+    r.rows.forEach(function(row){ if (row.expert) weDone[row.expert] = row.cnt; });
+  } catch(e) {}
+
+  // Load display names for all active experts
+  const kpiDisplayName = {};
+  try {
+    const r = await query(`SELECT username, display_name FROM app_users WHERE active = true ORDER BY display_name`);
+    r.rows.forEach(function(u){ kpiDisplayName[u.username] = u.display_name || u.username; });
   } catch(e) {}
 
   if (!Object.keys(stats).length && !Object.keys(weDone).length) {
@@ -2368,7 +2380,8 @@ async function handleWeeklyKPI(chatId, sess) {
   Array.from(allExperts).sort().forEach(function(expert) {
     const s = stats[expert] || { calls: 0, visits: 0, sales: 0 };
     const done = weDone[expert] || 0;
-    text += '👤 <b>' + expert + '</b>\n';
+    const name = kpiDisplayName[expert] || expert;
+    text += '👤 <b>' + name + '</b>\n';
     text += '  📞 تماس: ' + s.calls + ' | 🚗 بازدید: ' + s.visits;
     if (s.sales)  text += ' | 💰 فروش: ' + s.sales;
     if (done)     text += ' | ✅ انجام: ' + done;
