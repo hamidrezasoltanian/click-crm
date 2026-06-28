@@ -181,6 +181,13 @@ function _saveDBNow(){
           // Don't let server revive locally-deleted entries
           (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
           merged.edits=Object.assign({},d.edits||{},DB.edits||{});
+          // notes: local wins per-key if local has more entries
+          if(DB.notes&&d.notes){
+            merged.notes=Object.assign({},d.notes);
+            Object.keys(DB.notes).forEach(function(k){
+              if((DB.notes[k]||[]).length>(d.notes[k]||[]).length)merged.notes[k]=DB.notes[k];
+            });
+          }
           // Preserve local read=true for notifications on 409 retry
           if(DB.notifications&&d.notifications){
             var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
@@ -4451,6 +4458,34 @@ function _cmSetLastPurch(rtype,rid,id,v){
   var cs=_computeCustomerStatus(rtype,rid);
   if(cs)setE(rtype,rid,'customerStatus',cs);
 }
+function _schedFdToWeek(rtype, rid, date) {
+  if (!date) return;
+  var pts = date.split('/').map(Number);
+  if (pts.length !== 3 || !pts[0]) return;
+  var dateMs = jMs(pts[0], pts[1], pts[2]);
+  var foundWeek = null;
+  [pts[0]-1, pts[0], pts[0]+1].forEach(function(yr) {
+    if (foundWeek) return;
+    getYearWeeks(yr).forEach(function(wk) {
+      if (foundWeek) return;
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      if (dateMs >= wsMs && dateMs <= weMs) foundWeek = wk;
+    });
+  });
+  if (!foundWeek) return;
+  var recKey = rtype + '_' + rid;
+  var alreadyInWeek = Object.keys(DB.weekEntries || {}).some(function(k) {
+    var we = DB.weekEntries[k];
+    return !we.done && (we.recKey || (we.rtype + '_' + we.rid)) === recKey && k.indexOf(foundWeek.id) === 0;
+  });
+  if (alreadyInWeek) return;
+  var cname = _getCenterName(rtype, rid);
+  var newKey = wpEntryKey(foundWeek.id, rtype, rid);
+  if (!DB.weekEntries) DB.weekEntries = {};
+  DB.weekEntries[newKey] = {scheduledDate: date, done: false, doneDate: null, rtype: rtype, rid: rid, recKey: recKey, centerName: cname, actionType: 'call', addedBy: currentUser};
+  saveDB();
+}
 function openCenterModal(rtype,id){
   // Track recent centers
   var _rcKey=rtype+'_'+id;
@@ -4591,7 +4626,7 @@ function openCenterModal(rtype,id){
     +'<label>تاریخ پیگیری بعدی</label>'
     +'<div style="display:flex;gap:5px;align-items:center">'
     +'<input id="mfd_'+id+'" type="text" value="'+fd+'" readonly class="fd-inp'+(fd&&fd<today?' ov':'')+'" style="cursor:pointer;flex:1" '
-    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
+    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);renderBanner();_schedFdToWeek(\''+rtype+'\',\''+r.id+'\',v);if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
     +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
     +'<button onclick="convertFollowupToTask(\''+esc(rtype)+'\',\''+esc(r.id)+'\')" title="تبدیل به وظیفه" style="background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">📌 وظیفه</button>'
     +'</div>'
@@ -8139,7 +8174,8 @@ function collectCalItems(){
     if(!we||typeof we!=='object')return;
     if(!we.scheduledDate)return;var pts=we.scheduledDate.split('/').map(Number);if(pts.length!==3)return;
     items.push({type:'week',jDate:we.scheduledDate,jy:pts[0],jm:pts[1],jd:pts[2],time:null,
-      title:'📋 '+getRecLabel(we.recKey)+(we.done?' ✓':''),color:we.done?'#22c55e':'#8b5cf6',sk:jMs(pts[0],pts[1],pts[2])});
+      title:'📋 '+getRecLabel(we.recKey)+(we.done?' ✓':''),color:we.done?'#22c55e':'#8b5cf6',sk:jMs(pts[0],pts[1],pts[2]),
+      rtype:we.rtype||'',rid:we.rid||''});
   });
   return items;
 }
@@ -8165,7 +8201,7 @@ function renderCalendar(){
 function calChip(it){
   var hnd='';
   if(it.type==='event')hnd='onclick="event.stopPropagation();openEvModal('+it.evId+')"';
-  else if(it.type==='followup')hnd='onclick="event.stopPropagation();openCenterModal(\''+it.rtype+'\',\''+it.rid+'\')"';
+  else if(it.type==='followup'||it.type==='week')hnd=it.rtype&&it.rid?'onclick="event.stopPropagation();openCenterModal(\''+it.rtype+'\',\''+it.rid+'\')"':'';
   var icon=it.type==='event'?'🗓':it.type==='followup'?'📅':'📋';
   return'<div class="cal-chip" style="background:'+_safeColor(it.color)+'" '+hnd+'>'
     +'<span style="flex-shrink:0;font-size:9px">'+icon+'</span>'
