@@ -30,11 +30,8 @@ router.get('/db', async (req, res) => {
 
     const weekEntries = {};
     weResult.rows.forEach(function(r) { weekEntries[r.key] = r.value; });
-
-    // Also merge any weekEntries still in the blob (backward compat with old snapshots)
-    if (data && data.weekEntries && typeof data.weekEntries === 'object') {
-      Object.assign(weekEntries, data.weekEntries);
-    }
+    // SQL week_entries is the single source of truth — blob.weekEntries is ignored here.
+    // Any stale blob entries are migrated to SQL on server startup (_migrateWeekEntriesFromBlob).
 
     let safe = data;
     if (data && data.settings && data.settings.anthropicKey) {
@@ -122,9 +119,9 @@ router.put('/db', async (req, res) => {
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
         [JSON.stringify(incomingWE), req.user.username]
       ).catch(function(e) {
-        // Fallback: table may have old columnar schema — store in blob instead
-        console.warn('[week_entries upsert]', e.message, '— falling back to blob');
-        mainData.weekEntries = incomingWE;
+        // Log but do NOT fall back to blob — that would corrupt the single source of truth
+        console.error('[week_entries upsert FAILED]', e.message);
+        throw e;
       });
     }
 
@@ -203,10 +200,26 @@ router.post('/history/:id/restore', requireManager, async (req, res) => {
   try {
     const hist = await query('SELECT value FROM app_data_history WHERE id = $1 AND key = $2', [id, 'main']);
     if (!hist.rows.length) return res.status(404).json({ error: 'نسخه یافت نشد' });
+    const snap = hist.rows[0].value || {};
+
+    // If old snapshot has weekEntries in blob, migrate them to SQL table
+    if (snap.weekEntries && typeof snap.weekEntries === 'object') {
+      const blobWE = snap.weekEntries;
+      delete snap.weekEntries;
+      await query(
+        `INSERT INTO week_entries (key, value, updated_at, updated_by)
+         SELECT e.key, e.value, NOW(), $2
+         FROM jsonb_each($1::jsonb) AS e(key, value)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+        [JSON.stringify(blobWE), req.user.username]
+      ).catch(function(e) { console.warn('[history restore] weekEntries migrate:', e.message); });
+      console.log(`[data/history restore] migrated ${Object.keys(blobWE).length} weekEntries from old snapshot`);
+    }
+
     await query(
       `INSERT INTO app_data (key, value, updated_at, updated_by) VALUES ('main', $1, NOW(), $2)
        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
-      [JSON.stringify(hist.rows[0].value), req.user.username]
+      [JSON.stringify(snap), req.user.username]
     );
     console.log(`[data/history restore] id=${id} by=${req.user.username}`);
     return res.json({ ok: true });
@@ -299,11 +312,12 @@ router.put('/centers/master', requireManager, async (req, res) => {
 // GET /api/data/backup — manager only (contains full DB including sensitive config)
 router.get('/backup', requireManager, async (req, res) => {
   try {
-    const [mainR, mtrR, usersR, centersR] = await Promise.all([
+    const [mainR, mtrR, usersR, centersR, weR] = await Promise.all([
       query("SELECT value FROM app_data WHERE key = 'main'"),
       query("SELECT value FROM app_data WHERE key = 'mtr'"),
       query('SELECT username, display_name, role, color, phone, active FROM app_users ORDER BY username'),
       query("SELECT key, data FROM centers_master WHERE key IN ('CENTERS', 'PC_RAW')"),
+      query('SELECT key, value FROM week_entries'),
     ]);
 
     const centers = { CENTERS: [], PC_RAW: {} };
@@ -312,11 +326,15 @@ router.get('/backup', requireManager, async (req, res) => {
       else if (row.key === 'PC_RAW') centers.PC_RAW = row.data;
     });
 
+    const weekEntries = {};
+    weR.rows.forEach(function(r) { weekEntries[r.key] = r.value; });
+
     return res.json({
       db: mainR.rows.length ? mainR.rows[0].value : {},
       mtr: mtrR.rows.length ? mtrR.rows[0].value : {},
       users: usersR.rows,
       centers: centers,
+      weekEntries: weekEntries,
       exportedAt: new Date().toISOString(),
     });
   } catch (e) {
@@ -327,15 +345,30 @@ router.get('/backup', requireManager, async (req, res) => {
 
 // POST /api/data/restore
 router.post('/restore', requireManager, async (req, res) => {
-  const { db, mtr, users, centers } = req.body || {};
+  const { db, mtr, users, centers, weekEntries } = req.body || {};
 
   try {
     if (db && typeof db === 'object') {
+      // Strip any weekEntries from the blob before storing (SQL table is authoritative)
+      const cleanDb = Object.assign({}, db);
+      delete cleanDb.weekEntries;
       await query(
         `INSERT INTO app_data (key, value, updated_at, updated_by)
          VALUES ('main', $1, NOW(), $2)
          ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
-        [JSON.stringify(db), req.user.username]
+        [JSON.stringify(cleanDb), req.user.username]
+      );
+    }
+
+    // Restore weekEntries to SQL table
+    if (weekEntries && typeof weekEntries === 'object' && Object.keys(weekEntries).length) {
+      await query('DELETE FROM week_entries');
+      await query(
+        `INSERT INTO week_entries (key, value, updated_at, updated_by)
+         SELECT e.key, e.value, NOW(), $2
+         FROM jsonb_each($1::jsonb) AS e(key, value)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+        [JSON.stringify(weekEntries), req.user.username]
       );
     }
 
@@ -532,6 +565,31 @@ router.post('/centers/merge', requireManager, async (req, res) => {
     }
 
     DB.edits = edits; DB.rTags = rTags; DB.notes = noteMap;
+
+    // Migrate week_entries: rename keys that reference the source center
+    // week_entries key format: "{weekId}:::{rtype}_{rid}" or "{weekId}:::{recKey}"
+    const weRows = await client.query(
+      `SELECT key, value FROM week_entries WHERE key LIKE $1`,
+      [`%${sourceId}%`]
+    );
+    for (const row of weRows.rows) {
+      const newKey = row.key.replace(sourceId, targetId);
+      if (newKey !== row.key) {
+        // Merge into target key if it exists, otherwise rename
+        const newVal = Object.assign({}, row.value, {
+          rid: targetId,
+          recKey: (row.value.recKey || '').replace(sourceId, targetId),
+          centerName: row.value.centerName, // keep original name until next save
+        });
+        await client.query(
+          `INSERT INTO week_entries (key, value, updated_at, updated_by)
+           VALUES ($1, $2, NOW(), $3)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+          [newKey, JSON.stringify(newVal), req.user.username]
+        );
+        await client.query(`DELETE FROM week_entries WHERE key = $1`, [row.key]);
+      }
+    }
 
     // Save CENTERS
     await client.query(

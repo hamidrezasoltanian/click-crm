@@ -481,6 +481,9 @@ async function initSchema() {
   // Auto-migrate WMS from blob → tables (run once)
   await _migrateWMSFromBlob();
 
+  // Auto-migrate weekEntries from blob → week_entries table (run once on startup)
+  await _migrateWeekEntriesFromBlob();
+
   // ════════════════════════════════════════
   // TASKS — extracted from DB.tasks blob
   // ════════════════════════════════════════
@@ -1445,6 +1448,42 @@ async function _migrateWMSFromBlob() {
                 'transactions:', (S.transactions||[]).length);
   } catch(e) {
     console.error('[DB] WMS migration error:', e.message);
+  }
+}
+
+// ── Migrate weekEntries from app_data blob → week_entries table ─────────────
+// Runs once on startup. If the main blob still has a "weekEntries" key (from
+// old sessions that fell back to blob storage), those entries are inserted into
+// the SQL table (SQL wins for duplicates) and then removed from the blob.
+async function _migrateWeekEntriesFromBlob() {
+  try {
+    const blobRes = await query(`SELECT value FROM app_data WHERE key = 'main'`);
+    if (!blobRes.rows.length) return;
+    const blob = blobRes.rows[0].value;
+    if (!blob || typeof blob.weekEntries !== 'object' || !Object.keys(blob.weekEntries || {}).length) return;
+
+    const blobWE = blob.weekEntries;
+    const count = Object.keys(blobWE).length;
+    console.log(`[DB] Migrating ${count} weekEntries from blob → week_entries table`);
+
+    // Insert blob entries — ON CONFLICT DO NOTHING so SQL (already correct) wins
+    await query(
+      `INSERT INTO week_entries (key, value, updated_at, updated_by)
+       SELECT e.key, e.value, NOW(), 'blob-migration'
+       FROM jsonb_each($1::jsonb) AS e(key, value)
+       ON CONFLICT (key) DO NOTHING`,
+      [JSON.stringify(blobWE)]
+    );
+
+    // Remove weekEntries key from the blob
+    await query(
+      `UPDATE app_data SET value = value - 'weekEntries', updated_at = NOW()
+       WHERE key = 'main' AND value ? 'weekEntries'`
+    );
+
+    console.log(`[DB] weekEntries migration complete ✓`);
+  } catch (e) {
+    console.error('[DB] weekEntries migration error:', e.message);
   }
 }
 
