@@ -11593,8 +11593,16 @@ function _sseReloadDB(byUser) {
       if (!d || typeof d !== 'object') return;
       if (d._serverTs) _dbServerTs = d._serverTs;
       var merged = Object.assign({}, DB, d);
-      merged.weekEntries = Object.assign({}, DB.weekEntries, d.weekEntries || {});
-      merged.edits = Object.assign({}, DB.edits, d.edits || {});
+      // weekEntries: local wins — pending additions survive SSE reload
+      merged.weekEntries = Object.assign({}, d.weekEntries || {}, DB.weekEntries);
+      // edits: timestamp-based merge — whichever side touched a center more recently wins
+      // This preserves unsaved local changes AND picks up other users' changes correctly
+      merged.edits = Object.assign({}, d.edits || {});
+      Object.keys(DB.edits || {}).forEach(function(k) {
+        var localTs = (DB.edits[k] && DB.edits[k]._ts) || 0;
+        var serverTs = (d.edits && d.edits[k] && d.edits[k]._ts) || 0;
+        if (localTs >= serverTs) merged.edits[k] = DB.edits[k];
+      });
       // Preserve local read=true — SSE must not un-read notifications the user already opened
       if (d.notifications && DB.notifications && DB.notifications.length) {
         var _localRead={};
