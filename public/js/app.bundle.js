@@ -11603,6 +11603,15 @@ function _sseReloadDB(byUser) {
         var serverTs = (d.edits && d.edits[k] && d.edits[k]._ts) || 0;
         if (localTs >= serverTs) merged.edits[k] = DB.edits[k];
       });
+      // notes: local wins per-key if local has more entries (e.g. note just added before save completed)
+      if (DB.notes && d.notes) {
+        merged.notes = Object.assign({}, d.notes);
+        Object.keys(DB.notes).forEach(function(k) {
+          var localArr = DB.notes[k] || [];
+          var serverArr = d.notes[k] || [];
+          if (localArr.length > serverArr.length) merged.notes[k] = localArr;
+        });
+      }
       // Preserve local read=true — SSE must not un-read notifications the user already opened
       if (d.notifications && DB.notifications && DB.notifications.length) {
         var _localRead={};
