@@ -86,6 +86,7 @@ var _undoSuppressed=false;
 var _actPage=0;
 var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},_weDeletedKeys:[],events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
+var _DEFAULT_ROLES=['مدیر','کارشناس فروش','سوپر ادمین','بازرگانی','مالی','IT','مهمان'];
 
 // ── Login/Auth helpers ────────────────────────────────────────
 function showLoginOverlay(){
@@ -272,7 +273,7 @@ function openUserMgmt(){
 function openBulkReassign(){_UM_TAB='bulk';openUserMgmt();}
 function umTab(t){_UM_TAB=t;var w=document.getElementById('umWrap');if(w)w.innerHTML=_umBody();}
 function _umTabs(){
-  var tabs=[['users','👤 کاربران'],['provinces','🗺 استان‌ها'],['bulk','🔀 جابجایی']];
+  var tabs=[['users','👤 کاربران'],['provinces','🗺 استان‌ها'],['bulk','🔀 جابجایی'],['roles','🏷 نقش‌ها']];
   return '<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)">'
     +tabs.map(function(t){
       var on=_UM_TAB===t[0];
@@ -280,7 +281,60 @@ function _umTabs(){
     }).join('')+'</div>';
 }
 function _umBody(){
-  return _umTabs()+(_UM_TAB==='users'?_umUsers():_UM_TAB==='provinces'?_umProvinces():_umBulk());
+  return _umTabs()+(_UM_TAB==='users'?_umUsers():_UM_TAB==='provinces'?_umProvinces():_UM_TAB==='roles'?_umRolesTab():_umBulk());
+}
+function _umRolesTab(){
+  var roles=(DB.settings&&DB.settings.roles&&DB.settings.roles.length)?DB.settings.roles:_DEFAULT_ROLES.slice();
+  var rows=roles.map(function(r,i){
+    return '<div id="umrole_row_'+i+'" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'
+      +'<span style="min-width:22px;text-align:center;font-size:12px;color:var(--text-muted);direction:ltr">'+(i+1)+'</span>'
+      +'<input id="umrole_inp_'+i+'" class="ed-inp" style="flex:1" value="'+esc(r)+'" placeholder="نام نقش">'
+      +(r==='مدیر'?'<span style="font-size:11px;color:#6366f1;padding:0 6px" title="نقش مدیر دارای دسترسی کامل است">🔒</span>':'')
+      +'<button onclick="umDelRole('+i+')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;font-family:inherit"'+(r==='مدیر'?' disabled title="نقش مدیر حذف‌شدنی نیست"':'')+'>✕</button>'
+      +'</div>';
+  }).join('');
+  return '<div style="max-width:460px">'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg-raised);border-radius:6px;padding:8px 12px">نقش «مدیر» همیشه دسترسی کامل دارد. نقش‌های دیگر به عنوان کارشناس عمل می‌کنند مگر اینکه در کد خاص‌پردازی شده باشند.</div>'
+    +'<div id="umrole_list">'+rows+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<button onclick="umAddRole()" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-family:inherit">+ افزودن نقش</button>'
+    +'<button onclick="umSaveRoles()" style="background:var(--brand);color:#fff;border:none;border-radius:6px;padding:6px 18px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:600">💾 ذخیره نقش‌ها</button>'
+    +'</div></div>';
+}
+function umAddRole(){
+  var list=document.getElementById('umrole_list');
+  if(!list)return;
+  var i=list.querySelectorAll('[id^="umrole_row_"]').length;
+  var div=document.createElement('div');
+  div.id='umrole_row_'+i;
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  div.innerHTML='<span style="min-width:22px;text-align:center;font-size:12px;color:var(--text-muted);direction:ltr">'+(i+1)+'</span>'
+    +'<input id="umrole_inp_'+i+'" class="ed-inp" style="flex:1" placeholder="نام نقش جدید">'
+    +'<button onclick="umDelRole('+i+')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;font-family:inherit">✕</button>';
+  list.appendChild(div);
+  var inp=document.getElementById('umrole_inp_'+i);
+  if(inp)inp.focus();
+}
+function umDelRole(i){
+  var row=document.getElementById('umrole_row_'+i);
+  if(row)row.remove();
+}
+function umSaveRoles(){
+  var list=document.getElementById('umrole_list');
+  if(!list)return;
+  var roles=[];
+  Array.from(list.querySelectorAll('input[id^="umrole_inp_"]')).forEach(function(inp){
+    var v=inp.value.trim();
+    if(v)roles.push(v);
+  });
+  if(!roles.length){showToast('⚠ حداقل یک نقش لازم است');return;}
+  if(roles.indexOf('مدیر')<0)roles.unshift('مدیر');
+  if(!DB.settings)DB.settings={};
+  DB.settings.roles=roles;
+  saveDB();
+  showToast('✓ نقش‌ها ذخیره شد',2000);
+  var w=document.getElementById('umWrap');
+  if(w)w.innerHTML=_umBody();
 }
 function _umUsers(){
   var members=umGetMembers().filter(function(m){return m.id!=='guest';});
@@ -291,7 +345,7 @@ function _umUsers(){
     var statusBg=active?'#dcfce7':'var(--bg-raised)';
     var statusTxt=active?'#15803d':'var(--text-muted)';
     var rowOp=active?1:.55;
-    var roles=['مدیر','کارشناس فروش','سوپر ادمین','بازرگانی','مالی','IT','مهمان'];
+    var roles=(DB.settings&&DB.settings.roles&&DB.settings.roles.length)?DB.settings.roles:_DEFAULT_ROLES;
     return '<tr style="opacity:'+rowOp+';border-bottom:1px solid var(--border)">'
       +'<td style="padding:9px 8px;width:28px"><div id="umdot_'+m.id+'" style="width:16px;height:16px;border-radius:50%;background:'+color+';cursor:pointer;border:2px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.15)" onclick="umPickColor(\''+m.id+'\',this)" title="تغییر رنگ"></div></td>'
       +'<td style="padding:9px 6px"><input id="um_name_'+m.id+'" value="'+esc(m.name)+'" style="background:var(--bg-input);border:1px solid var(--border-input);border-radius:5px;padding:5px 9px;font-size:12.5px;font-family:inherit;color:var(--text-primary);width:130px"></td>'
