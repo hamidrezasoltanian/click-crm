@@ -418,6 +418,37 @@ router.post('/restore', requireManager, async (req, res) => {
   }
 });
 
+// GET /api/data/debug/center?id=p13||97 — manager only, diagnose center data collisions
+router.get('/debug/center', requireManager, async (req, res) => {
+  const centerId = req.query.id;
+  if (!centerId) return res.status(400).json({ error: 'id param required' });
+  try {
+    const mainR = await query("SELECT value FROM app_data WHERE key = 'main'");
+    const cmR   = await query("SELECT key, data FROM centers_master WHERE key IN ('CENTERS','PC_RAW')");
+    const db    = mainR.rows[0]?.value || {};
+    const extra = (db.extra || []).filter(x => String(x.id) === String(centerId));
+    const cmData = {};
+    for (const r of cmR.rows) cmData[r.key] = r.data;
+    // Find in PC_RAW
+    const pcRawMatches = [];
+    const PC_RAW = cmData['PC_RAW'] || {};
+    for (const [provName, entries] of Object.entries(PC_RAW)) {
+      if (!Array.isArray(entries)) continue;
+      entries.forEach((r, idx) => {
+        const rid = Array.isArray(r) ? r[0] : (r.row ?? r.n ?? idx);
+        const rname = Array.isArray(r) ? (r[1]||'') : (r.name||r[1]||'');
+        // This is a simple check; actual id building in client uses provId||rid
+        if (String(rid) === String(centerId).split('||')[1]) {
+          pcRawMatches.push({ provName, idx, rid, name: rname, raw: r });
+        }
+      });
+    }
+    return res.json({ centerId, extra, pcRawMatches, editsKey: (db.edits||{})[`pc_${centerId}`] });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/data/kv/:key  — generic key-value read (for MTR meta etc.)
 router.get('/kv/:key', async (req, res) => {
   const key = req.params.key.replace(/[^a-z0-9_-]/gi, '_');
