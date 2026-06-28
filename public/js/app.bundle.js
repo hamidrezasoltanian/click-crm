@@ -1094,7 +1094,10 @@ function _buildPCCache(){
     });
   }
   if(!extras.length&&!movedIn.length)return base;
-  return base.concat(extras).concat(movedIn);
+  // If an extra center shares the same ID as a base center, extra wins (user override)
+  var extraIds=new Set(extras.map(function(c){return String(c.id);}));
+  var filteredBase=base.filter(function(c){return!extraIds.has(String(c.id));});
+  return filteredBase.concat(extras).concat(movedIn);
 }
 function clearPCCache(){_PC_CACHE=null;}
 function isStalled(type,id){
@@ -4433,7 +4436,6 @@ function _cmSetLastPurch(rtype,rid,id,v){
   if(cs)setE(rtype,rid,'customerStatus',cs);
 }
 function openCenterModal(rtype,id){
-  console.log('[openCenterModal] called with rtype='+rtype+' id='+JSON.stringify(id));
   // Track recent centers
   var _rcKey=rtype+'_'+id;
   _recentCenters=_recentCenters.filter(function(x){return x.key!==_rcKey;});
@@ -4478,7 +4480,6 @@ function openCenterModal(rtype,id){
     });
   }
   if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);});}
-  console.log('[openCenterModal] prov='+prov+' r='+(r?JSON.stringify({id:r.id,name:r.name}):'null')+' e.nameOverride='+((getE(rtype,r&&r.id)||{}).nameOverride||''));
   if(!r){showToast('مرکز یافت نشد');return;}
   var e=getE(rtype,r.id);
   var st=e.status||'بدون تماس';var lead=e.lead||r.lead||'سرنخ';
