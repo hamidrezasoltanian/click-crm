@@ -463,6 +463,64 @@ Logged as: `[data/db PUT] weekEntries guard: merged server(N) + incoming(M) → 
 - Everything filterable by expert; experts only see their own centers (managers see all).
 - All UI text in Persian; all dates Jalali; layout RTL.
 
+---
+
+## Sales Playbook Gap Analysis (فایل: crm_gap_analysis.md)
+
+Based on the Atena Sales Playbook v1.0. These are features the playbook requires that the CRM must implement.
+
+### Implementation Status
+
+| # | Feature | Priority | Status |
+|---|---|---|---|
+| 1 | Customer Status خودکار (New/Active/Dormant/Lost) بر اساس آخرین خرید | 🔴 حیاتی | 🔲 TODO |
+| 2 | Dormant detection: مشتری بدون خرید > 90 روز شناسایی خودکار شود | 🔴 حیاتی | 🔲 TODO |
+| 3 | Closed Lost Reason: popup اجباری هنگام غیرفعال/بستن Opportunity | 🔴 حیاتی | 🔲 TODO |
+| 4 | Opportunity fields: احتمال موفقیت (کم/متوسط/زیاد) + درجه A/B/C | 🔴 حیاتی | 🔲 TODO |
+| 5 | Opportunity value: ارزش فرصت به عنوان فیلد مرکز (نه فقط done entry) | 🔴 حیاتی | 🔲 TODO |
+| 6 | Activity type dropdown کامل: ارسال قیمت / نمونه / کمیته / جلسه / ... | 🟠 مهم | 🔲 TODO |
+| 7 | No-Next-Step flag: نشانگر قرمز روی مراکز فعال بدون followupDate | 🟠 مهم | 🔲 TODO |
+| 8 | فیلدهای رقیب تکمیلی: مزیت / نقطه ضعف / دلیل خرید از رقیب | 🟠 مهم | 🔲 TODO |
+| 9 | گزارش هفتگی: New Opportunity / مشتری جدید / مشتری خوابیده این هفته | 🟠 مهم | 🔲 TODO |
+| 10 | فاصله پیگیری per-Stage: Lead 7d / Opportunity داغ 2-3d / Dormant ماهانه | 🟡 مطلوب | 🔲 TODO |
+| 11 | Pipeline value: ارزش کل Pipeline به تفکیک Stage در dashboard مدیر | 🟡 مطلوب | 🔲 TODO |
+| 12 | KOL/پزشک Entity جداگانه با رابطه many-to-many به مراکز | 🟡 مطلوب | 🔲 TODO |
+| 13 | Stage validation: فیلدهای اجباری قبل از تغییر Stage | 🟡 مطلوب | 🔲 TODO |
+| 14 | فیلدهای Prospect تکمیلی: میزان مصرف / نحوه خرید / شرایط پرداخت | 🟡 مطلوب | 🔲 TODO |
+| 15 | گزارش per-رقیب: چه مراکزی به کدام رقیب داده‌ایم و چرا | 🟡 مطلوب | 🔲 TODO |
+
+### Data Model Extensions Needed
+
+```
+DB.edits[key] extensions:
+  customerStatus: 'new' | 'active' | 'active_new' | 'dormant' | 'lost'  ← auto-computed
+  lastPurchaseDate: 'YYYY/MM/DD'    ← Jalali, updated on sale log
+  firstPurchaseDate: 'YYYY/MM/DD'   ← Jalali, set on first sale
+  closeReason: string               ← mandatory on غیرفعال/بسته
+  oppProbability: 'low'|'medium'|'high'   ← shown when lead=فرصت
+  oppGrade: 'A'|'B'|'C'            ← hot/warm/cold, shown when lead=فرصت
+  oppValue: number                  ← M ریال, shown when lead=فرصت
+  competitorAdvantage: string
+  competitorWeakness: string
+  buyReasonFromCompetitor: string
+  consumptionVolume: string         ← Prospect field
+  purchaseMethod: string            ← Prospect field
+  paymentTerms: string              ← Prospect field
+```
+
+### Action Type Extensions
+Current: `'call' | 'visit'`
+Target:  `'call' | 'visit' | 'price_send' | 'sample_send' | 'committee' | 'meeting' | 'followup'`
+
+Persian labels:
+```javascript
+var ACTION_TYPE_LABELS = {
+  call: '📞 تماس', visit: '🤝 ملاقات', price_send: '📄 ارسال قیمت',
+  sample_send: '🧪 ارسال نمونه', committee: '🏛 پیگیری کمیته',
+  meeting: '👥 جلسه', followup: '🔄 پیگیری'
+};
+```
+
 ## Workflow Checklist for every change
 
 1. Read exact lines with `repr()` before replacing (NBSP hazard).

@@ -1874,7 +1874,17 @@ function quickCallLog(rtype,rid,centerName){
   var id='qcl_'+rid;
   var e=getE(rtype,rid);
   var body='<div style="display:flex;flex-direction:column;gap:10px">'
-    +'<div><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">📊 نتیجه تماس</label>'
+    +'<div><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">🎯 نوع فعالیت</label>'
+    +'<select id="qcl_type" style="width:100%;padding:6px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px">'
+    +'<option value="call">📞 تماس</option>'
+    +'<option value="visit">🤝 ملاقات</option>'
+    +'<option value="price_send">📄 ارسال قیمت</option>'
+    +'<option value="sample_send">🧪 ارسال نمونه</option>'
+    +'<option value="committee">🏛 پیگیری کمیته</option>'
+    +'<option value="meeting">👥 جلسه</option>'
+    +'<option value="followup">🔄 پیگیری</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">📊 نتیجه</label>'
     +'<select id="qcl_result" style="width:100%;padding:6px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)">'
     +'<option value="">-- انتخاب --</option>'
     +'<option>تماس موفق - علاقه‌مند</option>'
@@ -1903,8 +1913,10 @@ function _submitQCL(rtype,rid,modalId){
   var result=((document.getElementById('qcl_result')||{}).value||'');
   var note=((document.getElementById('qcl_note')||{}).value||'').trim();
   var fd=((document.getElementById('qcl_fd')||{}).value||'');
+  var actType=((document.getElementById('qcl_type')||{}).value||'call');
   if(!result&&!note){showToast('نتیجه یا یادداشت را وارد کنید');return;}
-  var txt=(result?'نتیجه: '+result+(note?'\n'+note:''):note);
+  var actLabel=(ACTION_TYPE_LABELS&&ACTION_TYPE_LABELS[actType])||'📞 تماس';
+  var txt=(result?'['+actLabel+'] نتیجه: '+result+(note?'\n'+note:''):'['+actLabel+'] '+note);
   if(txt){
     if(!DB.notes)DB.notes={};
     if(!DB.notes[rtype+'_'+rid])DB.notes[rtype+'_'+rid]=[];
@@ -2866,6 +2878,7 @@ function renderProvTable(){
     var pot=e.potential!==undefined?e.potential:r.potential;
     var fd=e.followupDate||'';
     var fdCls='fd-inp'+(fd&&fd<today?' ov':fd&&fd===today?' today':'');
+    var _activeNoDate=!fd&&st!=='غیرفعال'&&st!=='قرارداد بسته شد';
     var notes=DB.notes[recK(rtype,r.id)]||[];
     var lastNote=notes.length?notes[notes.length-1]:null;
     var notePreview=lastNote?'<div style="font-size:9px;color:var(--text-muted);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px" title="'+esc(lastNote.text||'')+'">'+esc((lastNote.text||'').substring(0,40))+'</div>':'';
@@ -2926,7 +2939,7 @@ function renderProvTable(){
       +(function(){var typeOpts=[''].concat(TYPE_LIST);var curType=e.type||r.type||'';return'<td><select class="ed-inp" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)" style="width:90px">'+typeOpts.map(function(t){return'<option value="'+t+'"'+(curType===t?' selected':'')+'>'+(t||'-- نوع --')+'</option>';}).join('')+'</select></td>';})()
 
       +'<td><select class="ed-sel '+lc+'" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'lead\',this.value);this.className=\'ed-sel \'+(window.LEAD_CLS[this.value]||\'lead-none\')">'
-        +LEAD_LIST.map(function(l){return'<option'+(l===lead?' selected':'')+'>'+l+'</option>';}).join('')+'</select></td>'
+        +LEAD_LIST.map(function(l){return'<option'+(l===lead?' selected':'')+'>'+l+'</option>';}).join('')+'</select>'+(e.oppGrade?'<span style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;background:'+(e.oppGrade==='A'?'#fef08a;color:#92400e':e.oppGrade==='B'?'#fed7aa;color:#c2410c':'#e2e8f0;color:#475569')+'">'+e.oppGrade+'</span>':'')+(e.oppValue?'<span style="font-size:9px;color:#7c3aed">'+e.oppValue+'M</span>':'')+(e.customerStatus==='dormant'?'<span title="مشتری خوابیده">😴</span>':'')+'</td>'
       +'<td style="white-space:nowrap"><span class="owner-dot" data-uid="'+encodeURIComponent(e.owner||r.owner||'')+'"></span>'
       +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'owner\',this.value);var _d=this.previousElementSibling;if(_d)_d.style.background=window.umGetColor?umGetColor(this.value):\'#e2e8f0\'">'
       +'<option value="">—</option>'
@@ -2934,7 +2947,7 @@ function renderProvTable(){
       +'<td><select class="st-sel '+sc+'" onchange="onStatus(\''+rtype+'\',\''+r.id+'\',this)">'
         +STATUS_LIST.map(function(s,i){return'<option class="'+STATUS_CLS[i]+'"'+(s===st?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'
         +'<span class="st-print">'+st+'</span></td>'
-      +'<td style="white-space:nowrap"><input type="text" class="'+fdCls+'" value="'+fd+'" readonly onclick="openJDP(this,function(v){setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);this.value=v;renderBanner();renderProvTable();}.bind(this))" style="cursor:pointer;max-width:82px">'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',1)" title="فردا">+۱</button>'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',3)" title="۳ روز">+۳</button>'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',7)" title="هفته">+۷</button></td>'
+      +'<td style="white-space:nowrap">'+(_activeNoDate?'<span title="بدون تاریخ پیگیری" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f97316;margin-left:3px;vertical-align:middle"></span>':'')+'<input type="text" class="'+fdCls+'" value="'+fd+'" readonly onclick="openJDP(this,function(v){setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);this.value=v;renderBanner();renderProvTable();}.bind(this))" style="cursor:pointer;max-width:82px">'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',1)" title="فردا">+۱</button>'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',3)" title="۳ روز">+۳</button>'+'<button class="qfd-btn" onclick="event.stopPropagation();quickSetFd(\''+rtype+'\',\''+r.id+'\',7)" title="هفته">+۷</button></td>'
       +'<td><button class="note-btn'+(notes.length?' has':'')+'" onclick="openNotes(\''+rtype+'\',\''+r.id+'\',\''+esc(r.name)+'\')">📝'+(notes.length?' '+notes.length:'')+'</button>'
         +'<input style="margin-right:4px;width:100px;border:1px solid var(--border-input);border-radius:4px;padding:2px 5px;font-size:10px;direction:rtl" placeholder="یادداشت سریع" onkeydown="if(event.key===\'Enter\'&&this.value.trim()){addNote(\''+rtype+'\',\''+r.id+'\',this.value,this);}">'
         +notePreview+'</td>'
@@ -4335,6 +4348,53 @@ function _getCompetitorList(){
   return Object.keys(comps).sort(function(a,b){return comps[b]-comps[a];});
 }
 
+// ── Playbook gap: lead-change & status-change helpers ──────────
+var ACTION_TYPE_LABELS={'call':'📞 تماس','visit':'🤝 ملاقات','price_send':'📄 ارسال قیمت','sample_send':'🧪 ارسال نمونه','committee':'🏛 کمیته','meeting':'👥 جلسه','followup':'🔄 پیگیری'};
+function _onLeadChange(id,newLead){
+  var opp=document.getElementById('cmOppSection_'+id);
+  var cust=document.getElementById('cmCustSection_'+id);
+  if(opp)opp.style.display=newLead==='فرصت'?'':'none';
+  if(cust)cust.style.display=newLead==='مشتری'?'':'none';
+}
+function _onStatusChange(rtype,rid,newStatus){
+  var needReason=['غیرفعال','قرارداد بسته شد'];
+  setE(rtype,rid,'status',newStatus);
+  if(needReason.indexOf(newStatus)>=0){
+    var existing=getE(rtype,rid).closeReason||'';
+    if(existing)return;
+    var reasons=['قیمت','بودجه','رقیب','عدم نیاز','تصمیم پزشک','تصمیم بیمارستان','زمان خرید','سایر'];
+    var sel='<select id="_crSel" style="width:100%;padding:7px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;margin-top:4px"><option value="">انتخاب دلیل...</option>'+reasons.map(function(r){return'<option>'+r+'</option>';}).join('')+'</select>';
+    var body='<div style="font-size:12px"><p style="margin:0 0 8px;color:var(--text-secondary)">دلیل بسته/غیرفعال شدن مرکز را انتخاب کنید:</p>'+sel+'<input id="_crOther" type="text" placeholder="توضیح بیشتر (اختیاری)..." style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px"></div>';
+    var _rt=rtype,_ri=rid;
+    openModal('closeReasonModal','❗ دلیل بستن / غیرفعال کردن',body,
+      '<button class="btn-secondary" onclick="closeModal(\'closeReasonModal\')">بعداً ثبت می‌کنم</button>'
+      +'<button class="btn-primary" onclick="(function(){var s=(document.getElementById(\'_crSel\')||{}).value;var o=(document.getElementById(\'_crOther\')||{}).value||\'\';if(!s){showToast(\'دلیل را انتخاب کنید\');return;}setE(_rt,_ri,\'closeReason\',s+(o?\' — \'+o:\'\'));closeModal(\'closeReasonModal\');showToast(\'✓ دلیل ثبت شد\');})()">ثبت دلیل</button>'
+    );
+  }
+}
+function _computeCustomerStatus(rtype,rid){
+  var e=getE(rtype,rid);
+  var lpd=e.lastPurchaseDate||'';
+  if(!lpd)return'';
+  var today=todayStr();
+  var dp=lpd.split('/');var tp=today.split('/');
+  try{
+    var lpdMs=jMs(parseInt(dp[0]),parseInt(dp[1]),parseInt(dp[2]));
+    var todMs=jMs(parseInt(tp[0]),parseInt(tp[1]),parseInt(tp[2]));
+    var days=Math.floor((todMs-lpdMs)/86400000);
+    if(days>90)return'dormant';
+    if(days>0)return'active';
+    return'active_new';
+  }catch(_){return'';}
+}
+function openCloseReasonModal(rtype,rid){_onStatusChange(rtype,rid,getE(rtype,rid).status);}
+function _cmSetLastPurch(rtype,rid,id,v){
+  var el=document.getElementById('cmLastPurch_'+id);
+  if(el)el.value=v;
+  setE(rtype,rid,'lastPurchaseDate',v);
+  var cs=_computeCustomerStatus(rtype,rid);
+  if(cs)setE(rtype,rid,'customerStatus',cs);
+}
 function openCenterModal(rtype,id){
   // Track recent centers
   var _rcKey=rtype+'_'+id;
@@ -4410,10 +4470,50 @@ function openCenterModal(rtype,id){
     +(function(){var _act=typeof umGetActive==='function'?umGetActive():[];return _act.map(function(m){return'<option value="'+m.id+'"'+((e.owner||r.owner||'')==m.id?' selected':'')+'>'+m.name+'</option>';}).join('');})()+'</select></div>'
     +(function(){var _typeOpts=[''].concat(TYPE_LIST);var _curType=e.type||r.type||'';return'<div><label>نوع مرکز</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)">'+_typeOpts.map(function(t){return'<option value="'+t+'"'+(_curType===t?' selected':'')+'>'+(t||'-- نوع --')+'</option>';}).join('')+'</select></div>';})()
     +'</div><div class="m-2col">'
-    +'<div><label>وضعیت</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'status\',this.value)">'
+    +'<div><label>وضعیت</label><select class="ed-sel" onchange="_onStatusChange(\''+rtype+'\',\''+r.id+'\',this.value)">'
     +STATUS_LIST.map(function(s){return'<option'+(s===st?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'
-    +'<div><label>سرنخ</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'lead\',this.value)">'
+    +'<div><label>سرنخ</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'lead\',this.value);_onLeadChange(\''+id+'\',this.value)">'
     +LEAD_LIST.map(function(l){return'<option'+(l===lead?' selected':'')+'>'+l+'</option>';}).join('')+'</select></div>'
+    +'</div>'
+    // ── بخش فرصت (فقط وقتی lead=فرصت) ──
+    +'<div id="cmOppSection_'+id+'" style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px 12px;margin-top:6px;'+(lead==='فرصت'?'':'display:none')+'">'
+    +'<div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:8px">🎯 جزئیات فرصت</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">احتمال موفقیت</label>'
+    +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'oppProbability\',this.value)">'
+    +'<option value="">—</option>'
+    +'<option value="low"'+(e.oppProbability==='low'?' selected':'')+'>کم</option>'
+    +'<option value="medium"'+(e.oppProbability==='medium'?' selected':'')+'>متوسط</option>'
+    +'<option value="high"'+(e.oppProbability==='high'?' selected':'')+'>زیاد ✅</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">درجه فرصت</label>'
+    +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'oppGrade\',this.value)">'
+    +'<option value="">—</option>'
+    +'<option value="A"'+(e.oppGrade==='A'?' selected':'')+'>🔥 A (داغ)</option>'
+    +'<option value="B"'+(e.oppGrade==='B'?' selected':'')+'>☀️ B (گرم)</option>'
+    +'<option value="C"'+(e.oppGrade==='C'?' selected':'')+'>❄️ C (سرد)</option>'
+    +'</select></div>'
+    +'</div>'
+    +'<label style="font-size:10px;display:block;margin-bottom:3px">💰 ارزش فرصت (میلیون ریال)</label>'
+    +'<input type="number" min="0" step="1" value="'+(e.oppValue||'')+'" placeholder="مثلاً: 150" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'oppValue\',parseFloat(this.value)||0)" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+    +'</div>'
+    // ── بخش مشتری (فقط وقتی lead=مشتری) ──
+    +'<div id="cmCustSection_'+id+'" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;'+(lead==='مشتری'?'':'display:none')+'">'
+    +'<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">🏆 اطلاعات مشتری</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">وضعیت مشتری</label>'
+    +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'customerStatus\',this.value)">'
+    +'<option value="">خودکار</option>'
+    +'<option value="new"'+(e.customerStatus==='new'?' selected':'')+'>🆕 جدید</option>'
+    +'<option value="active_new"'+(e.customerStatus==='active_new'?' selected':'')+'>✨ فعال - جدید</option>'
+    +'<option value="active"'+(e.customerStatus==='active'?' selected':'')+'>✅ فعال</option>'
+    +'<option value="dormant"'+(e.customerStatus==='dormant'?' selected':'')+'>😴 خوابیده (+90 روز)</option>'
+    +'<option value="lost"'+(e.customerStatus==='lost'?' selected':'')+'>❌ از دست رفته</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">📅 آخرین خرید</label>'
+    +'<input type="text" id="cmLastPurch_'+id+'" value="'+(e.lastPurchaseDate||'')+'" readonly class="fd-inp" style="cursor:pointer;width:100%;box-sizing:border-box" placeholder="انتخاب تاریخ" onclick="openJDP(this,function(v){_cmSetLastPurch(\''+rtype+'\',\''+r.id+'\',\''+id+'\',v);})">'
+    +'</div></div>'
+    +(function(){var _cs=_computeCustomerStatus(rtype,r.id);return _cs==='dormant'?'<div style="font-size:10px;background:#fef9c3;border:1px solid #fde047;border-radius:5px;padding:4px 8px;color:#92400e">⚠️ مشتری خوابیده — بیش از ۹۰ روز از آخرین خرید گذشته</div>':'';})()+''
     +'</div>'
     +'<label>تاریخ پیگیری بعدی</label>'
     +'<div style="display:flex;gap:5px;align-items:center">'
@@ -4445,6 +4545,13 @@ function openCenterModal(rtype,id){
     +'<div><label style="font-size:10px;display:block;margin-bottom:3px">🤖 رقیب اصلی</label>'
     +'<input type="text" list="compDatalist_'+r.id+'" value="'+esc(e.competitor||'')+'" placeholder="نام رقیب / برند..." onchange="setE(\''+rtype+'\',\''+r.id+'\',\'competitor\',this.value)" style="width:100%;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px;background:var(--bg-input);color:var(--text-primary)"><datalist id="compDatalist_'+r.id+'">'+_getCompetitorList().map(function(c){return'<option value="'+esc(c)+'">';}).join('')+'</datalist></div>'
     +'<div id="cmCommission_'+r.id+'" style="font-size:10px;color:var(--text-muted);padding:4px 0"></div>'
+    +'</div>'
+    // ── جزئیات رقیب ──
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">'
+    +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">💪 مزیت رقیب</label>'
+    +'<input type="text" value="'+(e.competitorAdvantage||'')+'" placeholder="مثلاً: قیمت پایین‌تر" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'competitorAdvantage\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)"></div>'
+    +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">🎯 دلیل خرید از رقیب</label>'
+    +'<input type="text" value="'+(e.buyReasonFromCompetitor||'')+'" placeholder="مثلاً: رابطه قدیمی" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'buyReasonFromCompetitor\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)"></div>'
     +'</div></div>'
     +'<div id="cmPricingInfo_'+r.id+'" style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);font-size:11px"><span style="color:var(--text-muted)">در حال بارگذاری قیمت‌گذاری...</span></div>'
    // برنامه هفته
