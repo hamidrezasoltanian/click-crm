@@ -473,21 +473,21 @@ Based on the Atena Sales Playbook v1.0. These are features the playbook requires
 
 | # | Feature | Priority | Status |
 |---|---|---|---|
-| 1 | Customer Status خودکار (New/Active/Dormant/Lost) بر اساس آخرین خرید | 🔴 حیاتی | 🔲 TODO |
-| 2 | Dormant detection: مشتری بدون خرید > 90 روز شناسایی خودکار شود | 🔴 حیاتی | 🔲 TODO |
-| 3 | Closed Lost Reason: popup اجباری هنگام غیرفعال/بستن Opportunity | 🔴 حیاتی | 🔲 TODO |
-| 4 | Opportunity fields: احتمال موفقیت (کم/متوسط/زیاد) + درجه A/B/C | 🔴 حیاتی | 🔲 TODO |
-| 5 | Opportunity value: ارزش فرصت به عنوان فیلد مرکز (نه فقط done entry) | 🔴 حیاتی | 🔲 TODO |
-| 6 | Activity type dropdown کامل: ارسال قیمت / نمونه / کمیته / جلسه / ... | 🟠 مهم | 🔲 TODO |
-| 7 | No-Next-Step flag: نشانگر قرمز روی مراکز فعال بدون followupDate | 🟠 مهم | 🔲 TODO |
-| 8 | فیلدهای رقیب تکمیلی: مزیت / نقطه ضعف / دلیل خرید از رقیب | 🟠 مهم | 🔲 TODO |
-| 9 | گزارش هفتگی: New Opportunity / مشتری جدید / مشتری خوابیده این هفته | 🟠 مهم | 🔲 TODO |
-| 10 | فاصله پیگیری per-Stage: Lead 7d / Opportunity داغ 2-3d / Dormant ماهانه | 🟡 مطلوب | 🔲 TODO |
-| 11 | Pipeline value: ارزش کل Pipeline به تفکیک Stage در dashboard مدیر | 🟡 مطلوب | 🔲 TODO |
+| 1 | Customer Status خودکار (New/Active/Dormant/Lost) بر اساس آخرین خرید | 🔴 حیاتی | ✅ DONE |
+| 2 | Dormant detection: مشتری بدون خرید > 90 روز شناسایی خودکار شود | 🔴 حیاتی | ✅ DONE |
+| 3 | Closed Lost Reason: popup اجباری هنگام غیرفعال/بستن Opportunity | 🔴 حیاتی | ✅ DONE |
+| 4 | Opportunity fields: احتمال موفقیت (کم/متوسط/زیاد) + درجه A/B/C | 🔴 حیاتی | ✅ DONE |
+| 5 | Opportunity value: ارزش فرصت به عنوان فیلد مرکز (نه فقط done entry) | 🔴 حیاتی | ✅ DONE |
+| 6 | Activity type dropdown کامل: ارسال قیمت / نمونه / کمیته / جلسه / ... | 🟠 مهم | ✅ DONE |
+| 7 | No-Next-Step flag: نشانگر نارنجی روی مراکز فعال بدون followupDate | 🟠 مهم | ✅ DONE |
+| 8 | فیلدهای رقیب تکمیلی: مزیت / دلیل خرید از رقیب | 🟠 مهم | ✅ DONE |
+| 9 | گزارش هفتگی: New Opportunity / مشتری جدید / مشتری خوابیده این هفته | 🟠 مهم | ✅ DONE |
+| 10 | فاصله پیگیری per-Stage: Lead 7d / Opportunity داغ 2-3d / Dormant ماهانه | 🟡 مطلوب | ✅ DONE |
+| 11 | Pipeline value: ارزش کل Pipeline به تفکیک Stage در dashboard مدیر | 🟡 مطلوب | ✅ DONE |
 | 12 | KOL/پزشک Entity جداگانه با رابطه many-to-many به مراکز | 🟡 مطلوب | 🔲 TODO |
-| 13 | Stage validation: فیلدهای اجباری قبل از تغییر Stage | 🟡 مطلوب | 🔲 TODO |
-| 14 | فیلدهای Prospect تکمیلی: میزان مصرف / نحوه خرید / شرایط پرداخت | 🟡 مطلوب | 🔲 TODO |
-| 15 | گزارش per-رقیب: چه مراکزی به کدام رقیب داده‌ایم و چرا | 🟡 مطلوب | 🔲 TODO |
+| 13 | Stage validation: فیلدهای اجباری قبل از تغییر Stage | 🟡 مطلوب | ✅ DONE |
+| 14 | فیلدهای Prospect تکمیلی: میزان مصرف / نحوه خرید / شرایط پرداخت | 🟡 مطلوب | ✅ DONE |
+| 15 | گزارش per-رقیب: چه مراکزی به کدام رقیب داده‌ایم و چرا | 🟡 مطلوب | ✅ DONE |
 
 ### Data Model Extensions Needed
 
