@@ -4469,17 +4469,24 @@ function openCenterModal(rtype,id){
       });
     }
   }
-  var centers=getProvCenters(prov||'tehran');
-  var r=centers.find(function(x){return String(x.id)===String(id);});
-  if(!r&&prov){
-    getAllProvinces().some(function(p){
-      if(p.id===prov)return false;
-      var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
-      if(c){r=c;prov=p.id;return true;}
-      return false;
-    });
+  // DB.extra wins over PC cache when IDs collide — check it first
+  var r=(DB.extra||[]).find(function(x){
+    var xrt=x.province_id==='tehran'?'center':'pc';
+    return xrt===rtype&&String(x.id)===String(id);
+  })||null;
+  if(!r){
+    var centers=getProvCenters(prov||'tehran');
+    r=centers.find(function(x){return String(x.id)===String(id);});
+    if(!r&&prov){
+      getAllProvinces().some(function(p){
+        if(p.id===prov)return false;
+        var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
+        if(c){r=c;prov=p.id;return true;}
+        return false;
+      });
+    }
+    if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);})||null;}
   }
-  if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);});}
   if(!r){showToast('مرکز یافت نشد');return;}
   var e=getE(rtype,r.id);
   var st=e.status||'بدون تماس';var lead=e.lead||r.lead||'سرنخ';
