@@ -84,6 +84,8 @@ const faradisMatch = require('./routes/faradis-match');
 app.use('/api/faradis-match', faradisMatch);
 const faradisData = require('./routes/faradis-data');
 app.use('/api/faradis-data', faradisData);
+app.use('/api/letters', require('./routes/letters'));
+app.use('/api/wms-proforma', require('./routes/wms-proforma'));
 
 // Health check — بدون auth، قابل دسترس از هر جا
 app.get('/api/health', async function (req, res) {
@@ -142,6 +144,16 @@ app.get('/api/health', async function (req, res) {
 
   result.elapsed_ms = Date.now() - start;
   res.status(result.ok ? 200 : 503).json(result);
+});
+
+// Letters (دبیرخونه) page — standalone, like /wms
+app.get('/letters', function (req, res) {
+  const lettersPath = path.join(publicDir, 'letters.html');
+  if (fs.existsSync(lettersPath)) {
+    res.sendFile(lettersPath);
+  } else {
+    res.status(404).send('Letters module not deployed yet');
+  }
 });
 
 // WMS page — serve wms.html (auth handled client-side via /api/auth/me check)

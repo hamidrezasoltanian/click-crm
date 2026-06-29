@@ -1545,6 +1545,114 @@ async function initSchema() {
   await _migrateRemainingBlobsToSQL();
   await _migrateContactsToHCPs();
 
+  // ════════════════════════════════════════
+  // دبیرخونه — Letters module
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS letters (
+      id               VARCHAR(50)  PRIMARY KEY,
+      type             VARCHAR(20)  NOT NULL CHECK(type IN ('outgoing','incoming','internal')),
+      subject          TEXT         NOT NULL,
+      body             TEXT         DEFAULT '',
+      priority         VARCHAR(20)  DEFAULT 'normal' CHECK(priority IN ('normal','high','urgent')),
+      classification   VARCHAR(20)  DEFAULT 'normal' CHECK(classification IN ('normal','confidential')),
+      department_prefix VARCHAR(10) DEFAULT 'الف',
+      indicator_number  VARCHAR(80)  UNIQUE,
+      indicator_seq     INTEGER,
+      sender_name      TEXT         DEFAULT '',
+      receivers        JSONB        DEFAULT '[]',
+      status           VARCHAR(20)  NOT NULL DEFAULT 'draft'
+                       CHECK(status IN ('draft','registered','archived')),
+      created_by       VARCHAR(100),
+      created_at       TIMESTAMPTZ  DEFAULT NOW(),
+      updated_at       TIMESTAMPTZ  DEFAULT NOW(),
+      registered_at    TIMESTAMPTZ,
+      is_archived      BOOLEAN      DEFAULT false,
+      is_deleted       BOOLEAN      DEFAULT false
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_letters_type       ON letters(type)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_letters_status     ON letters(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_letters_created    ON letters(created_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_letters_created_by ON letters(created_by)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS letter_referrals (
+      id              VARCHAR(50)  PRIMARY KEY,
+      letter_id       VARCHAR(50)  NOT NULL REFERENCES letters(id) ON DELETE CASCADE,
+      from_user       VARCHAR(100) NOT NULL,
+      to_user         VARCHAR(100) NOT NULL,
+      action_type     VARCHAR(30)  DEFAULT 'for_info'
+                      CHECK(action_type IN ('for_action','for_info','for_archive')),
+      description     TEXT         DEFAULT '',
+      is_read         BOOLEAN      DEFAULT false,
+      is_completed    BOOLEAN      DEFAULT false,
+      completion_note TEXT         DEFAULT '',
+      created_at      TIMESTAMPTZ  DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_lref_letter    ON letter_referrals(letter_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_lref_to_user   ON letter_referrals(to_user)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_lref_from_user ON letter_referrals(from_user)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS letter_templates (
+      id          VARCHAR(50)  PRIMARY KEY,
+      title       VARCHAR(200) NOT NULL,
+      type        VARCHAR(20)  CHECK(type IN ('outgoing','incoming','internal')),
+      body        TEXT         DEFAULT '',
+      created_by  VARCHAR(100),
+      created_at  TIMESTAMPTZ  DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS letter_indicator_seq (
+      prefix      VARCHAR(10) NOT NULL,
+      type_code   VARCHAR(5)  NOT NULL,
+      year_month  VARCHAR(6)  NOT NULL,
+      seq         INTEGER     NOT NULL DEFAULT 0,
+      PRIMARY KEY (prefix, type_code, year_month)
+    )
+  `);
+
+  // ════════════════════════════════════════
+  // پیشفاکتور WMS
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_proformas (
+      id            VARCHAR(50)  PRIMARY KEY,
+      no            VARCHAR(50)  UNIQUE,
+      jalali_date   VARCHAR(20),
+      customer_id   VARCHAR(50),
+      customer_name VARCHAR(300) DEFAULT '',
+      warehouse_id  VARCHAR(50),
+      warehouse_name VARCHAR(200) DEFAULT '',
+      items         JSONB        DEFAULT '[]',
+      subtotal      BIGINT       DEFAULT 0,
+      discount_pct  DECIMAL(5,2) DEFAULT 0,
+      disc_amt      BIGINT       DEFAULT 0,
+      tax_pct       DECIMAL(5,2) DEFAULT 9,
+      tax_amt       BIGINT       DEFAULT 0,
+      total         BIGINT       DEFAULT 0,
+      note          TEXT         DEFAULT '',
+      status        VARCHAR(20)  NOT NULL DEFAULT 'draft'
+                    CHECK(status IN ('draft','sent','approved','rejected','cancelled','voucher_issued')),
+      exit_txn_id   VARCHAR(50),
+      manager_note  TEXT         DEFAULT '',
+      created_by    VARCHAR(100),
+      created_at    TIMESTAMPTZ  DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ  DEFAULT NOW(),
+      sent_at       TIMESTAMPTZ,
+      responded_at  TIMESTAMPTZ,
+      responded_by  VARCHAR(100)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpf_status     ON wms_proformas(status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpf_customer   ON wms_proformas(customer_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpf_created_by ON wms_proformas(created_by)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpf_created_at ON wms_proformas(created_at DESC)`);
+
   console.log('[DB] Schema initialized');
 }
 

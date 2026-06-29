@@ -510,6 +510,10 @@ code{font-family:monospace;font-size:12px;background:var(--surface3);padding:1px
     <div class="nav" onclick="go('po')"><span class="ico">🛒</span><span class="lbl">سفارش خرید</span><span class="nb b" id="poB">0</span></div>
   </div>
   <div class="sb-sect">
+    <div class="sb-lbl">فروش</div>
+    <div class="nav" id="nav-wpf" onclick="go('wpf')"><span class="ico">📄</span><span class="lbl">پیشفاکتور</span></div>
+  </div>
+  <div class="sb-sect">
     <div class="sb-lbl">خدمات‌یافتنی</div>
     <div class="nav" onclick="go('appr')" id="nav-appr"><span class="ico">✅</span><span class="lbl">تأییدیه‌ها</span><span class="nb y" id="apprB">0</span></div>
     <div class="nav" onclick="go('alerts')" id="nav-alerts"><span class="ico">🔔</span><span class="lbl">هشدارها</span><span class="nb" id="alrtB">0</span></div>
@@ -939,6 +943,9 @@ code{font-family:monospace;font-size:12px;background:var(--surface3);padding:1px
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px" id="systemContent"></div>
     </div>
 
+    <!-- WMS PROFORMA -->
+    <div class="page" id="p-wpf"></div>
+
     <!-- AUDIT -->
     <div class="page" id="p-audit">
       <div class="ph"><div><div class="pt">لاگ فعالیت کاربران</div><div class="ps">تمام عملیات ثبت‌شده در سیستم</div></div>
@@ -958,6 +965,17 @@ code{font-family:monospace;font-size:12px;background:var(--surface3);padding:1px
 </div>
 </div>
 
+<!-- WMS Proforma generic modal -->
+<div class="mo" id="mWpf" style="display:none;position:fixed;inset:0;background:rgba(15,31,53,.5);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(2px);">
+  <div class="md wide" id="mWpfBox" style="background:var(--surface);border-radius:16px;width:800px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.15);">
+    <div class="mh" style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;">
+      <span class="mt" id="mWpfTitle">پیشفاکتور</span>
+      <button class="mx" onclick="closeCentM()">✕</button>
+    </div>
+    <div class="mb" style="padding:20px;" id="mWpfBody"></div>
+    <div class="mf" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface2);border-radius:0 0 16px 16px;" id="mWpfFoot"></div>
+  </div>
+</div>
 <!-- ══ MODALS ══ -->
 
 <!-- Product Modal -->
@@ -1746,13 +1764,40 @@ function toast(msg,type='s'){
   setTimeout(dismiss,3200);
 }
 function openModal(id){document.getElementById(id).classList.add('open');}
+function openCentM(title, body, footer, wide){
+  document.getElementById('mWpfTitle').textContent = title || '';
+  document.getElementById('mWpfBody').innerHTML = body || '';
+  document.getElementById('mWpfFoot').innerHTML = footer || '';
+  const box = document.getElementById('mWpfBox');
+  if(wide) box.style.width='800px'; else box.style.width='560px';
+  const mo = document.getElementById('mWpf');
+  mo.style.display = 'flex';
+}
+function closeCentM(){
+  document.getElementById('mWpf').style.display = 'none';
+}
+async function wmsApi(method, path, body){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body!==undefined) opts.body=JSON.stringify(body);
+  const r=await fetch('/api'+path,opts);
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||r.statusText);
+  return d;
+}
+
+// Close on backdrop click
+document.addEventListener('click', function(e){
+  const mo = document.getElementById('mWpf');
+  if(mo && e.target === mo) closeCentM();
+});
+
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function emptyRow(cols,msg='موردی یافت نشد'){return `<tr><td colspan="${cols}" style="text-align:center;color:var(--text3);padding:36px">${msg}</td></tr>`;}
 
 // ══════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════
-const PAGE_TITLES={imed:'انبار مجازی IMED',dash:'داشبورد',delivery:'ارسال و رهگیری',reconcile:'تطبیق سه‌گانه',po:'سفارش خرید',ttac:'برچسب TTAC',analytics:'تحلیل کسب‌وکار',customers:'پروفایل مشتریان',recall:'مدیریت Recall',system:'سیستم',audit:'لاگ فعالیت',inv:'موجودی انبار',count:'انبارگردانی',entry:'ورود کالا',exit:'خروج کالا',hist:'تاریخچه تراکنش‌ها',appr:'تأییدیه‌ها',alerts:'هشدارها',prods:'مدیریت کالاها',whs:'مدیریت انبارها',cp:'طرف‌حساب‌ها',users:'مدیریت کاربران',prices:'قیمت‌ها و ارزش انبار',rpt:'گزارش‌ها'};
+const PAGE_TITLES={wpf:'پیشفاکتور WMS',imed:'انبار مجازی IMED',dash:'داشبورد',delivery:'ارسال و رهگیری',reconcile:'تطبیق سه‌گانه',po:'سفارش خرید',ttac:'برچسب TTAC',analytics:'تحلیل کسب‌وکار',customers:'پروفایل مشتریان',recall:'مدیریت Recall',system:'سیستم',audit:'لاگ فعالیت',inv:'موجودی انبار',count:'انبارگردانی',entry:'ورود کالا',exit:'خروج کالا',hist:'تاریخچه تراکنش‌ها',appr:'تأییدیه‌ها',alerts:'هشدارها',prods:'مدیریت کالاها',whs:'مدیریت انبارها',cp:'طرف‌حساب‌ها',users:'مدیریت کاربران',prices:'قیمت‌ها و ارزش انبار',rpt:'گزارش‌ها'};
 function go(id){
   if(window.innerWidth<=820) closeSb();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('act'));
@@ -1767,9 +1812,310 @@ function go(id){
   updateBadges();
 }
 function renderPage(id){
-  const fn={dash:renderDash,inv:renderInv,count:renderCount,entry:renderEntry,exit:renderExit,hist:renderHist,appr:renderAppr,alerts:renderAlerts,imed:renderIMEDPage,prods:renderProds,whs:renderWhs,cp:renderCp,users:renderUsers,prices:renderPrices,rpt:renderRpt,delivery:renderDelivery,reconcile:renderReconcilePage,po:renderPO,ttac:renderTTAC,analytics:renderAnalytics,customers:renderCustomers,recall:renderRecall,system:renderSystem,audit:renderAudit};
+  const fn={wpf:renderWpf,dash:renderDash,inv:renderInv,count:renderCount,entry:renderEntry,exit:renderExit,hist:renderHist,appr:renderAppr,alerts:renderAlerts,imed:renderIMEDPage,prods:renderProds,whs:renderWhs,cp:renderCp,users:renderUsers,prices:renderPrices,rpt:renderRpt,delivery:renderDelivery,reconcile:renderReconcilePage,po:renderPO,ttac:renderTTAC,analytics:renderAnalytics,customers:renderCustomers,recall:renderRecall,system:renderSystem,audit:renderAudit};
   if(fn[id]) fn[id]();
 }
+
+// ══════════════════════════════════════════
+// WMS PROFORMA
+// ══════════════════════════════════════════
+const WPF_STATUS_LABELS={draft:'پیش‌نویس',sent:'ارسال‌شده',approved:'تأییدشده',rejected:'ردشده',cancelled:'لغوشده',voucher_issued:'حواله صادرشد'};
+const WPF_STATUS_CSS={draft:'bgr',sent:'bb',approved:'bg',rejected:'br',cancelled:'br',voucher_issued:'bt'};
+
+async function renderWpf(){
+  const el=document.getElementById('p-wpf');
+  el.innerHTML='<div class="empty"><div class="ei">⏳</div>در حال بارگذاری...</div>';
+  try{
+    const rows=await wmsApi('GET','/wms-proforma');
+    const isManager=(currentRole==='admin'||currentRole==='sales_manager');
+    let html=`<div class="ph"><div><div class="pt">پیشفاکتور WMS</div><div class="ps">صدور پیشفاکتور فروش از انبار</div></div>
+      <div class="pa"><button class="btn btn-primary btn-sm" onclick="openWpfNew()">+ پیشفاکتور جدید</button></div></div>`;
+    if(!rows.length){
+      html+='<div class="empty"><div class="ei">📄</div><div>پیشفاکتوری ثبت نشده</div></div>';
+      el.innerHTML=html;return;
+    }
+    html+=`<div class="tw"><table><thead><tr><th>شماره</th><th>تاریخ</th><th>مشتری</th><th>انبار</th><th>مبلغ کل</th><th>وضعیت</th><th>ایجادکننده</th><th></th></tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const total=Number(r.total).toLocaleString('fa-IR');
+      const st=WPF_STATUS_LABELS[r.status]||r.status;
+      const sc=WPF_STATUS_CSS[r.status]||'bgr';
+      html+=`<tr>
+        <td><code>${r.no||'—'}</code></td>
+        <td style="font-size:11px">${r.jalaliDate||'—'}</td>
+        <td>${esc(r.customerName||'—')}</td>
+        <td>${esc(r.warehouseName||'—')}</td>
+        <td style="font-family:monospace">${total} ﷼</td>
+        <td><span class="badge ${sc}">${st}</span></td>
+        <td style="font-size:12px">${esc(r.createdBy||'')}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-xs" onclick="openWpfView('${r.id}')">مشاهده</button>
+          ${r.status==='draft'?`<button class="btn btn-ghost btn-xs" onclick="openWpfEdit('${r.id}')">ویرایش</button>`:''}
+        </td></tr>`;
+    });
+    html+='</tbody></table></div>';
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML=`<div class="empty"><div class="ei">⚠️</div>${esc(e.message)}</div>`;
+  }
+}
+
+function _wpfItemsHtml(items){
+  if(!items||!items.length) return '<div style="color:var(--text3);font-size:12px;padding:8px">هیچ ردیفی انتخاب نشده</div>';
+  return items.map((it,i)=>`<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;padding:8px;background:var(--surface2);border-radius:var(--r);">
+    <div style="font-size:12px;font-weight:600">${esc(it.productName||'')} <span style="font-size:10px;color:var(--text3)">[${esc(it.lotNo||'')}]</span></div>
+    <div style="font-size:12px">تعداد: ${it.qty}</div>
+    <div style="font-size:12px">قیمت: ${Number(it.unitPrice||0).toLocaleString('fa-IR')}</div>
+    <div style="font-size:12px;font-weight:700">جمع: ${(Number(it.qty)*Number(it.unitPrice||0)).toLocaleString('fa-IR')}</div>
+    <button class="btn btn-danger btn-xs" onclick="_wpfRemoveItem(${i})">حذف</button>
+  </div>`).join('');
+}
+
+var _wpfEditItems=[];
+var _wpfEditId=null;
+
+function openWpfNew(){
+  _wpfEditId=null;_wpfEditItems=[];
+  _openWpfModal(null);
+}
+async function openWpfEdit(id){
+  try{
+    const pf=await wmsApi('GET','/wms-proforma/'+id);
+    _wpfEditId=id;_wpfEditItems=pf.items?[...pf.items]:[];
+    _openWpfModal(pf);
+  }catch(e){alert(e.message);}
+}
+
+function _openWpfModal(pf){
+  const cps=S.counterparties.filter(c=>c.type==='customer'||c.type==='both');
+  const whs=S.warehouses;
+  const custOpts=cps.map(c=>`<option value="${c.id}" data-name="${esc(c.name)}" ${pf&&pf.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+  const whOpts=whs.map(w=>`<option value="${w.id}" data-name="${esc(w.name)}" ${pf&&pf.warehouseId===w.id?'selected':''}>${esc(w.name)}</option>`).join('');
+  const body=`
+    <div class="form-grid" style="margin-bottom:14px">
+      <div class="fg"><label class="fl">مشتری</label>
+        <select class="fs" id="wpf-cust"><option value="">— انتخاب —</option>${custOpts}</select></div>
+      <div class="fg"><label class="fl">انبار</label>
+        <select class="fs" id="wpf-wh" onchange="_wpfRefreshLots()"><option value="">— انتخاب —</option>${whOpts}</select></div>
+      <div class="fg"><label class="fl">تاریخ (جلالی)</label>
+        <input class="fi" id="wpf-date" value="${pf?pf.jalaliDate||'':''}" placeholder="مثلاً ۱۴۰۳/۰۶/۰۱" /></div>
+      <div class="fg"><label class="fl">تخفیف (%)</label>
+        <input class="fi" id="wpf-disc" type="number" min="0" max="100" value="${pf?pf.discountPct||0:0}" /></div>
+      <div class="fg"><label class="fl">مالیات (%)</label>
+        <input class="fi" id="wpf-tax" type="number" min="0" max="100" value="${pf?pf.taxPct||9:9}" /></div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+    <div style="font-weight:700;margin-bottom:10px;font-size:13px">افزودن آیتم از لات انبار</div>
+    <div class="form-grid" style="margin-bottom:8px">
+      <div class="fg"><label class="fl">محصول</label>
+        <select class="fs" id="wpf-prod" onchange="_wpfShowLots()"><option value="">— انتخاب —</option></select></div>
+      <div class="fg"><label class="fl">لات</label>
+        <select class="fs" id="wpf-lot"><option value="">— انتخاب لات —</option></select></div>
+      <div class="fg"><label class="fl">تعداد</label>
+        <input class="fi" id="wpf-qty" type="number" min="1" value="1" /></div>
+      <div class="fg"><label class="fl">قیمت فروش (ریال)</label>
+        <input class="fi" id="wpf-uprice" type="number" min="0" value="0" /></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="_wpfAddItem()" style="margin-bottom:14px">+ افزودن ردیف</button>
+    <div id="wpf-items-list">${_wpfItemsHtml(_wpfEditItems)}</div>
+    <div class="fg" style="margin-top:12px"><label class="fl">یادداشت</label>
+      <textarea class="fta" id="wpf-note" rows="3">${pf?esc(pf.note||''):''}</textarea></div>
+  `;
+  openCentM('پیشفاکتور WMS',body,
+    `<button class="btn btn-ghost btn-sm" onclick="closeCentM()">انصراف</button>
+     <button class="btn btn-primary btn-sm" onclick="_wpfSave()">ذخیره پیش‌نویس</button>`,true);
+  _wpfRefreshProds();
+}
+
+function _wpfRefreshProds(){
+  const sel=document.getElementById('wpf-prod');
+  if(!sel) return;
+  sel.innerHTML='<option value="">— انتخاب محصول —</option>';
+  S.products.filter(p=>p.active).forEach(p=>{
+    const opt=document.createElement('option');opt.value=p.id;opt.textContent=p.name;sel.appendChild(opt);
+  });
+}
+
+function _wpfRefreshLots(){
+  const whId=(document.getElementById('wpf-wh')||{}).value||'';
+  _wpfShowLots(whId);
+}
+
+function _wpfShowLots(whIdOverride){
+  const prodId=(document.getElementById('wpf-prod')||{}).value||'';
+  const whId=whIdOverride||(document.getElementById('wpf-wh')||{}).value||'';
+  const lotSel=document.getElementById('wpf-lot');
+  if(!lotSel) return;
+  lotSel.innerHTML='<option value="">— انتخاب لات —</option>';
+  S.lots.filter(l=>{
+    if(l.qty<=0) return false;
+    if(prodId&&l.productId!==prodId) return false;
+    if(whId&&l.warehouseId!==whId) return false;
+    return true;
+  }).forEach(l=>{
+    const prod=(S.products.find(p=>p.id===l.productId)||{}).name||l.productId;
+    const opt=document.createElement('option');
+    opt.value=l.id;
+    opt.dataset.lotno=l.lotNo||'';
+    opt.dataset.qty=l.qty;
+    opt.dataset.prodid=l.productId;
+    opt.dataset.prodname=prod;
+    opt.dataset.price=l.purchasePrice||0;
+    opt.textContent=`${prod} — لات ${l.lotNo||'?'} (موجودی: ${l.qty})`;
+    lotSel.appendChild(opt);
+  });
+}
+
+function _wpfAddItem(){
+  const lotSel=document.getElementById('wpf-lot');
+  if(!lotSel||!lotSel.value) return alert('لات را انتخاب کنید');
+  const opt=lotSel.options[lotSel.selectedIndex];
+  const qty=parseInt((document.getElementById('wpf-qty')||{}).value||1);
+  const available=parseInt(opt.dataset.qty||0);
+  if(qty<=0) return alert('تعداد باید بزرگتر از صفر باشد');
+  if(qty>available) return alert(`موجودی لات ${available} است`);
+  const uprice=parseInt((document.getElementById('wpf-uprice')||{}).value||0);
+  _wpfEditItems.push({
+    lotId:lotSel.value,lotNo:opt.dataset.lotno||'',
+    productId:opt.dataset.prodid||'',productName:opt.dataset.prodname||'',
+    qty,unitPrice:uprice,lineTotal:qty*uprice,
+  });
+  const el=document.getElementById('wpf-items-list');
+  if(el) el.innerHTML=_wpfItemsHtml(_wpfEditItems);
+}
+
+function _wpfRemoveItem(idx){
+  _wpfEditItems.splice(idx,1);
+  const el=document.getElementById('wpf-items-list');
+  if(el) el.innerHTML=_wpfItemsHtml(_wpfEditItems);
+}
+
+async function _wpfSave(){
+  const custSel=document.getElementById('wpf-cust');
+  const whSel=document.getElementById('wpf-wh');
+  if(!_wpfEditItems.length) return alert('حداقل یک ردیف اضافه کنید');
+  const body={
+    customerId:(custSel||{}).value||null,
+    customerName:custSel&&custSel.value?(custSel.options[custSel.selectedIndex]||{}).dataset&&(custSel.options[custSel.selectedIndex]).dataset.name||custSel.options[custSel.selectedIndex].textContent||'':'',
+    warehouseId:(whSel||{}).value||null,
+    warehouseName:whSel&&whSel.value?(whSel.options[whSel.selectedIndex]).textContent||'':'',
+    jalaliDate:((document.getElementById('wpf-date')||{}).value||'').trim(),
+    discountPct:parseFloat((document.getElementById('wpf-disc')||{}).value||0),
+    taxPct:parseFloat((document.getElementById('wpf-tax')||{}).value||9),
+    note:((document.getElementById('wpf-note')||{}).value||'').trim(),
+    items:_wpfEditItems,
+  };
+  try{
+    if(_wpfEditId){
+      await wmsApi('PUT','/wms-proforma/'+_wpfEditId,body);
+    }else{
+      await wmsApi('POST','/wms-proforma',body);
+    }
+    closeCentM();renderWpf();
+  }catch(e){alert(e.message);}
+}
+
+async function openWpfView(id){
+  try{
+    const pf=await wmsApi('GET','/wms-proforma/'+id);
+    const isManager=(currentRole==='admin'||currentRole==='sales_manager');
+    const st=WPF_STATUS_LABELS[pf.status]||pf.status;
+    const sc=WPF_STATUS_CSS[pf.status]||'bgr';
+    let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:13px;">
+      <div><span style="font-size:11px;color:var(--text3)">شماره</span><div style="font-family:monospace;font-weight:700;margin-top:2px">${pf.no||'—'}</div></div>
+      <div><span style="font-size:11px;color:var(--text3)">وضعیت</span><div style="margin-top:2px"><span class="badge ${sc}">${st}</span></div></div>
+      <div><span style="font-size:11px;color:var(--text3)">مشتری</span><div style="margin-top:2px;font-weight:600">${esc(pf.customerName||'—')}</div></div>
+      <div><span style="font-size:11px;color:var(--text3)">انبار</span><div style="margin-top:2px">${esc(pf.warehouseName||'—')}</div></div>
+      <div><span style="font-size:11px;color:var(--text3)">تاریخ</span><div style="margin-top:2px">${pf.jalaliDate||'—'}</div></div>
+      <div><span style="font-size:11px;color:var(--text3)">ایجادکننده</span><div style="margin-top:2px">${esc(pf.createdBy||'')}</div></div>
+    </div>`;
+    // Items table
+    html+=`<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px">
+      <thead><tr style="background:var(--surface2)"><th style="padding:7px;text-align:right;border:1px solid var(--border)">محصول</th><th style="padding:7px;text-align:right;border:1px solid var(--border)">لات</th><th style="padding:7px;text-align:right;border:1px solid var(--border)">تعداد</th><th style="padding:7px;text-align:right;border:1px solid var(--border)">قیمت</th><th style="padding:7px;text-align:right;border:1px solid var(--border)">جمع</th></tr></thead><tbody>`;
+    (pf.items||[]).forEach(it=>{
+      html+=`<tr><td style="padding:6px;border:1px solid var(--border)">${esc(it.productName||'')}</td><td style="padding:6px;border:1px solid var(--border);font-family:monospace">${esc(it.lotNo||'')}</td><td style="padding:6px;border:1px solid var(--border)">${it.qty}</td><td style="padding:6px;border:1px solid var(--border)">${Number(it.unitPrice||0).toLocaleString('fa-IR')}</td><td style="padding:6px;border:1px solid var(--border);font-weight:700">${(it.qty*Number(it.unitPrice||0)).toLocaleString('fa-IR')}</td></tr>`;
+    });
+    html+=`</tbody></table>`;
+    html+=`<div style="text-align:left;font-size:13px;margin-bottom:8px">
+      <div>جمع کل: <strong>${Number(pf.subtotal).toLocaleString('fa-IR')} ﷼</strong></div>
+      <div>تخفیف (${pf.discountPct}%): <strong>${Number(pf.discAmt).toLocaleString('fa-IR')} ﷼</strong></div>
+      <div>مالیات (${pf.taxPct}%): <strong>${Number(pf.taxAmt).toLocaleString('fa-IR')} ﷼</strong></div>
+      <div style="font-size:16px;margin-top:4px">قابل پرداخت: <strong>${Number(pf.total).toLocaleString('fa-IR')} ﷼</strong></div>
+    </div>`;
+    if(pf.note) html+=`<div style="background:var(--surface2);border-radius:var(--r);padding:10px;font-size:12px;margin-bottom:10px">📝 ${esc(pf.note)}</div>`;
+    if(pf.managerNote) html+=`<div style="background:#fff7ed;border-radius:var(--r);padding:10px;font-size:12px;border:1px solid #fed7aa">💬 یادداشت مدیر: ${esc(pf.managerNote)}</div>`;
+    // Actions footer
+    let footer=`<button class="btn btn-ghost btn-sm" onclick="closeCentM()">بستن</button>`;
+    if(pf.status==='draft') footer+=`<button class="btn btn-primary btn-sm" onclick="closeCentM();openWpfEdit('${id}')">ویرایش</button>`;
+    if(pf.status==='draft') footer+=`<button class="btn btn-success btn-sm" onclick="_wpfAction('${id}','send')">ارسال برای تأیید</button>`;
+    if(pf.status==='sent'&&isManager) footer+=`<button class="btn btn-success btn-sm" onclick="_wpfActionNote('${id}','approve')">تأیید</button><button class="btn btn-danger btn-sm" onclick="_wpfActionNote('${id}','reject')">رد</button>`;
+    if(pf.status==='approved'&&isManager) footer+=`<button class="btn btn-warn btn-sm" onclick="_wpfIssueVoucher('${id}')">صدور حواله خروج</button>`;
+    if(['draft','sent','approved'].includes(pf.status)) footer+=`<button class="btn btn-danger btn-sm btn-xs" onclick="_wpfAction('${id}','cancel')">لغو</button>`;
+    if(['rejected','cancelled'].includes(pf.status)) footer+=`<button class="btn btn-ghost btn-sm" onclick="_wpfAction('${id}','reopen')">بازگشایی</button>`;
+    if(['draft','cancelled'].includes(pf.status)) footer+=`<button class="btn btn-danger btn-sm btn-xs" onclick="_wpfDelete('${id}')">حذف</button>`;
+    footer+=`<button class="btn btn-ghost btn-sm" onclick="wpfPrint('${id}')">چاپ</button>`;
+    openCentM('پیشفاکتور '+pf.no,html,footer,true);
+  }catch(e){alert(e.message);}
+}
+
+async function _wpfAction(id,action){
+  if(!confirm('این عملیات انجام شود؟')) return;
+  try{await wmsApi('POST','/wms-proforma/'+id+'/action',{action});closeCentM();renderWpf();}catch(e){alert(e.message);}
+}
+
+async function _wpfActionNote(id,action){
+  const note=prompt('یادداشت (اختیاری):');
+  if(note===null) return;
+  try{await wmsApi('POST','/wms-proforma/'+id+'/action',{action,note});closeCentM();renderWpf();}catch(e){alert(e.message);}
+}
+
+async function _wpfIssueVoucher(id){
+  if(!confirm('حواله خروج صادر شود؟ این عملیات موجودی لات‌ها را کاهش می‌دهد و قابل برگشت نیست.')) return;
+  const note=prompt('یادداشت حواله (اختیاری):');
+  if(note===null) return;
+  try{await wmsApi('POST','/wms-proforma/'+id+'/issue-voucher',{note});closeCentM();renderWpf();toast('حواله خروج صادر شد','s');}catch(e){alert(e.message);}
+}
+
+async function _wpfDelete(id){
+  if(!confirm('این پیشفاکتور حذف شود؟')) return;
+  try{await wmsApi('DELETE','/wms-proforma/'+id);closeCentM();renderWpf();}catch(e){alert(e.message);}
+}
+
+function wpfPrint(id){
+  wmsApi('GET','/wms-proforma/'+id).then(pf=>{
+    const w=window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>پیشفاکتور ${pf.no}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>body{font-family:Vazirmatn,sans-serif;direction:rtl;padding:24px;color:#000;font-size:13px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px;}th,td{padding:7px;border:1px solid #999;text-align:right;}
+    th{background:#1a2744;color:#fff;font-weight:700;}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:14px;}
+    .total-row{font-weight:800;background:#f0f4f8;}
+    .sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;}
+    .sig{text-align:center;border-top:1px solid #000;padding-top:8px;}
+    </style></head><body>
+    <div class="head"><div><div style="font-size:18px;font-weight:800">آتنا زیست درمان</div><div style="font-size:11px;color:#555">پیشفاکتور فروش WMS</div></div>
+    <div style="border:2px solid #000;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800">${pf.no}</div><div style="font-size:11px">${pf.jalaliDate||''}</div></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;font-size:12px">
+    <div><strong>مشتری:</strong> ${esc2(pf.customerName||'—')}</div>
+    <div><strong>انبار:</strong> ${esc2(pf.warehouseName||'—')}</div>
+    <div><strong>وضعیت:</strong> ${WPF_STATUS_LABELS[pf.status]||pf.status}</div>
+    <div><strong>ایجادکننده:</strong> ${esc2(pf.createdBy||'')}</div></div>
+    <table><thead><tr><th>ردیف</th><th>محصول</th><th>لات</th><th>تعداد</th><th>قیمت واحد</th><th>جمع</th></tr></thead><tbody>
+    ${(pf.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${esc2(it.productName||'')}</td><td style="font-family:monospace">${esc2(it.lotNo||'')}</td><td>${it.qty}</td><td>${Number(it.unitPrice||0).toLocaleString('fa-IR')}</td><td>${(it.qty*Number(it.unitPrice||0)).toLocaleString('fa-IR')}</td></tr>`).join('')}
+    <tr class="total-row"><td colspan="5" style="text-align:left">جمع کل</td><td>${Number(pf.subtotal).toLocaleString('fa-IR')}</td></tr>
+    <tr><td colspan="5" style="text-align:left">تخفیف (${pf.discountPct}%)</td><td>${Number(pf.discAmt).toLocaleString('fa-IR')}</td></tr>
+    <tr><td colspan="5" style="text-align:left">مالیات (${pf.taxPct}%)</td><td>${Number(pf.taxAmt).toLocaleString('fa-IR')}</td></tr>
+    <tr class="total-row"><td colspan="5" style="text-align:left;font-size:15px">قابل پرداخت</td><td style="font-size:15px">${Number(pf.total).toLocaleString('fa-IR')} ﷼</td></tr>
+    </tbody></table>
+    ${pf.note?`<div style="border:1px dashed #ccc;padding:8px;margin-bottom:12px;font-size:12px">یادداشت: ${esc2(pf.note)}</div>`:''}
+    <div class="sigs"><div class="sig"><div style="font-weight:700">ایجادکننده</div><div style="font-size:11px;color:#555;margin:6px 0 40px">${esc2(pf.createdBy||'')}</div><div style="font-size:10px;color:#555">امضا</div></div>
+    <div class="sig"><div style="font-weight:700">انبارداری</div><div style="margin:6px 0 40px"></div><div style="font-size:10px;color:#555">امضا</div></div>
+    <div class="sig"><div style="font-weight:700">مدیر</div><div style="margin:6px 0 40px"></div><div style="font-size:10px;color:#555">امضا</div></div></div>
+    <script>window.print();setTimeout(()=>window.close(),1200);<\/script></body></html>`);
+    w.document.close();
+  }).catch(e=>alert(e.message));
+}
+function esc2(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ══════════════════════════════════════════
 // ROLE SWITCH
