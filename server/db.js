@@ -2075,6 +2075,8 @@ async function _migrateRemainingBlobsToSQL() {
 }
 
 async function _migrateContactsToHCPs() {
+  console.log('[DB] _migrateContactsToHCPs is disabled');
+  return;
   try {
     // Detect junk entries from previous migration and force re-migration
     const checkJunk = await query(`
