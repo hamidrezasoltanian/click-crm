@@ -110,6 +110,43 @@ async function initSchema() {
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_center_contacts_key ON center_contacts(center_key)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_center_contacts_name ON center_contacts(contact_name)`);
 
+  // Healthcare Professionals (HCPs)
+  await query(`
+    CREATE TABLE IF NOT EXISTS healthcare_professionals (
+      id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(300) NOT NULL,
+      specialty VARCHAR(300),
+      rank VARCHAR(100),
+      medical_council_no VARCHAR(100),
+      phones TEXT[],
+      email VARCHAR(250),
+      notes TEXT,
+      created_by VARCHAR(100),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_hcp_name ON healthcare_professionals(name)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_hcp_specialty ON healthcare_professionals(specialty)`);
+
+  // HCP Affiliations (HCO-HCP Relationship)
+  await query(`
+    CREATE TABLE IF NOT EXISTS hcp_affiliations (
+      id SERIAL PRIMARY KEY,
+      center_key VARCHAR(200) NOT NULL,
+      hcp_id VARCHAR(50) NOT NULL REFERENCES healthcare_professionals(id) ON DELETE CASCADE,
+      role VARCHAR(200),
+      influence_level VARCHAR(100),
+      working_hours VARCHAR(300),
+      notes TEXT,
+      updated_by VARCHAR(100),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT uq_center_hcp UNIQUE (center_key, hcp_id)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_aff_center ON hcp_affiliations(center_key)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_aff_hcp ON hcp_affiliations(hcp_id)`);
+
   // Products catalog
   await query(`
     CREATE TABLE IF NOT EXISTS products (
@@ -1308,6 +1345,206 @@ async function initSchema() {
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_fpurch_company ON faradis_purchases_cache(company_num)`);
 
+  // ════════════════════════════════════════
+  // NORMALIZED CRM TABLES — replace 'main' blob
+  // ════════════════════════════════════════
+  await query(`
+    CREATE TABLE IF NOT EXISTS center_edits (
+      center_key TEXT PRIMARY KEY,
+      data       JSONB NOT NULL DEFAULT '{}',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ce_updated ON center_edits(updated_at DESC)`).catch(()=>{});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS center_notes (
+      center_key TEXT PRIMARY KEY,
+      notes      JSONB NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS center_tags (
+      center_key TEXT PRIMARY KEY,
+      tags       JSONB NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key        TEXT PRIMARY KEY,
+      value      JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS bot_sessions (
+      chat_id    TEXT PRIMARY KEY,
+      data       JSONB NOT NULL DEFAULT '{}',
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // 1. Calendar Events
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_events (
+      id         INT PRIMARY KEY,
+      title      TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      start_ms   BIGINT NOT NULL,
+      all_day    BOOLEAN NOT NULL DEFAULT false,
+      color      TEXT,
+      owner      TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+
+  // 2. Daily Checklists
+  await query(`
+    CREATE TABLE IF NOT EXISTS daily_checklists (
+      date       TEXT NOT NULL,
+      username   TEXT NOT NULL,
+      items      JSONB NOT NULL DEFAULT '[]'::jsonb,
+      note       TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT,
+      PRIMARY KEY (date, username)
+    )
+  `);
+
+  // 3. Extra Centers
+  await query(`
+    CREATE TABLE IF NOT EXISTS center_extras (
+      id          TEXT PRIMARY KEY,
+      row_num     INT NOT NULL DEFAULT 0,
+      name        TEXT NOT NULL,
+      potential   INT NOT NULL DEFAULT 1,
+      type        TEXT,
+      lead        TEXT NOT NULL DEFAULT 'سرنخ',
+      province_id TEXT NOT NULL,
+      owner       TEXT,
+      updated_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_by  TEXT
+    )
+  `);
+
+  // 4. KPI User Targets
+  await query(`
+    CREATE TABLE IF NOT EXISTS kpi_user_targets (
+      username        TEXT NOT NULL,
+      month           TEXT NOT NULL,
+      calls_per_day   INT NOT NULL DEFAULT 10,
+      visits_per_week INT NOT NULL DEFAULT 5,
+      sales_count     INT NOT NULL DEFAULT 5,
+      sales_amount    DECIMAL(15,2) DEFAULT 0,
+      cash_pct        INT NOT NULL DEFAULT 50,
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      updated_by      TEXT,
+      PRIMARY KEY (username, month)
+    )
+  `);
+
+  // 5. KPI Province Targets
+  await query(`
+    CREATE TABLE IF NOT EXISTS kpi_province_targets (
+      province_id TEXT PRIMARY KEY,
+      calls       INT NOT NULL DEFAULT 0,
+      visits      INT NOT NULL DEFAULT 0,
+      sales       INT NOT NULL DEFAULT 0,
+      extra       INT NOT NULL DEFAULT 0,
+      updated_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_by  TEXT
+    )
+  `);
+
+  // 6. KPI History
+  await query(`
+    CREATE TABLE IF NOT EXISTS kpi_history (
+      username   TEXT NOT NULL,
+      month      TEXT NOT NULL,
+      data       JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (username, month)
+    )
+  `);
+
+  // 7. Logs Tables (call_log, visit_log, sales_log, mission_log)
+  await query(`
+    CREATE TABLE IF NOT EXISTS call_log (
+      id         BIGINT PRIMARY KEY,
+      date       TEXT NOT NULL,
+      username   TEXT NOT NULL,
+      count      INT NOT NULL DEFAULT 0,
+      note       TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS visit_log (
+      id         BIGINT PRIMARY KEY,
+      date       TEXT NOT NULL,
+      username   TEXT NOT NULL,
+      count      INT NOT NULL DEFAULT 0,
+      note       TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS sales_log (
+      id          BIGINT PRIMARY KEY,
+      date        TEXT NOT NULL,
+      username    TEXT NOT NULL,
+      center_name TEXT NOT NULL,
+      center_key  TEXT,
+      amount      DECIMAL(15,2) DEFAULT 0,
+      is_cash     BOOLEAN DEFAULT false,
+      updated_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_by  TEXT
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS mission_log (
+      id         BIGINT PRIMARY KEY,
+      username   TEXT NOT NULL,
+      month      TEXT NOT NULL,
+      done       BOOLEAN DEFAULT false,
+      note       TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+
+  // 8. Province Ownership History Table (province_history)
+  await query(`
+    CREATE TABLE IF NOT EXISTS province_history (
+      id            SERIAL PRIMARY KEY,
+      province_id   TEXT NOT NULL,
+      province_name TEXT NOT NULL,
+      from_owner    TEXT,
+      from_name     TEXT,
+      to_owner      TEXT,
+      to_name       TEXT,
+      action_date   TEXT NOT NULL,
+      action_ts     BIGINT NOT NULL,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await _migrateMainBlobToSQL();
+  await _migrateRemainingBlobsToSQL();
+  await _migrateContactsToHCPs();
+
   console.log('[DB] Schema initialized');
 }
 
@@ -1487,4 +1724,479 @@ async function _migrateWeekEntriesFromBlob() {
   }
 }
 
+// ── Migrate 'main' blob → normalized SQL tables ─────────────────────────────
+// Runs once on startup. Splits edits/notes/tags/settings out of the monolithic
+// 'main' JSONB blob into dedicated tables. Safe to re-run (ON CONFLICT DO NOTHING).
+async function _migrateMainBlobToSQL() {
+  try {
+    const blobRes = await query("SELECT value FROM app_data WHERE key = 'main'");
+    if (!blobRes.rows.length || !blobRes.rows[0].value) return;
+    const blob = blobRes.rows[0].value;
+
+    const edits    = blob.edits    || {};
+    const notes    = blob.notes    || {};
+    const rTags    = blob.rTags    || blob.tags || {};
+    const settings = blob.settings || {};
+
+    let migrated = false;
+
+    // 1. center_edits
+    if (Object.keys(edits).length > 0) {
+      await query(
+        `INSERT INTO center_edits (center_key, data, updated_at, updated_by)
+         SELECT key, value, NOW(), 'blob-migration'
+         FROM jsonb_each($1::jsonb)
+         ON CONFLICT (center_key) DO NOTHING`,
+        [JSON.stringify(edits)]
+      );
+      console.log(`[DB] Migrated ${Object.keys(edits).length} rows → center_edits`);
+      migrated = true;
+    }
+
+    // 2. center_notes
+    if (Object.keys(notes).length > 0) {
+      await query(
+        `INSERT INTO center_notes (center_key, notes, updated_at, updated_by)
+         SELECT key, value, NOW(), 'blob-migration'
+         FROM jsonb_each($1::jsonb)
+         ON CONFLICT (center_key) DO NOTHING`,
+        [JSON.stringify(notes)]
+      );
+      console.log(`[DB] Migrated ${Object.keys(notes).length} rows → center_notes`);
+      migrated = true;
+    }
+
+    // 3. center_tags
+    if (Object.keys(rTags).length > 0) {
+      await query(
+        `INSERT INTO center_tags (center_key, tags, updated_at, updated_by)
+         SELECT key, value, NOW(), 'blob-migration'
+         FROM jsonb_each($1::jsonb)
+         ON CONFLICT (center_key) DO NOTHING`,
+        [JSON.stringify(rTags)]
+      );
+      console.log(`[DB] Migrated ${Object.keys(rTags).length} rows → center_tags`);
+      migrated = true;
+    }
+
+    // 4. app_settings
+    if (Object.keys(settings).length > 0) {
+      for (const [key, value] of Object.entries(settings)) {
+        await query(
+          `INSERT INTO app_settings (key, value, updated_at, updated_by)
+           VALUES ($1, $2, NOW(), 'blob-migration')
+           ON CONFLICT (key) DO NOTHING`,
+          [key, JSON.stringify(value)]
+        );
+      }
+      console.log(`[DB] Migrated ${Object.keys(settings).length} keys → app_settings`);
+      migrated = true;
+    }
+
+    // 5. Small blobs → separate app_data keys (one key each, not bundled in 'main')
+    const SPLIT_KEYS = ['events', 'checklist', 'kpiTargets', 'salesLog', 'callLog', 'visitLog', 'extra'];
+    for (const k of SPLIT_KEYS) {
+      if (blob[k] !== undefined) {
+        await query(
+          `INSERT INTO app_data (key, value, updated_at, updated_by)
+           VALUES ($1, $2, NOW(), 'blob-migration')
+           ON CONFLICT (key) DO NOTHING`,
+          [k, JSON.stringify(blob[k])]
+        );
+      }
+    }
+
+    // 6. bot_sessions
+    const botRes = await query("SELECT value FROM app_data WHERE key = 'bot_sessions'");
+    if (botRes.rows.length && botRes.rows[0].value) {
+      const stored = botRes.rows[0].value;
+      for (const [chatId, data] of Object.entries(stored)) {
+        await query(
+          `INSERT INTO bot_sessions (chat_id, data, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (chat_id) DO NOTHING`,
+          [chatId, JSON.stringify(data)]
+        );
+      }
+      console.log(`[DB] Migrated ${Object.keys(stored).length} sessions → bot_sessions`);
+    }
+
+    if (migrated) {
+      // Strip migrated keys from 'main' so it's no longer the source of truth
+      await query(
+        `UPDATE app_data
+         SET value = value - '{edits,notes,rTags,tags,settings,events,checklist,kpiTargets,salesLog,callLog,visitLog,extra}'::text[],
+             updated_at = NOW()
+         WHERE key = 'main'`
+      );
+      // Seed _db_meta row used for conflict detection (replaces updated_at of 'main')
+      await query(
+        `INSERT INTO app_data (key, value, updated_at, updated_by)
+         VALUES ('_db_meta', '{}', NOW(), 'migration')
+         ON CONFLICT (key) DO NOTHING`
+      );
+      console.log('[DB] main blob stripped of migrated keys ✓');
+    }
+  } catch (e) {
+    console.error('[DB] _migrateMainBlobToSQL error:', e.message);
+  }
+}
+
+// ── Migrate remaining small JSON blobs → structured SQL tables ──────────────
+// Runs on startup. Reads the separate app_data rows for events, checklists, targets,
+// logs, and history, populates the respective SQL tables, and purges the old app_data keys.
+async function _migrateRemainingBlobsToSQL() {
+  try {
+    // 1. Migrate events
+    const evRes = await query("SELECT value FROM app_data WHERE key = 'events'");
+    if (evRes.rows.length && evRes.rows[0].value) {
+      const list = evRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const ev of list) {
+          if (!ev || ev.id === undefined) continue;
+          await query(
+            `INSERT INTO app_events (id, title, description, start_ms, all_day, color, owner, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'migration')
+             ON CONFLICT (id) DO NOTHING`,
+            [ev.id, ev.title || '', ev.desc || '', ev.startMs || 0, !!ev.allDay, ev.color || null, ev.owner || null]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} events → app_events`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'events'");
+    }
+
+    // 2. Migrate checklist
+    const ckRes = await query("SELECT value FROM app_data WHERE key = 'checklist'");
+    if (ckRes.rows.length && ckRes.rows[0].value) {
+      const dict = ckRes.rows[0].value || {};
+      if (typeof dict === 'object') {
+        let count = 0;
+        for (const [key, value] of Object.entries(dict)) {
+          if (!value) continue;
+          const parts = key.split('_');
+          if (parts.length >= 2) {
+            const date = parts[0];
+            const username = parts.slice(1).join('_');
+            const items = value.items || [];
+            const note = value.note || '';
+            await query(
+              `INSERT INTO daily_checklists (date, username, items, note, updated_at, updated_by)
+               VALUES ($1, $2, $3, $4, NOW(), 'migration')
+               ON CONFLICT (date, username) DO NOTHING`,
+              [date, username, JSON.stringify(items), note]
+            );
+            count++;
+          }
+        }
+        console.log(`[DB] Migrated ${count} checklists → daily_checklists`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'checklist'");
+    }
+
+    // 3. Migrate extra centers
+    const exRes = await query("SELECT value FROM app_data WHERE key = 'extra'");
+    if (exRes.rows.length && exRes.rows[0].value) {
+      const list = exRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const c of list) {
+          if (!c || !c.id) continue;
+          await query(
+            `INSERT INTO center_extras (id, row_num, name, potential, type, lead, province_id, owner, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), 'migration')
+             ON CONFLICT (id) DO NOTHING`,
+            [c.id, c.row || 0, c.name || '', c.potential || 1, c.type || null, c.lead || 'سرنخ', c.province_id || '', c.owner || null]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} extra centers → center_extras`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'extra'");
+    }
+
+    // 4. Migrate KPI targets
+    const kpiRes = await query("SELECT value FROM app_data WHERE key = 'kpiTargets'");
+    if (kpiRes.rows.length && kpiRes.rows[0].value) {
+      const dict = kpiRes.rows[0].value || {};
+      if (typeof dict === 'object') {
+        let uCount = 0;
+        let pCount = 0;
+        for (const [key, value] of Object.entries(dict)) {
+          if (!value) continue;
+          if (key === 'weights') {
+            await query(
+              `INSERT INTO app_settings (key, value, updated_at, updated_by)
+               VALUES ('kpi_weights', $1, NOW(), 'migration')
+               ON CONFLICT (key) DO NOTHING`,
+              [JSON.stringify(value)]
+            );
+          } else if (key === 'provinces') {
+            for (const [provId, targets] of Object.entries(value)) {
+              if (!targets) continue;
+              await query(
+                `INSERT INTO kpi_province_targets (province_id, calls, visits, sales, extra, updated_at, updated_by)
+                 VALUES ($1, $2, $3, $4, $5, NOW(), 'migration')
+                 ON CONFLICT (province_id) DO NOTHING`,
+                [provId, targets.calls || 0, targets.visits || 0, targets.sales || 0, targets.extra || 0]
+              );
+              pCount++;
+            }
+          } else if (key.includes(':')) {
+            const [username, month] = key.split(':');
+            await query(
+              `INSERT INTO kpi_user_targets (username, month, calls_per_day, visits_per_week, sales_count, sales_amount, cash_pct, updated_at, updated_by)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'migration')
+               ON CONFLICT (username, month) DO NOTHING`,
+              [username, month, value.callsPerDay || 10, value.visitsPerWeek || 5, value.salesCount || 5, value.salesAmount || 0, value.cashPct || 50]
+            );
+            uCount++;
+          }
+        }
+        console.log(`[DB] Migrated kpiTargets: ${uCount} user targets, ${pCount} province targets → SQL`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'kpiTargets'");
+    }
+
+    // 5. Migrate Call Log
+    const callRes = await query("SELECT value FROM app_data WHERE key = 'callLog'");
+    if (callRes.rows.length && callRes.rows[0].value) {
+      const list = callRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const l of list) {
+          if (!l || !l.id) continue;
+          await query(
+            `INSERT INTO call_log (id, date, username, count, note, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, NOW(), 'migration')
+             ON CONFLICT (id) DO NOTHING`,
+            [l.id, l.date || '', l.userId || '', l.count || 0, l.note || null]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} call logs → call_log`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'callLog'");
+    }
+
+    // 6. Migrate Visit Log
+    const visitRes = await query("SELECT value FROM app_data WHERE key = 'visitLog'");
+    if (visitRes.rows.length && visitRes.rows[0].value) {
+      const list = visitRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const l of list) {
+          if (!l || !l.id) continue;
+          await query(
+            `INSERT INTO visit_log (id, date, username, count, note, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, NOW(), 'migration')
+             ON CONFLICT (id) DO NOTHING`,
+            [l.id, l.date || '', l.userId || '', l.count || 0, l.note || null]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} visit logs → visit_log`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'visitLog'");
+    }
+
+    // 7. Migrate Sales Log
+    const salesRes = await query("SELECT value FROM app_data WHERE key = 'salesLog'");
+    if (salesRes.rows.length && salesRes.rows[0].value) {
+      const list = salesRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const l of list) {
+          if (!l || !l.id) continue;
+          await query(
+            `INSERT INTO sales_log (id, date, username, center_name, center_key, amount, is_cash, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'migration')
+             ON CONFLICT (id) DO NOTHING`,
+            [l.id, l.date || '', l.userId || '', l.centerName || '', l.centerKey || null, l.amount || 0, !!l.isCash]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} sales logs → sales_log`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'salesLog'");
+    }
+
+    // 8. Migrate Mission Log
+    const missionRes = await query("SELECT value FROM app_data WHERE key = 'missionLog'");
+    if (missionRes.rows.length && missionRes.rows[0].value) {
+      const list = missionRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const l of list) {
+          if (!l || !l.id) continue;
+          await query(
+            `INSERT INTO mission_log (id, username, month, done, note, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, NOW(), 'migration')
+             ON CONFLICT (id) DO NOTHING`,
+            [l.id, l.userId || '', l.month || '', !!l.done, l.note || null]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} mission logs → mission_log`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'missionLog'");
+    }
+
+    // 9. Migrate Province History
+    const provHistRes = await query("SELECT value FROM app_data WHERE key = 'provHistory'");
+    if (provHistRes.rows.length && provHistRes.rows[0].value) {
+      const list = provHistRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const h of list) {
+          if (!h) continue;
+          await query(
+            `INSERT INTO province_history (province_id, province_name, from_owner, from_name, to_owner, to_name, action_date, action_ts, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+            [h.provId, h.provName || '', h.from || null, h.fromName || null, h.to || null, h.toName || null, h.at || '', h.ts || 0]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} province history entries → province_history`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'provHistory'");
+    }
+
+    // 10. Migrate KPI History
+    const kpiHistRes = await query("SELECT value FROM app_data WHERE key = 'kpiHistory'");
+    if (kpiHistRes.rows.length && kpiHistRes.rows[0].value) {
+      const list = kpiHistRes.rows[0].value || [];
+      if (Array.isArray(list) && list.length > 0) {
+        for (const s of list) {
+          if (!s || !s.userId || !s.month) continue;
+          await query(
+            `INSERT INTO kpi_history (username, month, data, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (username, month) DO NOTHING`,
+            [s.userId, s.month, JSON.stringify(s)]
+          );
+        }
+        console.log(`[DB] Migrated ${list.length} kpi history snapshots → kpi_history`);
+      }
+      await query("DELETE FROM app_data WHERE key = 'kpiHistory'");
+    }
+
+  } catch (e) {
+    console.error('[DB] _migrateRemainingBlobsToSQL error:', e.message);
+  }
+}
+
+async function _migrateContactsToHCPs() {
+  try {
+    // Detect junk entries from previous migration and force re-migration
+    const checkJunk = await query(`
+      SELECT COUNT(*) FROM healthcare_professionals 
+      WHERE name = '.' OR name = '-' OR name = '#####';
+    `);
+    const hasJunk = parseInt(checkJunk.rows[0].count) > 0;
+    if (hasJunk) {
+      console.log(`[DB] Junk HCP records detected. Truncating and re-migrating with clean logic...`);
+      await query(`TRUNCATE TABLE hcp_affiliations CASCADE;`);
+      await query(`TRUNCATE TABLE healthcare_professionals CASCADE;`);
+    }
+
+    const existingHCPs = await query(`SELECT COUNT(*) FROM healthcare_professionals`);
+    if (parseInt(existingHCPs.rows[0].count) > 0) {
+      return;
+    }
+
+    const result = await query(`SELECT center_key, data, updated_by FROM center_edits`);
+    if (!result.rows.length) return;
+
+    console.log(`[DB] Migrating contacts from center_edits to HCP model...`);
+
+    let hcpCount = 0;
+    let affCount = 0;
+
+    // Helper to sanitize HCP name and phones
+    function _sanitizeHCPName(name, phones) {
+      if (!name) return { name: 'مخاطب بدون نام', phones, valid: false };
+
+      let clean = name
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .trim();
+
+      if (/^[\s\.\-\#\&\;\?\*\_\|\+\=\@\/]*$/.test(clean)) {
+        clean = 'مخاطب بدون نام';
+      }
+
+      if (/^[0-9\s\-\+\(\)\&]*$/.test(clean) && clean.replace(/[^0-9]/g, '').length >= 5) {
+        const ph = clean.trim();
+        if (ph && !phones.includes(ph)) {
+          phones.push(ph);
+        }
+        clean = 'مخاطب بدون نام';
+      }
+
+      const junkList = ['.', '-', '---', '###', '***', '&&&', '?', '1', '1 1', 'رادیولوژی', 'بخش رادیولوژی', 'اتاق عمل', 'سونوگرافی'];
+      if (junkList.includes(clean)) {
+        clean = 'مخاطب بدون نام';
+      }
+
+      if (clean === 'مخاطب بدون نام' && (!phones || !phones.length)) {
+        return { name: clean, phones, valid: false };
+      }
+
+      return { name: clean, phones, valid: true };
+    }
+
+    for (const row of result.rows) {
+      const centerKey = row.center_key;
+      const data = row.data || {};
+      const contacts = data.contacts || [];
+      const updatedBy = row.updated_by || 'system';
+
+      if (!Array.isArray(contacts) || !contacts.length) continue;
+
+      for (const c of contacts) {
+        const rawPhones = Array.isArray(c.phones) ? c.phones.filter(Boolean) : [];
+        const { name, phones, valid } = _sanitizeHCPName(c.name, rawPhones);
+        
+        if (!valid) continue;
+
+        const title = (c.title || '').trim();
+
+        let hcpId = null;
+        if (phones.length > 0) {
+          const checkRes = await query(
+            `SELECT id FROM healthcare_professionals 
+             WHERE name = $1 AND phones && $2::text[]`,
+            [name, phones]
+          );
+          if (checkRes.rows.length) {
+            hcpId = checkRes.rows[0].id;
+          }
+        } else {
+          const checkRes = await query(
+            `SELECT id FROM healthcare_professionals WHERE name = $1 AND (phones IS NULL OR cardinality(phones) = 0)`,
+            [name]
+          );
+          if (checkRes.rows.length) {
+            hcpId = checkRes.rows[0].id;
+          }
+        }
+
+        if (!hcpId) {
+          hcpId = 'hcp_' + Math.random().toString(36).substring(2, 11);
+          await query(
+            `INSERT INTO healthcare_professionals (id, name, specialty, rank, phones, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [hcpId, name, null, title || null, phones, updatedBy]
+          );
+          hcpCount++;
+        }
+
+        await query(
+          `INSERT INTO hcp_affiliations (center_key, hcp_id, role, influence_level, updated_by)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (center_key, hcp_id) DO NOTHING`,
+          [centerKey, hcpId, title || null, 'Decision Maker', updatedBy]
+        );
+        affCount++;
+      }
+    }
+    console.log(`[DB] HCP migration complete: ${hcpCount} professionals, ${affCount} affiliations created.`);
+  } catch (e) {
+    console.error('[DB] _migrateContactsToHCPs error:', e.message);
+  }
+}
+
 module.exports = { pool, query, initSchema };
+
+// Trigger restart 1782717251274

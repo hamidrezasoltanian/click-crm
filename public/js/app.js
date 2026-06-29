@@ -1064,7 +1064,7 @@ function switchTab(tab){
   currentTab=tab;
   try{localStorage.setItem('_st',tab);}catch(e){}
   _navPush(tab, null);
-  ['home','provinces','weekplan','calendar','checklist','activity','changelog','tasks','manager','kpi','mtr','pricing','proforma'].forEach(function(t){
+  ['home','provinces','weekplan','calendar','checklist','activity','changelog','tasks','manager','kpi','mtr','pricing','proforma','hcp'].forEach(function(t){
     var b=document.getElementById('tab_'+t);if(b)b.classList.toggle('active',t===tab);
   });
   document.getElementById('dash').style.display=(tab==='provinces')?'':'none';
@@ -1084,11 +1084,13 @@ function switchTab(tab){
   var mtrp=document.getElementById('mtrPanel');if(mtrp)mtrp.style.display=(tab==='mtr')?'':'none';
   var pricingP=document.getElementById('pricingPanel');if(pricingP)pricingP.style.display=(tab==='pricing')?'':'none';
   var pfP=document.getElementById('proformaPanel');if(pfP)pfP.style.display=(tab==='proforma')?'':'none';
+  var hcpP=document.getElementById('hcpPanel');if(hcpP)hcpP.style.display=(tab==='hcp')?'':'none';
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
   if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
   if(tab==='proforma'&&typeof renderProformaPanel==='function')renderProformaPanel();
+  if(tab==='hcp'&&typeof renderHCPPanel==='function')renderHCPPanel();
   // update mobile nav
-  (function(){var tabs=['home','provinces','weekplan','calendar','checklist','activity','mtr'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
+  (function(){var tabs=['home','provinces','weekplan','calendar','checklist','activity','mtr','hcp'];document.querySelectorAll('.mob-tab').forEach(function(btn,i){btn.classList.toggle('active',tabs[i]===tab);});})();
   if(tab==='provinces'){
     renderDashboard();renderBanner();
     if(!_currentProvId){
@@ -6221,6 +6223,7 @@ function openDailyMonitor(){
       +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
       +'<thead><tr style="background:var(--bg-raised)">'
       +'<th style="padding:8px 10px;text-align:right">کارشناس</th>'
+      +'<th style="padding:8px 10px;text-align:center">گزارش</th>'
       +'<th style="padding:8px 10px;text-align:center">برنامه امروز</th>'
       +'<th style="padding:8px 10px;text-align:center;color:#16a34a">انجام شده</th>'
       +'<th style="padding:8px 10px;text-align:center;color:#dc2626">انجام نشده</th>'

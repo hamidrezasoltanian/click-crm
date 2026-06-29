@@ -61,6 +61,7 @@ const { router: eventsRouter } = require('./routes/events');
 app.use('/api/events', eventsRouter);
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/contacts', require('./routes/contacts'));
+app.use('/api/hcps', require('./routes/hcps'));
 app.use('/api/pricing', require('./routes/pricing'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/discovery', require('./routes/discovery'));
