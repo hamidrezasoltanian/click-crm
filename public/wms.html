@@ -1871,6 +1871,30 @@ function _wpfItemsHtml(items){
 }
 
 var _wpfEditItems=[];
+var _crmCenters=[];
+function _flatCenters(d){
+  var list=[];
+  (d.CENTERS||[]).forEach(function(c){if(c.name)list.push({key:c.id,name:c.name});});
+  Object.entries(d.PC_RAW||{}).forEach(function(entry){
+    var provId=entry[0],rows=entry[1];
+    (rows||[]).forEach(function(row,i){var nm=row[1]||row[0]||'';if(nm)list.push({key:provId+'||'+i,name:nm});});
+  });
+  return list;
+}
+function _searchCenter(q,dropId,keyId,txtId){
+  var drop=document.getElementById(dropId);
+  if(!drop)return;
+  if(!q||!q.trim()){drop.innerHTML='';return;}
+  var qt=q.trim();
+  var res=_crmCenters.filter(function(c){return c.name.indexOf(qt)!==-1;}).slice(0,8);
+  drop.innerHTML=res.map(function(c){var k=c.key.replace(/'/g,"&#39;"),n=c.name.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,"&#39;");return'<div class="csd-item" onclick="_pickCenter('+JSON.stringify(c.key)+','+JSON.stringify(c.name)+",'"+(keyId?keyId:dropId)+"','"+keyId+"','"+txtId+"')\">"+(c.name.replace(/</g,'&lt;'))+'</div>';}).join('');
+}
+function _pickCenter(key,name,dropId,keyId,txtId){
+  var t=document.getElementById(txtId);
+  var k=document.getElementById(keyId);
+  var d=document.getElementById(dropId);
+  if(t)t.value=name;if(k)k.value=key;if(d)d.innerHTML='';
+}
 var _wpfEditId=null;
 
 function openWpfNew(){
@@ -1886,14 +1910,20 @@ async function openWpfEdit(id){
 }
 
 function _openWpfModal(pf){
-  const cps=S.counterparties.filter(c=>c.type==='customer'||c.type==='both');
   const whs=S.warehouses;
-  const custOpts=cps.map(c=>`<option value="${c.id}" data-name="${esc(c.name)}" ${pf&&pf.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+  const _cval=pf?pf.customerName||'':'';
+  const _ckey=pf?pf.customerId||'':'';
   const whOpts=whs.map(w=>`<option value="${w.id}" data-name="${esc(w.name)}" ${pf&&pf.warehouseId===w.id?'selected':''}>${esc(w.name)}</option>`).join('');
   const body=`
     <div class="form-grid" style="margin-bottom:14px">
-      <div class="fg"><label class="fl">مشتری</label>
-        <select class="fs" id="wpf-cust"><option value="">— انتخاب —</option>${custOpts}</select></div>
+      <div class="fg"><label class="fl">مشتری / مرکز</label>
+        <div style="position:relative">
+          <input class="fi" id="wpf-cust-txt" placeholder="جستجوی مرکز..." autocomplete="off"
+                 oninput="_searchCenter(this.value,'wpf-cust-drop','wpf-cust-key','wpf-cust-txt')"
+                 value="${_cval}" />
+          <input type="hidden" id="wpf-cust-key" value="${_ckey}" />
+          <div id="wpf-cust-drop" class="csd-drop"></div>
+        </div></div>
       <div class="fg"><label class="fl">انبار</label>
         <select class="fs" id="wpf-wh" onchange="_wpfRefreshLots()"><option value="">— انتخاب —</option>${whOpts}</select></div>
       <div class="fg"><label class="fl">تاریخ (جلالی)</label>
@@ -1990,12 +2020,13 @@ function _wpfRemoveItem(idx){
 }
 
 async function _wpfSave(){
-  const custSel=document.getElementById('wpf-cust');
+  const custTxt=document.getElementById('wpf-cust-txt');
+  const custKey=document.getElementById('wpf-cust-key');
   const whSel=document.getElementById('wpf-wh');
   if(!_wpfEditItems.length) return alert('حداقل یک ردیف اضافه کنید');
   const body={
-    customerId:(custSel||{}).value||null,
-    customerName:custSel&&custSel.value?(custSel.options[custSel.selectedIndex]||{}).dataset&&(custSel.options[custSel.selectedIndex]).dataset.name||custSel.options[custSel.selectedIndex].textContent||'':'',
+    customerId:(custKey||{}).value||null,
+    customerName:((custTxt||{}).value||'').trim(),
     warehouseId:(whSel||{}).value||null,
     warehouseName:whSel&&whSel.value?(whSel.options[whSel.selectedIndex]).textContent||'':'',
     jalaliDate:((document.getElementById('wpf-date')||{}).value||'').trim(),
@@ -4396,6 +4427,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     currentUserId=me.username;
     const roleMap={'مدیر':'sales_manager','کارشناس فروش':'sales','سوپر ادمین':'admin','مهمان':'support'};
     currentRole=roleMap[me.role]||'sales';
+    try{var _cr=await fetch('/api/data/centers/master',{credentials:'include'});if(_cr.ok)_crmCenters=_flatCenters(await _cr.json());}catch(e){}
     document.getElementById('unEl').textContent=me.name;
     document.getElementById('urEl').textContent=me.role;
     const av=document.getElementById('avEl');
@@ -6325,7 +6357,10 @@ function printInv(){
     .totals span{font-weight:700;}
     footer{margin-top:12px;font-size:9px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:8px;}
     @media print{@page{size:A4;margin:12mm}body{padding:0}}
-  </style></head><body>
+  .csd-drop{position:absolute;top:100%;right:0;left:0;background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:8px;z-index:200;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.15);}
+.csd-item{padding:8px 12px;cursor:pointer;font-size:13px;}
+.csd-item:hover{background:var(--surface2,#f8fafc);}
+</style></head><body>
   <h1>گزارش موجودی انبار — آتنا زیست درمان</h1>
   <div class="sub">تاریخ: ${today} | شمسی</div>
   <div class="totals">

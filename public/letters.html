@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>دبیرخونه — آتنا زیست درمان</title>
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 <style>
 :root{
   --bg:#eef2f7;--surface:#fff;--surface2:#f8fafc;--surface3:#f1f5f9;
@@ -150,6 +153,21 @@ tbody tr:last-child td{border-bottom:none;}
   .form-grid,.form-grid-2{grid-template-columns:1fr!important;}
   th,td{padding:6px 8px!important;font-size:12px!important;}
 }
+/* Quill RTL overrides */
+.ql-editor{direction:rtl;text-align:right;font-family:'Vazirmatn',sans-serif;font-size:14px;min-height:160px;line-height:1.8;}
+.ql-toolbar.ql-snow{border-radius:var(--r) var(--r) 0 0;border-color:var(--border)!important;}
+.ql-container.ql-snow{border-radius:0 0 var(--r) var(--r);border-color:var(--border)!important;}
+.ql-toolbar button,.ql-toolbar .ql-picker{direction:ltr;}
+/* Center search dropdown */
+.csd-wrap{position:relative;}
+.csd-drop{position:absolute;top:100%;right:0;left:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);z-index:300;max-height:220px;overflow-y:auto;box-shadow:var(--shadow2);}
+.csd-item{padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);}
+.csd-item:last-child{border-bottom:none;}
+.csd-item:hover{background:var(--surface2);}
+/* Receiver chips */
+.recv-chip{display:inline-flex;align-items:center;gap:6px;background:#eff6ff;color:#1d4ed8;border-radius:20px;padding:4px 12px;font-size:12px;margin:3px;}
+.recv-chip .rx{cursor:pointer;font-size:15px;line-height:1;color:#6b7280;}
+.recv-chip .rx:hover{color:var(--danger);}
 </style>
 </head>
 <body>
@@ -206,6 +224,14 @@ tbody tr:last-child td{border-bottom:none;}
       <div class="nav" id="nav-templates" onclick="go('templates')">
         <span class="ico">📋</span>
         <span class="lbl">قالب‌ها</span>
+      </div>
+      <div class="nav" onclick="openSigModal()">
+        <span class="ico">✍</span>
+        <span class="lbl">امضای الکترونیک</span>
+      </div>
+      <div class="nav" onclick="openBgModal()">
+        <span class="ico">🖼</span>
+        <span class="lbl">سربرگ نامه</span>
       </div>
     </div>
 
@@ -297,6 +323,36 @@ tbody tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- Modal: Electronic Signature -->
+<div class="mo" id="mo-sig">
+  <div class="md" style="width:560px;">
+    <div class="mh">
+      <span class="mt-m">✍ امضای الکترونیک</span>
+      <button class="mx" onclick="closeMo('mo-sig')">✕</button>
+    </div>
+    <div class="mb" id="mo-sig-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost btn-sm" onclick="_sigDelete()">🗑 حذف امضا</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeMo('mo-sig')">انصراف</button>
+      <button class="btn btn-success btn-sm" onclick="_sigSave()">ذخیره امضا</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Letterhead Background -->
+<div class="mo" id="mo-bg">
+  <div class="md" style="width:480px;">
+    <div class="mh">
+      <span class="mt-m">🖼 سربرگ نامه</span>
+      <button class="mx" onclick="closeMo('mo-bg')">✕</button>
+    </div>
+    <div class="mb" id="mo-bg-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost btn-sm" onclick="closeMo('mo-bg')">بستن</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -310,6 +366,90 @@ var S = {
   referLetterId: null,
   registerLetterId: null,
 };
+
+var _crmCenters = [];
+var _lfReceivers = [];
+var _quill = null;
+var _sigPad = null;
+
+function _flatCenters(d) {
+  var list = [];
+  (d.CENTERS || []).forEach(function(c) { if (c.name) list.push({ key: c.id, name: c.name }); });
+  Object.entries(d.PC_RAW || {}).forEach(function(entry) {
+    var provId = entry[0], rows = entry[1];
+    (rows || []).forEach(function(row, i) {
+      var nm = row[1] || row[0] || '';
+      if (nm) list.push({ key: provId + '||' + i, name: nm });
+    });
+  });
+  return list;
+}
+
+function _searchCenter(q, dropId, keyId, txtId) {
+  var drop = document.getElementById(dropId);
+  if (!drop) return;
+  if (!q || !q.trim()) { drop.innerHTML = ''; return; }
+  var qt = q.trim();
+  var res = _crmCenters.filter(function(c) { return c.name.indexOf(qt) !== -1; }).slice(0, 8);
+  drop.innerHTML = res.map(function(c) {
+    var safeKey = esc(c.key), safeName = esc(c.name);
+    if (!keyId) {
+      return '<div class="csd-item" onclick="_addRecv(\'' + safeKey + '\',\'' + safeName + '\',\'' + dropId + '\',\'' + txtId + '\')">' + safeName + '</div>';
+    }
+    return '<div class="csd-item" onclick="_pickCtr(\'' + safeKey + '\',\'' + safeName + '\',\'' + dropId + '\',\'' + keyId + '\',\'' + txtId + '\')">' + safeName + '</div>';
+  }).join('');
+}
+
+function _pickCtr(key, name, dropId, keyId, txtId) {
+  var t = document.getElementById(txtId), k = document.getElementById(keyId), d = document.getElementById(dropId);
+  if (t) t.value = name;
+  if (k) k.value = key;
+  if (d) d.innerHTML = '';
+}
+
+function _addRecv(key, name, dropId, txtId) {
+  if (!_lfReceivers.find(function(r) { return r.key === key; })) {
+    _lfReceivers.push({ key: key, name: name });
+    _renderRecvChips();
+  }
+  var d = document.getElementById(dropId), t = document.getElementById(txtId);
+  if (d) d.innerHTML = '';
+  if (t) t.value = '';
+}
+
+function _removeRecv(key) {
+  _lfReceivers = _lfReceivers.filter(function(r) { return r.key !== key; });
+  _renderRecvChips();
+}
+
+function _renderRecvChips() {
+  var el = document.getElementById('lf-recv-chips');
+  if (!el) return;
+  el.innerHTML = _lfReceivers.map(function(r) {
+    return '<span class="recv-chip">' + esc(r.name) +
+      '<span class="rx" onclick="_removeRecv(\'' + esc(r.key) + '\')">×</span></span>';
+  }).join('');
+}
+
+function _initQuill(bodyHtml) {
+  _quill = null;
+  var el = document.getElementById('lf-body-editor');
+  if (!el || typeof Quill === 'undefined') return;
+  _quill = new Quill('#lf-body-editor', {
+    theme: 'snow',
+    modules: { toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'align': [] }],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      ['clean']
+    ]},
+    placeholder: 'متن نامه را اینجا بنویسید...'
+  });
+  _quill.root.setAttribute('dir', 'rtl');
+  if (bodyHtml) _quill.root.innerHTML = bodyHtml;
+}
 
 var PAGE_TITLES = {
   inbox: 'کارتابل من',
@@ -354,6 +494,11 @@ async function init() {
     var usersRes = await api('GET', '/users');
     S.users = Array.isArray(usersRes) ? usersRes : (usersRes.users || []);
   } catch(e) { S.users = []; }
+
+  try {
+    var cr = await api('GET', '/data/centers/master');
+    _crmCenters = _flatCenters(cr);
+  } catch(e) {}
 
   await loadCounts();
   go('inbox');
@@ -523,10 +668,12 @@ function openTemplateNew() {
 function useTemplate(tpl) {
   _templateNew = false;
   S.editId = null;
+  _lfReceivers = [];
   document.getElementById('mo-letter-title').textContent = 'نامه جدید از قالب';
   document.getElementById('mo-letter-body').innerHTML = buildLetterForm(null, false, tpl);
   document.getElementById('mo-letter-footer').innerHTML = buildLetterFooter(null);
   openMo('mo-letter');
+  setTimeout(function() { _initQuill(tpl.body || ''); _renderRecvChips(); }, 50);
 }
 
 async function deleteTemplate(id) {
@@ -551,10 +698,12 @@ async function _submitTemplate() {
 function openLetterNew() {
   _templateNew = false;
   S.editId = null;
+  _lfReceivers = [];
   document.getElementById('mo-letter-title').textContent = 'نامه جدید';
   document.getElementById('mo-letter-body').innerHTML = buildLetterForm(null);
   document.getElementById('mo-letter-footer').innerHTML = buildLetterFooter(null);
   openMo('mo-letter');
+  setTimeout(function() { _initQuill(''); _renderRecvChips(); }, 50);
 }
 
 async function openLetterEdit(id) {
@@ -562,10 +711,12 @@ async function openLetterEdit(id) {
   S.editId = id;
   try {
     var letter = await api('GET', '/letters/' + id);
+    _lfReceivers = (letter.receivers || []).slice();
     document.getElementById('mo-letter-title').textContent = 'ویرایش نامه';
     document.getElementById('mo-letter-body').innerHTML = buildLetterForm(letter);
     document.getElementById('mo-letter-footer').innerHTML = buildLetterFooter(letter);
     openMo('mo-letter');
+    setTimeout(function() { _initQuill(letter.body || ''); _renderRecvChips(); }, 50);
   } catch(e) { alert(e.message); }
 }
 
@@ -620,7 +771,20 @@ function buildLetterForm(letter, isTemplate, tpl) {
   html += '</div>';
 
   html += '<div class="fg" style="margin-top:12px;"><label class="fl">متن نامه</label>' +
-    '<textarea class="fta" id="lf-body" rows="8" placeholder="متن نامه را اینجا بنویسید...">' + esc(body) + '</textarea></div>';
+    '<div id="lf-body-editor" style="background:#fff;"></div>' +
+    '<textarea id="lf-body-fallback" style="display:none;">' + esc(body) + '</textarea></div>';
+
+  if (!isTemplate) {
+    html += '<div class="fg" style="margin-top:14px;">' +
+      '<label class="fl">گیرنده / طرف‌حساب</label>' +
+      '<div class="csd-wrap">' +
+        '<input class="fi" id="lf-recv-txt" placeholder="جستجوی مرکز یا مشتری..." autocomplete="off"' +
+        ' oninput="_searchCenter(this.value,\'lf-recv-drop\',\'\',\'lf-recv-txt\')" />' +
+        '<div id="lf-recv-drop" class="csd-drop"></div>' +
+      '</div>' +
+      '<div id="lf-recv-chips" style="margin-top:8px;min-height:28px;"></div>' +
+      '</div>';
+  }
 
   return html;
 }
@@ -642,15 +806,18 @@ function buildLetterFooter(letter) {
 }
 
 function collectLetterForm() {
+  var bodyHtml = _quill ? _quill.root.innerHTML : ((document.getElementById('lf-body-fallback') || {}).value || '').trim();
+  if (bodyHtml === '<p><br></p>' || bodyHtml === '<p></p>') bodyHtml = '';
   return {
     type:             (document.getElementById('lf-type') || {}).value || 'outgoing',
     subject:          ((document.getElementById('lf-subject') || {}).value || '').trim(),
-    body:             ((document.getElementById('lf-body') || {}).value || '').trim(),
+    body:             bodyHtml,
     priority:         (document.getElementById('lf-prio') || {}).value || 'normal',
     classification:   (document.getElementById('lf-class') || {}).value || 'normal',
     departmentPrefix: (document.getElementById('lf-prefix') || {}).value || 'الف',
     senderName:       ((document.getElementById('lf-sender') || {}).value || '').trim(),
     title:            ((document.getElementById('lf-tpl-title') || {}).value || '').trim(),
+    receivers:        _lfReceivers.slice(),
   };
 }
 
@@ -693,7 +860,11 @@ async function openLetterView(id) {
     }
 
     html += '<div style="font-size:16px;font-weight:700;margin-bottom:10px;">' + esc(letter.subject) + '</div>';
-    html += '<div class="letter-body">' + esc(letter.body || '—') + '</div>';
+    if (letter.receivers && letter.receivers.length) {
+      html += '<div style="margin-bottom:10px;font-size:12px;color:var(--text2);">گیرندگان: ' +
+        letter.receivers.map(function(r) { return '<span class="recv-chip">' + esc(r.name || r.key) + '</span>'; }).join('') + '</div>';
+    }
+    html += '<div class="letter-body" style="line-height:1.9;">' + (letter.body || '<em style="color:var(--text3)">متنی وارد نشده</em>') + '</div>';
 
     // Referral timeline
     if (letter.referrals && letter.referrals.length) {
@@ -856,29 +1027,174 @@ async function deleteLetter(id) {
 function printLetter(letter) {
   var TYPE_LABELS = { outgoing: 'نامه صادره', incoming: 'نامه وارده', internal: 'مکاتبه داخلی' };
   var PRIO_LABELS = { normal: 'عادی', high: 'فوری', urgent: 'آنی' };
-
-  var html = '<div class="pz-border">' +
-    '<div class="pz-head">' +
-      '<div><div class="pz-company">شرکت آتنا زیست درمان</div><div class="pz-sub">سیستم دبیرخونه</div></div>' +
-      '<div class="pz-indicator"><div class="pz-ind-no">' + esc(letter.indicatorNumber || '—') + '</div>' +
-        '<div class="pz-ind-date">' + fmtDate(letter.registeredAt || letter.createdAt) + '</div></div>' +
+  var bgCss = localStorage.getItem('letter_bg_css') || '';
+  var sigUser = S.user ? S.user.username : '';
+  var sigImg = sigUser ? (localStorage.getItem('letter_sig_' + sigUser) || '') : '';
+  var sigName = S.user ? (S.user.name || S.user.username || '') : '';
+  var sigRole = S.user ? (S.user.role || '') : '';
+  var recvHtml = '';
+  if (letter.receivers && letter.receivers.length) {
+    recvHtml = '<div style="margin-bottom:12px;font-size:12px;color:#555;border-right:3px solid #0284c7;padding-right:8px;">' +
+      'گیرندگان: ' + letter.receivers.map(function(r) { return r.name || r.key; }).join(' | ') + '</div>';
+  }
+  var bodyContent = letter.body || '';
+  var letterHtml = '<!DOCTYPE html><html lang="fa" dir="rtl">' +
+    '<head><meta charset="utf-8"><title>نامه ' + esc(letter.indicatorNumber || '') + '</title>' +
+    '<link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.003.0/Vazirmatn-font-face.css" rel="stylesheet">' +
+    '<style>' +
+    'body{font-family:Vazirmatn,sans-serif;margin:0;padding:0;direction:rtl;background:#f0f0f0;}' +
+    '.letter-page{width:21cm;min-height:29.7cm;margin:0 auto;padding:2.5cm 2cm;position:relative;box-sizing:border-box;background:#fff;' + bgCss + '}' +
+    '.lh{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px double #1e3a5f;padding-bottom:14px;margin-bottom:20px;}' +
+    '.lh-org{font-size:20px;font-weight:800;color:#1e3a5f;letter-spacing:-0.5px;}' +
+    '.lh-sub{font-size:12px;color:#64748b;margin-top:4px;}' +
+    '.lh-meta{text-align:left;font-size:12px;color:#334155;line-height:2;}' +
+    '.lh-meta strong{color:#1e3a5f;}' +
+    '.type-bar{background:#1e3a5f;color:#fff;text-align:center;padding:6px;border-radius:4px;margin-bottom:18px;font-weight:700;font-size:14px;letter-spacing:1px;}' +
+    '.subject{font-size:16px;font-weight:700;text-align:center;margin:18px 0;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:10px;}' +
+    '.sender-row{font-size:12px;color:#475569;margin-bottom:14px;}' +
+    '.body-sec{font-size:14px;line-height:2.2;min-height:14cm;color:#1e293b;}' +
+    '.sigs{display:flex;justify-content:space-between;margin-top:2cm;padding-top:16px;border-top:1px solid #e2e8f0;}' +
+    '.sig-blk{text-align:center;width:30%;}' +
+    '.sig-title{font-size:12px;font-weight:700;color:#334155;margin-bottom:8px;}' +
+    '.sig-img{max-width:110px;max-height:55px;display:block;margin:0 auto 6px;}' +
+    '.sig-line{border-top:1px solid #94a3b8;margin:8px auto 4px;width:80%;}' +
+    '.sig-name{font-size:12px;color:#475569;}' +
+    '@media print{body{background:#fff;}.letter-page{margin:0;width:100%;min-height:auto;box-shadow:none;}}' +
+    '</style></head><body>' +
+    '<div class="letter-page">' +
+      '<div class="lh">' +
+        '<div><div class="lh-org">آتنا زیست درمان</div><div class="lh-sub">دبیرخانه مرکزی</div></div>' +
+        '<div class="lh-meta">' +
+          '<div>شماره: <strong>' + esc(letter.indicatorNumber || '(ثبت نشده)') + '</strong></div>' +
+          '<div>تاریخ: <strong>' + fmtDate(letter.registeredAt || letter.createdAt) + '</strong></div>' +
+          '<div>اولویت: ' + (PRIO_LABELS[letter.priority] || letter.priority) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="type-bar">' + (TYPE_LABELS[letter.type] || letter.type) + '</div>' +
+      '<div class="subject">موضوع: ' + esc(letter.subject) + '</div>' +
+      (letter.senderName ? '<div class="sender-row">فرستنده: <strong>' + esc(letter.senderName) + '</strong></div>' : '') +
+      recvHtml +
+      '<div class="body-sec">' + bodyContent + '</div>' +
+      '<div class="sigs">' +
+        '<div class="sig-blk">' +
+          '<div class="sig-title">تهیه‌کننده</div>' +
+          (sigImg ? '<img class="sig-img" src="' + sigImg + '" />' : '<div style="height:55px;"></div>') +
+          '<div class="sig-line"></div>' +
+          '<div class="sig-name">' + esc(sigName) + '</div>' +
+          '<div style="font-size:11px;color:#94a3b8;">' + esc(sigRole) + '</div>' +
+        '</div>' +
+        '<div class="sig-blk"><div class="sig-title">تأییدکننده</div><div style="height:55px;"></div><div class="sig-line"></div><div class="sig-name"></div></div>' +
+        '<div class="sig-blk"><div class="sig-title">مدیر</div><div style="height:55px;"></div><div class="sig-line"></div><div class="sig-name"></div></div>' +
+      '</div>' +
     '</div>' +
-    '<div class="pz-type-bar">' + (TYPE_LABELS[letter.type] || letter.type) + '</div>' +
-    '<div class="pz-meta">' +
-      '<div class="pz-meta-row"><span class="pz-meta-key">موضوع:</span><span>' + esc(letter.subject) + '</span></div>' +
-      '<div class="pz-meta-row"><span class="pz-meta-key">اولویت:</span><span>' + (PRIO_LABELS[letter.priority] || letter.priority) + '</span></div>' +
-      (letter.senderName ? '<div class="pz-meta-row"><span class="pz-meta-key">فرستنده:</span><span>' + esc(letter.senderName) + '</span></div>' : '') +
-      '<div class="pz-meta-row"><span class="pz-meta-key">ایجادکننده:</span><span>' + esc(letter.createdBy || '—') + '</span></div>' +
-    '</div>' +
-    '<div class="pz-body-sec">' + esc(letter.body || '—') + '</div>' +
-    '<div class="pz-sigs">' +
-      '<div class="pz-sig"><div class="pz-sig-title">تهیه‌کننده</div><div class="pz-sig-name">' + esc(letter.createdBy || '') + '</div><div class="pz-sig-line">امضا</div></div>' +
-      '<div class="pz-sig"><div class="pz-sig-title">تأییدکننده</div><div class="pz-sig-name"></div><div class="pz-sig-line">امضا</div></div>' +
-      '<div class="pz-sig"><div class="pz-sig-title">مدیر</div><div class="pz-sig-name"></div><div class="pz-sig-line">امضا</div></div>' +
-    '</div></div>';
+    '<script>window.onload=function(){window.print();};<\/script>' +
+    '</body></html>';
 
-  document.getElementById('pz').innerHTML = html;
-  window.print();
+  var w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { alert('لطفاً pop-up های مرورگر را فعال کنید'); return; }
+  w.document.write(letterHtml);
+  w.document.close();
+}
+
+// ── Signature modal ────────────────────────────────────────────────────────
+function openSigModal() {
+  var existing = S.user ? (localStorage.getItem('letter_sig_' + S.user.username) || '') : '';
+  var html =
+    '<p style="font-size:12px;color:var(--text2);margin-bottom:10px;">امضا را روی صفحه بکشید یا تصویر آپلود کنید. در پرینت نامه استفاده می‌شود.</p>' +
+    '<canvas id="sigCanvas" width="480" height="160" style="border:1px solid var(--border);border-radius:var(--r);touch-action:none;width:100%;background:#fff;"></canvas>' +
+    (existing ? '<div style="margin-top:8px;font-size:11px;color:var(--success);">✓ امضای فعلی ذخیره شده</div>' : '') +
+    '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
+      '<button class="btn btn-ghost btn-sm" onclick="_sigClear()">🗑 پاک کردن</button>' +
+      '<label class="btn btn-ghost btn-sm" style="cursor:pointer;">📁 آپلود تصویر<input type="file" accept="image/*" style="display:none;" onchange="_sigUpload(this)"></label>' +
+    '</div>';
+  document.getElementById('mo-sig-body').innerHTML = html;
+  openMo('mo-sig');
+  setTimeout(function() {
+    var canvas = document.getElementById('sigCanvas');
+    if (canvas && typeof SignaturePad !== 'undefined') {
+      _sigPad = new SignaturePad(canvas, { penColor: '#1e293b' });
+    }
+  }, 50);
+}
+
+function _sigClear() { if (_sigPad) _sigPad.clear(); }
+
+function _sigUpload(inp) {
+  var file = inp.files[0]; if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.getElementById('sigCanvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var ratio = Math.min(canvas.width / img.width, canvas.height / img.height);
+      var w = img.width * ratio, h = img.height * ratio;
+      ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+      if (_sigPad) _sigPad.off(); // disable pad drawing after upload
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function _sigSave() {
+  if (!S.user) return;
+  var canvas = document.getElementById('sigCanvas');
+  if (!canvas) return;
+  var dataUrl = canvas.toDataURL('image/png');
+  localStorage.setItem('letter_sig_' + S.user.username, dataUrl);
+  closeMo('mo-sig');
+  showToast('امضا ذخیره شد');
+}
+
+function _sigDelete() {
+  if (!S.user) return;
+  localStorage.removeItem('letter_sig_' + S.user.username);
+  closeMo('mo-sig');
+  showToast('امضا حذف شد');
+}
+
+// ── Letterhead background modal ────────────────────────────────────────────
+function openBgModal() {
+  var existing = localStorage.getItem('letter_bg_data') || '';
+  var html =
+    '<p style="font-size:12px;color:var(--text2);margin-bottom:10px;">تصویر سربرگ یا لوگوی سازمانی را آپلود کنید. در پرینت نامه به عنوان پس‌زمینه استفاده می‌شود.</p>' +
+    (existing ? '<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;"><img src="' + existing + '" style="width:100%;max-height:120px;object-fit:contain;display:block;" /></div>' : '') +
+    '<label class="btn btn-primary btn-sm" style="cursor:pointer;display:inline-block;">📁 انتخاب تصویر<input type="file" accept="image/*" style="display:none;" onchange="_bgUpload(this)"></label>' +
+    (existing ? ' <button class="btn btn-danger btn-sm" onclick="_bgDelete()">حذف سربرگ</button>' : '');
+  document.getElementById('mo-bg-body').innerHTML = html;
+  openMo('mo-bg');
+}
+
+function _bgUpload(inp) {
+  var file = inp.files[0]; if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var dataUrl = e.target.result;
+    localStorage.setItem('letter_bg_data', dataUrl);
+    localStorage.setItem('letter_bg_css',
+      'background-image:url(\'' + dataUrl + '\');background-size:100% auto;background-position:top center;background-repeat:no-repeat;');
+    closeMo('mo-bg');
+    showToast('سربرگ ذخیره شد');
+  };
+  reader.readAsDataURL(file);
+}
+
+function _bgDelete() {
+  localStorage.removeItem('letter_bg_data');
+  localStorage.removeItem('letter_bg_css');
+  closeMo('mo-bg');
+  showToast('سربرگ حذف شد');
+}
+
+function showToast(msg) {
+  var t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  document.body.appendChild(t);
+  setTimeout(function() { document.body.removeChild(t); }, 2500);
 }
 
 // ── Modal helpers ──────────────────────────────────────────────────────────
