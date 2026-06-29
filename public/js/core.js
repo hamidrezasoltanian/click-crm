@@ -1,3 +1,4 @@
+/* ═══ public/js/core.js ═══ */
 /* ══ BLOCK 1: Centers placeholder ══ */
 var PROVINCES = [{"id":"p1","row":1,"name":"فارس","potential":1,"biopsyPct":7.28,"owner":"Sarah.hosseini"},{"id":"p2","row":2,"name":"اصفهان","potential":1,"biopsyPct":7.68,"owner":"Sarah.hosseini"},{"id":"p3","row":3,"name":"سیستان و بلوچستان","potential":1,"biopsyPct":4.16,"owner":"Mohammad.seyedsalehi"},{"id":"p4","row":4,"name":"مازندران","potential":1,"biopsyPct":4.93,"owner":"Mohammad.seyedsalehi"},{"id":"p5","row":5,"name":"آذربایجان شرقی","potential":1,"biopsyPct":5.86,"owner":"Mohammad.seyedsalehi"},{"id":"p6","row":6,"name":"لرستان","potential":2,"biopsyPct":2.64,"owner":"Mohammad.seyedsalehi"},{"id":"p7","row":7,"name":"بوشهر","potential":2,"biopsyPct":1.74,"owner":"Mohammad.seyedsalehi"},{"id":"p8","row":8,"name":"گلستان","potential":2,"biopsyPct":2.8,"owner":"Mohammad.seyedsalehi"},{"id":"p9","row":9,"name":"خراسان جنوبی","potential":3,"biopsyPct":1.15,"owner":"Rambod.ghasemi"},{"id":"p10","row":10,"name":"چهارمحال و بختیاری","potential":3,"biopsyPct":1.42,"owner":"Mohammad.seyedsalehi"},{"id":"p11","row":11,"name":"اردبیل","potential":3,"biopsyPct":1.91,"owner":"Mohammad.seyedsalehi"},{"id":"p12","row":12,"name":"خراسان رضوی","potential":1,"biopsyPct":9.64,"owner":"Rambod.ghasemi"},{"id":"p13","row":13,"name":"یزد","potential":2,"biopsyPct":1.71,"owner":"Rambod.ghasemi"},{"id":"p14","row":14,"name":"قم","potential":2,"biopsyPct":1.94,"owner":"Rambod.ghasemi"},{"id":"p15","row":15,"name":"زنجان","potential":2,"biopsyPct":1.59,"owner":"Rambod.ghasemi"},{"id":"p16","row":16,"name":"مرکزی","potential":2,"biopsyPct":2.15,"owner":"Rambod.ghasemi"},{"id":"p17","row":17,"name":"گیلان","potential":2,"biopsyPct":3.81,"owner":"Rambod.ghasemi"},{"id":"p18","row":18,"name":"خراسان شمالی","potential":3,"biopsyPct":1.29,"owner":"Rambod.ghasemi"},{"id":"p19","row":19,"name":"ایلام","potential":3,"biopsyPct":0.87,"owner":"Rambod.ghasemi"},{"id":"p20","row":20,"name":"خوزستان","potential":1,"biopsyPct":7.07,"owner":"Reyhane.kashisaz"},{"id":"p21","row":21,"name":"کرمانشاه","potential":1,"biopsyPct":2.93,"owner":"Reyhane.kashisaz"},{"id":"p22","row":22,"name":"آذربایجان غربی","potential":1,"biopsyPct":4.9,"owner":"Reyhane.kashisaz"},{"id":"p23","row":23,"name":"کرمان","potential":1,"biopsyPct":4.75,"owner":"Reyhane.kashisaz"},{"id":"p24","row":24,"name":"البرز","potential":2,"biopsyPct":4.07,"owner":"Reyhane.kashisaz"},{"id":"p25","row":25,"name":"همدان","potential":2,"biopsyPct":2.6,"owner":"Reyhane.kashisaz"},{"id":"p26","row":26,"name":"قزوین","potential":2,"biopsyPct":1.91,"owner":"Reyhane.kashisaz"},{"id":"p27","row":27,"name":"کردستان","potential":2,"biopsyPct":2.4,"owner":"Reyhane.kashisaz"},{"id":"p28","row":28,"name":"هرمزگان","potential":2,"biopsyPct":2.66,"owner":"Reyhane.kashisaz"},{"id":"p29","row":29,"name":"کهگیلویه و بویراحمد","potential":3,"biopsyPct":1.07,"owner":"Reyhane.kashisaz"},{"id":"p30","row":30,"name":"سمنان","potential":3,"biopsyPct":1.05,"owner":"Reyhane.kashisaz"}];
 var CENTERS = []; // loaded from IndexedDB
@@ -50,10 +51,12 @@ var _sortField='';
 var _sortDir=1;
 var _selectedCenters=new Set();
 var _provView='grid'; // 'grid' | 'list' | 'kanban'
+var _compactTable=false;
 var _nextTagId=1;var _nextWkId=1;var _nextEvId=1;
 
 // ════════════════════════ JALALI ════════════════════════
 function g2j(gy,gm,gd){var g_d_m=[0,31,59,90,120,151,181,212,243,273,304,334];var gy2=(gm>2)?(gy+1):gy;var days=355666+(365*gy)+Math.floor((gy2+3)/4)-Math.floor((gy2+99)/100)+Math.floor((gy2+399)/400)+gd+g_d_m[gm-1];var jy=-1595+(33*Math.floor(days/12053));days%=12053;jy+=4*Math.floor(days/1461);days%=1461;if(days>365){jy+=Math.floor((days-1)/365);days=(days-1)%365;}var jm=(days<186)?1+Math.floor(days/31):7+Math.floor((days-186)/30);var jd=1+((days<186)?(days%31):((days-186)%30));return[jy,jm,jd];}
+function toJalali(d){var r=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());return r[0]+'-'+String(r[1]).padStart(2,'0')+'-'+String(r[2]).padStart(2,'0');}
 function j2g(jy,jm,jd){var jy2=jy+1595;var days=-355668+(365*jy2)+(Math.floor(jy2/33)*8)+Math.floor(((jy2%33)+3)/4)+jd+((jm<7)?(jm-1)*31:((jm-7)*30)+186);var gy=400*Math.floor(days/146097);days%=146097;if(days>36524){gy+=100*Math.floor(--days/36524);days%=36524;if(days>=365)days++;}gy+=4*Math.floor(days/1461);days%=1461;if(days>365){gy+=Math.floor((days-1)/365);days=(days-1)%365;}var gd=days+1;var sal_a=[0,31,((gy%4===0&&gy%100!==0)||(gy%400===0))?29:28,31,30,31,30,31,31,30,31,30,31];var gm=0;for(;gm<13&&gd>sal_a[gm];gm++)gd-=sal_a[gm];return[gy,gm,gd];}
 function todayJ(){var d=new Date();return g2j(d.getFullYear(),d.getMonth()+1,d.getDate());}
 function todayStr(){var t=todayJ();return t[0]+'/'+p2(t[1])+'/'+p2(t[2]);}
@@ -81,7 +84,7 @@ var _redoStack=[];
 var MAX_UNDO=50;
 var _undoSuppressed=false;
 var _actPage=0;
-var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
+var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},_weDeletedKeys:[],events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
 // ── Login/Auth helpers ────────────────────────────────────────
@@ -120,6 +123,11 @@ var _serverSynced=false;
 var _saveDebounceTimer=null;
 var _dbServerTs=null; // tracks server updated_at for conflict detection
 var _saveSeq=0; // sequence counter to ignore out-of-order fetch responses
+var _editsKeysCache=null; // invalidated by setE/loadDB for memoized Object.keys(DB.edits)
+function _getEditsKeys(){if(!_editsKeysCache)_editsKeysCache=Object.keys(DB.edits||{});return _editsKeysCache;}
+function _invalidateEditsCache(){_editsKeysCache=null;}
+var _wpRenderTimer=null;
+function _debouncedRenderWeekPlan(){clearTimeout(_wpRenderTimer);_wpRenderTimer=setTimeout(renderWeekPlan,80);}
 var _sseClientId=Math.random().toString(36).slice(2)+Date.now().toString(36); // unique per tab, used to exclude own SSE events
 
 async function loadDB(){
@@ -144,12 +152,17 @@ async function loadDB(){
       }
     });
     if(_migrated){saveDB();console.log('[migration] legacy contacts migrated');}
-    _serverSynced=true;
+    _serverSynced=true;_invalidateEditsCache();
   }catch(e){
     console.warn('Server fetch failed, using empty DB:',e.message);
   }finally{
     var _sp2=document.getElementById('loadingSpinner');if(_sp2)_sp2.style.display='none';
   }
+}
+function _weRemove(k){
+  delete DB.weekEntries[k];
+  if(!DB._weDeletedKeys)DB._weDeletedKeys=[];
+  if(DB._weDeletedKeys.indexOf(k)<0)DB._weDeletedKeys.push(k);
 }
 function _saveDBNow(){
   var payload=JSON.parse(JSON.stringify(DB));
@@ -158,19 +171,41 @@ function _saveDBNow(){
   return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(payload)})
     .then(function(r){
       if(r.status===409){
-        showToast('⚠ کاربر دیگری تغییراتی ذخیره کرده — صفحه بارگذاری می‌شود',5000);
-        setTimeout(function(){location.reload();},5500);
-        return;
+        // Merge latest server data and retry once — no page reload
+        return fetch('/api/data/db').then(function(r2){return r2.ok?r2.json():null;}).then(function(d){
+          if(!d||typeof d!=='object'){showToast('⚠ خطای همگام‌سازی — لطفاً صفحه را رفرش کنید',5000);return;}
+          if(d._serverTs)_dbServerTs=d._serverTs;
+          // Merge: local edits + weekEntries win over server (preserve unsaved work)
+          var merged=Object.assign({},DB,d);
+          merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
+          // Don't let server revive locally-deleted entries
+          (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
+          merged.edits=Object.assign({},d.edits||{},DB.edits||{});
+          // Preserve local read=true for notifications on 409 retry
+          if(DB.notifications&&d.notifications){
+            var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
+            merged.notifications=(d.notifications||[]).map(function(n){return _lr409[n.id]?Object.assign({},n,{read:true}):n;});
+          }
+          delete merged._serverTs;delete merged._clientTs;
+          Object.keys(merged).forEach(function(k){DB[k]=merged[k];});
+          // Retry save with updated timestamp
+          var p2=JSON.parse(JSON.stringify(DB));
+          if(_dbServerTs)p2._clientTs=_dbServerTs;
+          return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(p2)})
+            .then(function(r3){if(!r3.ok)return;return r3.json().then(function(res){if(res&&res._serverTs)_dbServerTs=res._serverTs;if(seq===_saveSeq)DB._weDeletedKeys=[];});})
+            .catch(function(){});
+        }).catch(function(){showToast('⚠ خطای شبکه — لطفاً صفحه را رفرش کنید',5000);});
       }
       return r.json().then(function(result){
         if(result&&result._serverTs&&seq===_saveSeq)_dbServerTs=result._serverTs;
+        if(seq===_saveSeq)DB._weDeletedKeys=[];
       });
     })
     .catch(function(e){console.warn('saveDB sync failed:',e.message);});
 }
 function saveDB(){
   clearTimeout(_saveDebounceTimer);
-  _saveDebounceTimer=setTimeout(function(){_saveDBNow();},300);
+  _saveDebounceTimer=setTimeout(function(){_saveDBNow();},600);
 }
 function saveDBSync(){clearTimeout(_saveDebounceTimer);return _saveDBNow();}
 
@@ -214,5 +249,41 @@ async function downloadServerBackup(){
     a.click();
     showToast('✅ بکاپ سرور دانلود شد',2500);
   }catch(e){showToast('⚠ خطا در دریافت بکاپ: '+e.message);}
+}
+
+function getWeekLabelForDate(dateStr){
+  if(!dateStr) return '';
+  var parts = dateStr.split('/').map(Number);
+  if(parts.length!==3) return '';
+  try {
+    if(typeof getYearWeeks !== 'function') return '';
+    var targetMs = jMs(parts[0], parts[1], parts[2]);
+    var weeks = getYearWeeks(parts[0]);
+    var w = weeks.find(function(wk){
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      return targetMs >= wsMs && targetMs <= weMs;
+    });
+    if(w) return 'هفته ' + w.num;
+    
+    var prevWeeks = getYearWeeks(parts[0] - 1);
+    var wPrev = prevWeeks.find(function(wk){
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      return targetMs >= wsMs && targetMs <= weMs;
+    });
+    if(wPrev) return 'هفته ' + wPrev.num;
+    
+    var nextWeeks = getYearWeeks(parts[0] + 1);
+    var wNext = nextWeeks.find(function(wk){
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      return targetMs >= wsMs && targetMs <= weMs;
+    });
+    if(wNext) return 'هفته ' + wNext.num;
+  } catch(e) {
+    console.error('getWeekLabelForDate error:', e);
+  }
+  return '';
 }
 

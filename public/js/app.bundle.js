@@ -1,4 +1,5 @@
 /* ═══ public/js/core.js ═══ */
+/* ═══ public/js/core.js ═══ */
 /* ══ BLOCK 1: Centers placeholder ══ */
 var PROVINCES = [{"id":"p1","row":1,"name":"فارس","potential":1,"biopsyPct":7.28,"owner":"Sarah.hosseini"},{"id":"p2","row":2,"name":"اصفهان","potential":1,"biopsyPct":7.68,"owner":"Sarah.hosseini"},{"id":"p3","row":3,"name":"سیستان و بلوچستان","potential":1,"biopsyPct":4.16,"owner":"Mohammad.seyedsalehi"},{"id":"p4","row":4,"name":"مازندران","potential":1,"biopsyPct":4.93,"owner":"Mohammad.seyedsalehi"},{"id":"p5","row":5,"name":"آذربایجان شرقی","potential":1,"biopsyPct":5.86,"owner":"Mohammad.seyedsalehi"},{"id":"p6","row":6,"name":"لرستان","potential":2,"biopsyPct":2.64,"owner":"Mohammad.seyedsalehi"},{"id":"p7","row":7,"name":"بوشهر","potential":2,"biopsyPct":1.74,"owner":"Mohammad.seyedsalehi"},{"id":"p8","row":8,"name":"گلستان","potential":2,"biopsyPct":2.8,"owner":"Mohammad.seyedsalehi"},{"id":"p9","row":9,"name":"خراسان جنوبی","potential":3,"biopsyPct":1.15,"owner":"Rambod.ghasemi"},{"id":"p10","row":10,"name":"چهارمحال و بختیاری","potential":3,"biopsyPct":1.42,"owner":"Mohammad.seyedsalehi"},{"id":"p11","row":11,"name":"اردبیل","potential":3,"biopsyPct":1.91,"owner":"Mohammad.seyedsalehi"},{"id":"p12","row":12,"name":"خراسان رضوی","potential":1,"biopsyPct":9.64,"owner":"Rambod.ghasemi"},{"id":"p13","row":13,"name":"یزد","potential":2,"biopsyPct":1.71,"owner":"Rambod.ghasemi"},{"id":"p14","row":14,"name":"قم","potential":2,"biopsyPct":1.94,"owner":"Rambod.ghasemi"},{"id":"p15","row":15,"name":"زنجان","potential":2,"biopsyPct":1.59,"owner":"Rambod.ghasemi"},{"id":"p16","row":16,"name":"مرکزی","potential":2,"biopsyPct":2.15,"owner":"Rambod.ghasemi"},{"id":"p17","row":17,"name":"گیلان","potential":2,"biopsyPct":3.81,"owner":"Rambod.ghasemi"},{"id":"p18","row":18,"name":"خراسان شمالی","potential":3,"biopsyPct":1.29,"owner":"Rambod.ghasemi"},{"id":"p19","row":19,"name":"ایلام","potential":3,"biopsyPct":0.87,"owner":"Rambod.ghasemi"},{"id":"p20","row":20,"name":"خوزستان","potential":1,"biopsyPct":7.07,"owner":"Reyhane.kashisaz"},{"id":"p21","row":21,"name":"کرمانشاه","potential":1,"biopsyPct":2.93,"owner":"Reyhane.kashisaz"},{"id":"p22","row":22,"name":"آذربایجان غربی","potential":1,"biopsyPct":4.9,"owner":"Reyhane.kashisaz"},{"id":"p23","row":23,"name":"کرمان","potential":1,"biopsyPct":4.75,"owner":"Reyhane.kashisaz"},{"id":"p24","row":24,"name":"البرز","potential":2,"biopsyPct":4.07,"owner":"Reyhane.kashisaz"},{"id":"p25","row":25,"name":"همدان","potential":2,"biopsyPct":2.6,"owner":"Reyhane.kashisaz"},{"id":"p26","row":26,"name":"قزوین","potential":2,"biopsyPct":1.91,"owner":"Reyhane.kashisaz"},{"id":"p27","row":27,"name":"کردستان","potential":2,"biopsyPct":2.4,"owner":"Reyhane.kashisaz"},{"id":"p28","row":28,"name":"هرمزگان","potential":2,"biopsyPct":2.66,"owner":"Reyhane.kashisaz"},{"id":"p29","row":29,"name":"کهگیلویه و بویراحمد","potential":3,"biopsyPct":1.07,"owner":"Reyhane.kashisaz"},{"id":"p30","row":30,"name":"سمنان","potential":3,"biopsyPct":1.05,"owner":"Reyhane.kashisaz"}];
 var CENTERS = []; // loaded from IndexedDB
@@ -251,7 +252,44 @@ async function downloadServerBackup(){
   }catch(e){showToast('⚠ خطا در دریافت بکاپ: '+e.message);}
 }
 
+function getWeekLabelForDate(dateStr){
+  if(!dateStr) return '';
+  var parts = dateStr.split('/').map(Number);
+  if(parts.length!==3) return '';
+  try {
+    if(typeof getYearWeeks !== 'function') return '';
+    var targetMs = jMs(parts[0], parts[1], parts[2]);
+    var weeks = getYearWeeks(parts[0]);
+    var w = weeks.find(function(wk){
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      return targetMs >= wsMs && targetMs <= weMs;
+    });
+    if(w) return 'هفته ' + w.num;
+    
+    var prevWeeks = getYearWeeks(parts[0] - 1);
+    var wPrev = prevWeeks.find(function(wk){
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      return targetMs >= wsMs && targetMs <= weMs;
+    });
+    if(wPrev) return 'هفته ' + wPrev.num;
+    
+    var nextWeeks = getYearWeeks(parts[0] + 1);
+    var wNext = nextWeeks.find(function(wk){
+      var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+      var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+      return targetMs >= wsMs && targetMs <= weMs;
+    });
+    if(wNext) return 'هفته ' + wNext.num;
+  } catch(e) {
+    console.error('getWeekLabelForDate error:', e);
+  }
+  return '';
+}
 
+
+/* ═══ public/js/settings.js ═══ */
 /* ═══ public/js/settings.js ═══ */
 // ════════════════════════ SETTINGS ════════════════════════════════════
 
@@ -960,7 +998,109 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
     }
   }
   DB.edits[k][field]=val;DB.edits[k]._ts=nowTs();_invalidateEditsCache();
-  if(field==='status'&&val==='غیرفعال'&&!_undoSuppressed)setTimeout(function(){_promptLostReason(type,id);},400);if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();if(field==='status')DB.edits[k]._statusChangedTs=nowTs();if(field==='followupDate'&&val){(function(){var _p=(val+'').split('/').map(Number);if(_p.length!==3||isNaN(_p[0]))return;var _ndMs=jMs(_p[0],_p[1],_p[2]);Object.keys(DB.weekEntries||{}).forEach(function(_wk){var _we=DB.weekEntries[_wk];if(_we.rtype!==type||_we.rid!==id||_we.done)return;var _wId=_wk.split(':::')[0];var _mWk=(wpGetWeeks()||[]).find(function(w){return w.id===_wId;});if(!_mWk)return;var _wsMs=jMs(_mWk.wsArr[0],_mWk.wsArr[1],_mWk.wsArr[2]);var _weMs=jMs(_mWk.weArr[0],_mWk.weArr[1],_mWk.weArr[2]);if(_ndMs>=_wsMs&&_ndMs<=_weMs)_we.scheduledDate=val;});})();}saveDB();flashRow(id);if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);if(field==='followupDate'&&currentTab==='weekplan')setTimeout(renderWeekPlan,50);if(field==='owner'&&val&&typeof sendNotif==='function'){(function(){var _oldOwner=(DB.edits[k]||{})._prevOwner||'';if(val!==_oldOwner&&val!==currentUser){var _cn=_getCenterName(type,id);sendNotif(val,'مرکز "'+_cn+'" به شما واگذار شد',type+'_'+id,[],'owner_change',{centerKey:type+'_'+id});}DB.edits[k]._prevOwner=val;})();}var _cFields=['contactName','contactTitle','phones','address','contacts'];if(_cFields.indexOf(field)>=0){  var _ce=DB.edits[k];  fetch('/api/contacts/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},    body:JSON.stringify({centerName:_getCenterName(type,id),      contacts:_ce.contacts||[],address:_ce.address||''})  }).catch(function(){});}}
+  if(field==='status'&&val==='غیرفعال'&&!_undoSuppressed)setTimeout(function(){_promptLostReason(type,id);},400);
+  if(field==='status'||field==='lead'||field==='potential')DB.edits[k]._lastActivity=nowTs();
+  if(field==='status')DB.edits[k]._statusChangedTs=nowTs();
+  if(field==='followupDate'&&val){
+    (function(){
+      var _p=(val+'').split('/').map(Number);
+      if(_p.length!==3||isNaN(_p[0]))return;
+      var _ndMs=jMs(_p[0],_p[1],_p[2]);
+      Object.keys(DB.weekEntries||{}).forEach(function(_wk){
+        var _we=DB.weekEntries[_wk];
+        if(_we.rtype!==type||_we.rid!==id||_we.done)return;
+        var _wId=_wk.split(':::')[0];
+        var _mWk=(wpGetWeeks()||[]).find(function(w){return w.id===_wId;});
+        if(!_mWk)return;
+        var _wsMs=jMs(_mWk.wsArr[0],_mWk.wsArr[1],_mWk.wsArr[2]);
+        var _weMs=jMs(_mWk.weArr[0],_mWk.weArr[1],_mWk.weArr[2]);
+        if(_ndMs>=_wsMs&&_ndMs<=_weMs)_we.scheduledDate=val;
+      });
+      // Automatically schedule a week entry for this future week if it doesn't exist
+      var foundWeek=null;
+      var yrs=[_p[0]-1,_p[0],_p[0]+1];
+      for(var i=0;i<yrs.length;i++){
+        var yr=yrs[i];
+        var wks=typeof getYearWeeks==='function'?getYearWeeks(yr):[];
+        for(var j=0;j<wks.length;j++){
+          var wk=wks[j];
+          var wsMs=jMs(wk.wsArr[0],wk.wsArr[1],wk.wsArr[2]);
+          var weMs=jMs(wk.weArr[0],wk.weArr[1],wk.weArr[2]);
+          if(_ndMs>=wsMs&&_ndMs<=weMs){foundWeek=wk;break;}
+        }
+        if(foundWeek)break;
+      }
+      if(foundWeek){
+        var newKey=wpEntryKey(foundWeek.id,type,id);
+        if(!DB.weekEntries[newKey]){
+          var cname=_getCenterName(type,id)||(type+'_'+id);
+          DB.weekEntries[newKey]={
+            scheduledDate:val,
+            done:false,
+            doneDate:null,
+            rtype:type,
+            rid:id,
+            recKey:type+'_'+id,
+            centerName:cname,
+            actionType:'call',
+            addedBy:currentUser
+          };
+          (function(_k,_we){
+            var _pts=_k.split(':::');
+            fetch('/api/week-entries',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({
+                id:'we_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+                weekId:_pts[0],
+                recKey:_pts[1],
+                rtype:_we.rtype,
+                rid:_we.rid,
+                scheduledDate:_we.scheduledDate||null,
+                actionType:_we.actionType||'call',
+                done:false,
+                doneDate:null,
+                addedBy:_we.addedBy||currentUser,
+                centerName:_we.centerName||''
+              })
+            }).then(function(r){return r.ok?r.json():null;}).then(function(d){
+              if(d&&d.id&&DB.weekEntries[_k])DB.weekEntries[_k].sqlId=d.id;
+            }).catch(function(){});
+          })(newKey,DB.weekEntries[newKey]);
+        } else {
+          DB.weekEntries[newKey].scheduledDate=val;
+        }
+      }
+    })();
+  }
+  saveDB();
+  flashRow(id);
+  if(currentTab==='kpi'&&(field==='status'||field==='lead'||field==='owner'))setTimeout(renderKPIPanel,300);
+  if(currentTab==='manager'&&(field==='status'||field==='lead'||field==='owner'||field==='followupDate'))setTimeout(renderManagerPanel,300);
+  if(field==='followupDate'&&currentTab==='weekplan')setTimeout(renderWeekPlan,50);
+  if(field==='owner'&&val&&typeof sendNotif==='function'){
+    (function(){
+      var _oldOwner=(DB.edits[k]||{})._prevOwner||'';
+      if(val!==_oldOwner&&val!==currentUser){
+        var _cn=_getCenterName(type,id);
+        sendNotif(val,'مرکز "'+_cn+'" به شما واگذار شد',type+'_'+id,[],'owner_change',{centerKey:type+'_'+id});
+      }
+      DB.edits[k]._prevOwner=val;
+    })();
+  }
+  var _cFields=['contactName','contactTitle','phones','address','contacts'];
+  if(_cFields.indexOf(field)>=0){
+    var _ce=DB.edits[k];
+    fetch('/api/contacts/'+encodeURIComponent(k),{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        centerName:_getCenterName(type,id),
+        contacts:_ce.contacts||[],
+        address:_ce.address||''
+      })
+    }).catch(function(){});
+  }}
 function _lrSelect(btn,reason){
   document.querySelectorAll('[data-lrb]').forEach(function(b){
     b.style.background='var(--bg-raised)';b.style.color='var(--text-primary)';b.style.borderColor='var(--border)';
@@ -1023,6 +1163,7 @@ function redoEdit(){
 }
 
 
+/* ═══ public/js/data.js ═══ */
 /* ═══ public/js/data.js ═══ */
 // ════════════════════════ DATA HELPERS ════════════════
 // تهران + ۳۰ استان دیگر — cached
@@ -1125,6 +1266,7 @@ function isOverdue(type,id){
 
 
 /* ═══ public/js/ui-core.js ═══ */
+/* ═══ public/js/ui-core.js ═══ */
 // ════════════════════════ UI FLASH / TOAST ════════════
 function flashRow(id){
   var r=document.querySelector('[data-rowid="'+id+'"]');
@@ -1157,7 +1299,7 @@ function switchTab(tab){
   currentTab=tab;
   try{localStorage.setItem('_st',tab);}catch(e){}
   _navPush(tab, null);
-  ['home','provinces','weekplan','calendar','checklist','activity','changelog','tasks','manager','kpi','mtr','pricing','proforma','reports'].forEach(function(t){
+  ['home','provinces','weekplan','calendar','checklist','activity','changelog','tasks','manager','kpi','mtr','pricing','proforma','reports','hcp'].forEach(function(t){
     var b=document.getElementById('tab_'+t);if(b)b.classList.toggle('active',t===tab);
   });
   document.getElementById('dash').style.display=(tab==='provinces')?'':'none';
@@ -1181,6 +1323,8 @@ function switchTab(tab){
   if(tab==='mtr'&&typeof mtrLazyInit==='function')mtrLazyInit();
   if(tab==='pricing'&&typeof pricingLazyInit==='function')pricingLazyInit();
   if(tab==='proforma'){if(window._pfVueRefresh)window._pfVueRefresh();else if(typeof renderProformaPanel==='function')renderProformaPanel();}
+  var hcpP=document.getElementById('hcpPanel');if(hcpP)hcpP.style.display=(tab==='hcp')?'':'none';
+  if(tab==='hcp'&&typeof renderHCPPanel==='function')renderHCPPanel();
   var spPanel=document.getElementById('supportPanel');if(spPanel)spPanel.style.display=(tab==='support')?'':'none';
   var hrPanel=document.getElementById('hrPanel');if(hrPanel)hrPanel.style.display=(tab==='hr')?'':'none';
   if(tab==='support'&&typeof renderSupportPanel==='function')renderSupportPanel();
@@ -1347,6 +1491,7 @@ window.addEventListener('popstate', function(e) {
 });
 
 
+/* ═══ public/js/dashboard.js ═══ */
 /* ═══ public/js/dashboard.js ═══ */
 // ════════════════════════ DASHBOARD ═══════════════════
 
@@ -1938,6 +2083,7 @@ function _submitQCL(rtype,rid,modalId){
   }
   if(fd)setE(rtype,rid,'followupDate',fd);
   saveDB();closeModal(modalId);showToast('✓ تماس ثبت شد');
+  if(typeof renderExpertDashboard==='function')renderExpertDashboard();
 }
 function _renderExpertDash(el){
   if(!el)return;
@@ -2658,6 +2804,7 @@ function bannerSnooze(rtype,id,ev){
 }
 
 
+/* ═══ public/js/provinces.js ═══ */
 /* ═══ public/js/provinces.js ═══ */
 // ════════════════════════ TABLE RENDER ════════════════
 function getFiltered(){
@@ -3396,6 +3543,7 @@ function createTagPrompt(){
 
 
 /* ═══ public/js/center-modal.js ═══ */
+/* ═══ public/js/center-modal.js ═══ */
 // ════════════════════════ JDP ══════════════════════════
 var _jdpOutsideHandler=null;
 function openJDP(inp,cb){
@@ -3551,6 +3699,7 @@ function hideContactPopup() {
 }
 
 
+/* ═══ public/js/pricing.js ═══ */
 /* ═══ public/js/pricing.js ═══ */
 // ══════════════════════ PRICING MODULE ══════════════════════════════════════
 var _plInited=false;
@@ -4457,10 +4606,10 @@ function openCenterModal(rtype,id){
   _recentCenters=_recentCenters.filter(function(x){return x.key!==_rcKey;});
   _recentCenters.unshift({key:_rcKey,rtype:rtype,id:id,name:_getCenterName(rtype,id),ts:Date.now()});
   if(_recentCenters.length>8)_recentCenters=_recentCenters.slice(0,8);
-  var prov=_currentProvId;
+  var prov=null;
   // For PC centers: ID encodes the province (format: 'provId||n') — extract first
   if(rtype==='pc'&&typeof id==='string'&&id.indexOf('||')>=0){
-    prov=id.split('||')[0]||prov;
+    prov=id.split('||')[0];
   }
   if(!prov){
     // Search PC cache FIRST (before DB.extra) to avoid ID collisions with extra centers
@@ -4477,13 +4626,16 @@ function openCenterModal(rtype,id){
       // Fall back to full province search (includes DB.extra)
       getAllProvinces().some(function(p){
         var pt=getProvType(p.id);
-        if(pt===rtype||rtype==='center'&&p.id==='tehran'){
+        if(pt===rtype||(rtype==='center'&&p.id==='tehran')){
           var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
           if(c){prov=p.id;return true;}
         }
         return false;
       });
     }
+  }
+  if(!prov){
+    prov=_currentProvId||'tehran';
   }
   // DB.extra wins over PC cache when IDs collide — check it first
   var r=(DB.extra||[]).find(function(x){
@@ -4591,10 +4743,11 @@ function openCenterModal(rtype,id){
     +'<label>تاریخ پیگیری بعدی</label>'
     +'<div style="display:flex;gap:5px;align-items:center">'
     +'<input id="mfd_'+id+'" type="text" value="'+fd+'" readonly class="fd-inp'+(fd&&fd<today?' ov':'')+'" style="cursor:pointer;flex:1" '
-    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
-    +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
+    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);var _lbl=document.getElementById(\'mfd_wk_'+id+'\');if(_lbl){_lbl.textContent=v?\' (\'+getWeekLabelForDate(v)+\')\':\'\';}renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
+    +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';var _lbl=document.getElementById(\'mfd_wk_'+id+'\');if(_lbl){_lbl.textContent=\'\';}renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
     +'<button onclick="convertFollowupToTask(\''+esc(rtype)+'\',\''+esc(r.id)+'\')" title="تبدیل به وظیفه" style="background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">📌 وظیفه</button>'
     +'</div>'
+    +'<div id="mfd_wk_'+id+'" style="font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:700">'+(fd?' ('+getWeekLabelForDate(fd)+')':'')+'</div>'
     +'<label>برچسب‌ها</label>'
     +'<div id="tagArea_'+id+'" style="display:flex;flex-wrap:wrap;gap:4px;padding:7px;background:var(--bg-raised);border-radius:6px;min-height:30px;border:1px solid var(--border)">'
     +tgs.map(function(tid){var t=tagById(tid);return t?'<span class="tag-badge" style="background:'+_safeColor(t.color)+';display:inline-flex;align-items:center;gap:3px">'+esc(t.name)+'<button onclick="removeCenterTag(event,\''+rtype+'\',\''+r.id+'\',\''+tid+'\')" style="background:rgba(0,0,0,.2);border:none;color:var(--text-primary);width:14px;height:14px;border-radius:50%;cursor:pointer;font-size:9px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center">✕</button></span>':'';}).join('')
@@ -4604,9 +4757,9 @@ function openCenterModal(rtype,id){
     +'<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;margin-top:6px;border:1px solid var(--border)">'
     +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">'
     +'<span>📞 اطلاعات تماس</span>'
-    +'<button onclick="addContact(\''+rtype+'\',\''+r.id+'\',\''+id+'\')" style="padding:3px 10px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:11px;font-family:inherit;cursor:pointer;font-weight:700">+ افزودن مخاطب</button>'
+    +'<button onclick="if(typeof _hcpOpenLinkModal===\'function\')_hcpOpenLinkModal(\''+rtype+'\',\''+r.id+'\',\''+id+'\');else addContact(\''+rtype+'\',\''+r.id+'\',\''+id+'\')" style="padding:3px 10px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:11px;font-family:inherit;cursor:pointer;font-weight:700">+ افزودن مخاطب</button>'
     +'</div>'
-    +'<div id="contactsArea_'+id+'">'+_buildContactsHTML(rtype,r.id,id)+'</div>'
+    +'<div id="contactsArea_'+id+'">⏳ در حال بارگذاری پزشکان متصل...</div>'
     // آدرس
     +'<label style="font-size:10px;margin-top:8px;display:block">آدرس</label>'
     +'<textarea id="maddr_'+id+'" placeholder="آدرس کامل مرکز..." rows="2" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl" '
@@ -4715,6 +4868,7 @@ function openCenterModal(rtype,id){
     if(mtrHtml) body+=mtrHtml;
   }
   openModal('cm_'+id,'🏥 '+esc(displayName),body,foot,{lg:true});
+  if(typeof _hcpLoadCenterAffiliations==='function'){setTimeout(function(){_hcpLoadCenterAffiliations(rtype,r.id,id);},20);}
   if(window.umGetColor){setTimeout(function(){document.querySelectorAll('.owner-dot[data-uid]').forEach(function(d){var u=decodeURIComponent(d.dataset.uid);if(u)d.style.background=umGetColor(u);});},0);}
   // ── قیمت‌گذاری ──
   (function(_rid,_rname){
@@ -5114,6 +5268,7 @@ function updateContactPhone(rtype,id,ci,pi,val){
 }
 
 
+/* ═══ public/js/weekplan.js ═══ */
 /* ═══ public/js/weekplan.js ═══ */
 // ════════════════════════ NOTES ════════════════════════
 function addNote(type,id,text,inp){
@@ -6079,6 +6234,13 @@ function wpMarkDoneKey(eKey){
     +'<label style="font-size:12px;font-weight:700;color:#166534;display:block;margin-bottom:6px">💰 مبلغ قرارداد (میلیون تومان) — اختیاری</label>'
     +'<input id="_mdk_amount" type="number" min="0" step="0.1" placeholder="مثلاً: 12.5" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #86efac;border-radius:5px;font-size:12px;font-family:inherit">'
     +'</div>'
+    +'<div id="_mdk_inactive_sec" style="display:none;margin-bottom:10px;padding:10px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:7px">'
+    +'<label style="font-size:12px;font-weight:700;color:#991b1b;display:block;margin-bottom:6px">❌ دلیل غیرفعال شدن — اختیاری</label>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'
+    +['رقیب برد','قیمت بالا','نیاز نداشتن','زمان‌بندی نامناسب','عدم دسترسی به تصمیم‌گیر','سایر'].map(function(r){return'<button type="button" onclick="_mdkLostSelect(this,\''+r+'\')" data-lrb="1" style="padding:4px 10px;border-radius:20px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:11px;font-family:inherit">'+r+'</button>';}).join('')
+    +'</div>'
+    +'<input type="hidden" id="_mdk_lost_reason">'
+    +'</div>'
     +'<label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">📝 یادداشت (اختیاری)</label>'
     +'<textarea id="_mdk_note" rows="2" placeholder="خلاصه مکالمه یا نتیجه..." style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical"></textarea>'
     +'</div>';
@@ -6096,6 +6258,7 @@ function _mdkSelectOutcome(lbl,val){
   if(r)r.checked=true;
   document.getElementById('_mdk_followup_sec').style.display=val==='followup'?'':'none';
   document.getElementById('_mdk_won_sec').style.display=val==='won'?'':'none';
+  document.getElementById('_mdk_inactive_sec').style.display=val==='inactive'?'':'none';
   if(val==='followup'){
     // pre-fill default date if empty
     var nd=document.getElementById('_mdk_nextdate');
@@ -6106,6 +6269,11 @@ function _mdkSelectOutcome(lbl,val){
     }
   }
   _mdkCheckSubmit();
+}
+function _mdkLostSelect(btn,reason){
+  document.querySelectorAll('[data-lrb]').forEach(function(b){b.style.background='#fee2e2';b.style.borderColor='#fca5a5';});
+  btn.style.background='#dc2626';btn.style.color='#fff';btn.style.borderColor='#dc2626';
+  var inp=document.getElementById('_mdk_lost_reason');if(inp)inp.value=reason;
 }
 function _mdkCheckSubmit(){
   var r=document.querySelector('[name="_mdk_outcome"]:checked');
@@ -6137,6 +6305,7 @@ function _wpFinishDone(eKey){
   var note=(document.getElementById('_mdk_note')||{}).value||'';
   var nextDate=(document.getElementById('_mdk_nextdate')||{}).value||'';
   var amount=parseFloat((document.getElementById('_mdk_amount')||{}).value||'')||0;
+  var lostReason=(document.getElementById('_mdk_lost_reason')||{}).value||'';
 
   // Mark week entry done
   we.done=true;we.doneDate=todayStr();we.doneResult=outcome;we.doneNote=note;
@@ -6148,13 +6317,34 @@ function _wpFinishDone(eKey){
   if(actionType==='visit'){DB.visitLog.push(logEntry);}
   else{DB.callLog.push(logEntry);}
 
+  // ── Mirror to DB.changeLog so _getTodayActivities() finds this entry ──────
+  DB.changeLog=DB.changeLog||[];
+  var _clEntry={at:new Date().toISOString(),by:currentUser||'',rkey:rtype+'_'+rid,field:actionType==='visit'?'visit':'call',val:outcome+(note?' — '+note:'')};
+  DB.changeLog.push(_clEntry);
+  if(DB.changeLog.length>500)DB.changeLog=DB.changeLog.slice(-500);
+  fetch('/api/changelog',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_clEntry)}).catch(function(){});
+
   // ── Mirror note to DB.notes ───────────────────────────────────────────────
-  if(note&&rtype&&rid){
+  if(rtype&&rid){
     if(!DB.notes)DB.notes={};
     var _dnKey=rtype+'_'+rid;
     if(!DB.notes[_dnKey])DB.notes[_dnKey]=[];
-    var pfx=actionType==='visit'?'🤝 نتیجه مراجعه: ':'📞 نتیجه تماس: ';
-    DB.notes[_dnKey].push({text:pfx+note,at:new Date().toISOString(),by:currentUser||''});
+    var pfx=actionType==='visit'?'🤝 مراجعه انجام شد: ':'📞 تماس انجام شد: ';
+    var outcomeText = '';
+    if(outcome==='won'){
+      outcomeText = 'قرارداد / فروش بسته شد' + (amount > 0 ? ' (مبلغ: ' + amount + ' میلیون تومان)' : '');
+    } else if(outcome==='inactive'){
+      outcomeText = 'غیرفعال / رد شد' + (lostReason ? ' (دلیل: ' + lostReason + ')' : '');
+    } else {
+      outcomeText = 'نیاز به پیگیری دارد' + (nextDate ? ' (تاریخ پیگیری بعدی: ' + nextDate + ')' : '');
+    }
+    var fullNoteText = pfx + outcomeText + (note ? '\nتوضیح: ' + note : '');
+    DB.notes[_dnKey].push({
+      text: fullNoteText,
+      date: todayStr(),
+      user: USERS[currentUser]||currentUser,
+      ts: Date.now()
+    });
   }
 
   var _foundWeekLabel='';
@@ -6166,7 +6356,11 @@ function _wpFinishDone(eKey){
       DB.salesLog.push({id:Date.now()+1,date:todayStr(),userId:currentUser||'',centerName:cname,centerKey:rtype+'_'+rid,amount:amount,isCash:false});
     }
   } else if(outcome==='inactive'){
-    if(rtype&&rid){setE(rtype,rid,'status','غیرفعال');}
+    if(rtype&&rid){
+      // pre-fill lostReason before setE so _promptLostReason() skips its modal
+      var _ik=recK(rtype,rid);if(!DB.edits[_ik])DB.edits[_ik]={};DB.edits[_ik].lostReason=lostReason||'—';
+      setE(rtype,rid,'status','غیرفعال');
+    }
   } else {
     // followup: schedule next contact
     if(nextDate&&rtype&&rid){
@@ -6971,6 +7165,7 @@ function openDailyMonitor(){
       +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
       +'<thead><tr style="background:var(--bg-raised)">'
       +'<th style="padding:8px 10px;text-align:right">کارشناس</th>'
+      +'<th style="padding:8px 10px;text-align:center">گزارش</th>'
       +'<th style="padding:8px 10px;text-align:center">برنامه امروز</th>'
       +'<th style="padding:8px 10px;text-align:center;color:#16a34a">انجام شده</th>'
       +'<th style="padding:8px 10px;text-align:center;color:#dc2626">انجام نشده</th>'
@@ -7009,33 +7204,47 @@ function openDailyMonitor(){
     });
     body+='</tbody></table></div></div>';
 
-    // Collapsible per-expert detail sections (only experts with actual entries)
+    // Collapsible per-expert detail sections (ALL experts shown for consistency)
     body+='<div style="font-weight:700;font-size:13px;margin-bottom:8px">📍 جزئیات مراکز</div>';
-    Object.keys(byOwner).filter(function(ow){return byOwner[ow].length>0;}).sort().forEach(function(ow){
+    _dmOwnerList.forEach(function(ow){
       var entries=byOwner[ow];
       var owName=ow==='__none__'?'بدون مسئول':(USERS[ow]||ow);
       var owColor=(window.umGetColor?umGetColor(ow):'#94a3b8');
-      var sectionId='dm_sec_'+ow.replace(/[^a-z0-9]/gi,'_');
-      body+='<div style="background:var(--bg-card);border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin-bottom:8px;overflow:hidden">'
+      var sectionId='dm_sec2_'+ow.replace(/[^a-z0-9]/gi,'_');
+      var hasEntries=entries&&entries.length>0;
+      var overdueCount=(overdueByOwner[ow]||[]).length;
+      var subtitle=hasEntries?(entries.length+' مرکز برنامه‌ریزی شده'):'بدون برنامه امروز';
+      body+='<div style="background:var(--bg-card);border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin-bottom:8px;overflow:hidden;'+(hasEntries?'':'opacity:.6')+'">'
         +'<div onclick="var el=document.getElementById(\''+sectionId+'\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'" '
         +'style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">'
         +'<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:'+owColor+'"></span>'
         +'<span style="font-weight:700;font-size:13px">'+esc(owName)+'</span>'
-        +'<span style="font-size:11px;color:var(--text-muted);margin-right:auto">'+entries.length+' مرکز — کلیک برای باز/بسته</span>'
+        +'<span style="font-size:11px;color:var(--text-muted);margin-right:auto">'+subtitle+' — کلیک برای باز/بسته</span>'
+        +(overdueCount>0?'<span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 7px;font-weight:700">⚠ '+overdueCount+' معوق</span>':'')
         +'</div>'
         +'<div id="'+sectionId+'" style="display:none;padding:8px">';
-      entries.forEach(function(en){
-        var icon=en.done?'✅':'🔴';
-        var actTypeLabel=en.actType==='visit'?'🤝 ویزیت':'📞 تماس';
-        body+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px">'
-          +'<span style="font-size:16px">'+icon+'</span>'
-          +'<span style="flex:1">'+esc(en.name)+'</span>'
-          +'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:8px;border:1px solid #7dd3fc">'+actTypeLabel+'</span>'
-          +'<span style="font-size:10px;color:var(--text-muted)">'+esc(en.status)+'</span>'
-          +'</div>';
-      });
+      if(hasEntries){
+        entries.forEach(function(en){
+          var icon=en.done?'✅':'🔴';
+          var actTypeLabel=en.actType==='visit'?'🤝 ویزیت':'📞 تماس';
+          body+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px">'
+            +'<span style="font-size:16px">'+icon+'</span>'
+            +'<span style="flex:1"><a href="#" onclick="closeModal(\'dmModal\');openCenterModal(\''+en.rtype+'\',\''+en.rid+'\');return false;" style="color:#2563eb;text-decoration:none;font-weight:600">'+esc(en.name)+'</a></span>'
+            +'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:8px;border:1px solid #7dd3fc">'+actTypeLabel+'</span>'
+            +'<span style="font-size:10px;color:var(--text-muted)">'+esc(en.status)+'</span>'
+            +'</div>';
+        });
+        if((overdueByOwner[ow]||[]).length>0){
+          body+='<div style="padding:6px 8px;font-size:11px;color:#92400e;background:#fef3c7;border-radius:4px;margin-top:4px">⚠ معوق: '
+            +(overdueByOwner[ow]||[]).map(function(x){return esc(x.name)+' ('+x.date+')';}).join('، ')
+            +'</div>';
+        }
+      } else {
+        body+='<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px">💤 برنامه‌ای برای امروز تعریف نشده</div>';
+      }
       body+='</div></div>';
     });
+
   } else {
     body+='<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:10px">📋</div><div>هیچ کارشناس فعالی یافت نشد</div></div>';
   }
@@ -7260,6 +7469,431 @@ function renderChangelog(){
 }
 
 
+/* ═══ public/js/activity.js ═══ */
+var _dmFilters = {search: '', status: 'all'};
+
+function openDailyMonitor(){
+  if(!_isManager()){showToast('⚠ این بخش فقط برای مدیران است');return;}
+  _dmFilters.search = '';
+  _dmFilters.status = 'all';
+  
+  var today = todayStr();
+  var body = '<div style="font-size:12px">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;background:var(--bg-raised);padding:8px;border-radius:8px;border:1px solid var(--border)">'
+    + '<input type="text" id="dmSearch" placeholder="🔍 جستجو کارشناس یا مرکز..." oninput="_dmFilters.search=this.value;filterDailyMonitor()" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px;min-width:160px">'
+    + '<select id="dmStatus" onchange="_dmFilters.status=this.value;filterDailyMonitor()" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px">'
+    + '<option value="all">🎯 همه وضعیت‌ها</option>'
+    + '<option value="done">✅ انجام شده</option>'
+    + '<option value="notdone">❌ انجام نشده</option>'
+    + '</select>'
+    + '</div>'
+    + '<div id="dmModalBody"></div>'
+    + '</div>';
+
+  var foot = '<button class="btn-secondary" onclick="closeModal(\'dmModal\')">بستن</button>'
+    + '<button class="btn-secondary" onclick="sendReminderToAll()" style="background:#fef3c7;color:#92400e;border-color:#fcd34d">📩 یادآوری به همه</button>'
+    + '<button class="btn-primary" onclick="openDailyMonitor()">🔄 بروزرسانی</button>';
+    
+  openModal('dmModal', '📊 گزارش فعالیت روزانه — ' + today, body, foot, {xl:true});
+  filterDailyMonitor();
+}
+
+function filterDailyMonitor(){
+  _buildPCCache();
+  var today = todayStr();
+  var todayEntries = [];
+  var seenKeys = new Set();
+
+  // 1. Collect week entries scheduled for today
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we = DB.weekEntries[k];
+    if(we.rtype==='mtr') return;
+    if(we.scheduledDate!==today) return;
+    var rtype = we.rtype||'center', rid = we.rid||'';
+    var key = rtype+'_'+rid;
+    seenKeys.add(key);
+    var e = getE(rtype,rid);
+    var owner = _wpGetOwner(we);
+    var name = we.centerName||getRecLabel(rtype+'_'+rid)||'?';
+    var acts = _getTodayActivities(rtype,rid,today);
+    var isDone = we.done||acts.length>0;
+    todayEntries.push({key:k,rtype:rtype,rid:rid,name:name,owner:owner,actType:we.actionType||'call',status:e.status||'بدون تماس',activities:acts,done:isDone});
+  });
+
+  // 2. Collect centers where followupDate === today (not already seen)
+  getAllProvinces().forEach(function(p) {
+    var rt = getProvType(p.id);
+    getProvCenters(p.id).forEach(function(c) {
+      var e = getE(rt,c.id);
+      var owner = e.owner||c.owner||'';
+      if(!owner) return;
+      if(e.followupDate===today) {
+        var key = rt+'_'+c.id;
+        if(!seenKeys.has(key)) {
+          seenKeys.add(key);
+          var acts = _getTodayActivities(rt,c.id,today);
+          var isDone = acts.length>0||(e.status==='قرارداد بسته شد'||e.status==='غیرفعال');
+          todayEntries.push({
+            key: 'followup_'+key,
+            rtype: rt,
+            rid: c.id,
+            name: e.nameOverride||c.name||'?',
+            owner: owner,
+            actType: 'call',
+            status: e.status||'بدون تماس',
+            activities: acts,
+            done: isDone
+          });
+        }
+      }
+    });
+  });
+
+  var searchQ = fNorm(_dmFilters.search || '');
+  var statusFilter = _dmFilters.status;
+
+  var filteredEntries = todayEntries.filter(function(en) {
+    var expertName = en.owner === '__none__' ? 'بدون مسئول' : (USERS[en.owner] || en.owner || '');
+    if (searchQ) {
+      var match = fNorm(en.name).indexOf(searchQ) >= 0 || fNorm(expertName).indexOf(searchQ) >= 0;
+      if (!match) return false;
+    }
+    if (statusFilter === 'done' && !en.done) return false;
+    if (statusFilter === 'notdone' && en.done) return false;
+    return true;
+  });
+
+  var totalScheduled = todayEntries.length;
+  var totalDone = todayEntries.filter(function(en){return en.done;}).length;
+  var totalNotDone = totalScheduled - totalDone;
+  var pct = totalScheduled > 0 ? Math.round((totalDone / totalScheduled) * 100) : 0;
+
+  var html = '<div style="background:var(--bg-raised);border-radius:10px;padding:14px;margin-bottom:16px">'
+    + '<div style="font-weight:700;font-size:13px;margin-bottom:10px">📊 خلاصه امروز — ' + today + '</div>'
+    + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">'
+    + '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#16a34a">' + totalScheduled + '</div><div style="font-size:11px;color:#166534">برنامه‌ریزی امروز</div></div>'
+    + '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#16a34a">' + totalDone + '</div><div style="font-size:11px;color:#166534">انجام شده ✔</div></div>'
+    + '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#dc2626">' + totalNotDone + '</div><div style="font-size:11px;color:#991b1b">انجام نشده ✖</div></div>'
+    + '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800;color:#1d4ed8">' + pct + '%</div><div style="font-size:11px;color:#1e40af">درصد انجام</div></div>'
+    + '</div>'
+    + '<div style="background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden">'
+    + '<div style="background:linear-gradient(90deg,#22c55e,#16a34a);height:100%;width:' + pct + '%;transition:width .4s"></div>'
+    + '</div>'
+    + '</div>';
+
+  var byOwner = {};
+  todayEntries.forEach(function(en){
+    var o = en.owner || '__none__';
+    if(!byOwner[o]) byOwner[o] = [];
+    byOwner[o].push(en);
+  });
+
+  var overdueByOwner = {};
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we = DB.weekEntries[k];
+    if(we.done || we.rtype === 'mtr') return;
+    if(!we.scheduledDate || we.scheduledDate >= today) return;
+    var owner = _wpGetOwner(we);
+    if(!owner) return;
+    var acts = _getActivitiesOnDate(we.rtype||'center', we.rid||'', we.scheduledDate);
+    if(acts.length > 0) return;
+    if(!overdueByOwner[owner]) overdueByOwner[owner] = [];
+    overdueByOwner[owner].push({name: we.centerName||getRecLabel((we.rtype||'center')+'_'+(we.rid||'')), date: we.scheduledDate});
+  });
+
+  var allMem = (DB.settings && DB.settings.members) || _DEFAULT_MEMBERS;
+  var activeExperts = allMem.filter(function(m){return m.role !== 'manager';});
+
+  html += '<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:16px">'
+    + '<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">👥 عملکرد کارشناسان</div>'
+    + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr style="background:var(--bg-raised)">'
+    + '<th style="padding:8px 10px;text-align:right">کارشناس</th>'
+    + '<th style="padding:8px 10px;text-align:center">گزارش</th>'
+    + '<th style="padding:8px 10px;text-align:center">برنامه امروز</th>'
+    + '<th style="padding:8px 10px;text-align:center;color:#16a34a">انجام شده</th>'
+    + '<th style="padding:8px 10px;text-align:center;color:#dc2626">انجام نشده</th>'
+    + '<th style="padding:8px 10px;text-align:center;color:#f59e0b">سررسید گذشته</th>'
+    + '<th style="padding:8px 10px;text-align:center">اقدام</th>'
+    + '</tr></thead><tbody>';
+
+  activeExperts.forEach(function(m, idx) {
+    var ow = m.id;
+    var entries = byOwner[ow] || [];
+    var owName = m.name;
+    var owDone = entries.filter(function(en){return en.done;}).length;
+    var owNotDone = entries.length - owDone;
+    var owOverdue = (overdueByOwner[ow] || []).length;
+    var owColor = (window.umGetColor ? umGetColor(ow) : '#94a3b8');
+    var bg = idx % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-raised)';
+    
+    html += '<tr style="background:' + bg + ';border-bottom:1px solid #f1f5f9">'
+      + '<td style="padding:8px 10px;font-weight:600"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:' + owColor + '"></span>' + esc(owName) + '</span></td>'
+      + '<td style="padding:8px 10px;text-align:center">'
+      + '<button onclick="event.stopPropagation();openExpertReport(\'' + ow + '\')" style="font-size:10px;padding:2px 8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;cursor:pointer;font-family:inherit">📊 گزارش</button>'
+      + '</td>'
+      + '<td style="text-align:center;padding:8px">' + (entries.length > 0 ? entries.length : '<span style="color:var(--text-muted)">بدون برنامه</span>') + '</td>'
+      + '<td style="text-align:center;padding:8px"><span style="background:#dcfce7;color:#166534;border-radius:10px;padding:2px 8px;font-weight:700">' + owDone + '</span></td>'
+      + '<td style="text-align:center;padding:8px"><span style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-weight:700">' + owNotDone + '</span></td>'
+      + '<td style="text-align:center;padding:8px"><span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 8px;font-weight:700">' + owOverdue + '</span></td>'
+      + '<td style="text-align:center;padding:8px">'
+      + (owNotDone > 0 ? '<button onclick="sendReminderToExpert(\'' + ow + '\')" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;padding:3px 10px;cursor:pointer;font-size:10px;font-family:inherit">📩 یادآوری</button>' : '<span style="color:var(--text-muted);font-size:11px">✔ کامل</span>')
+      + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+
+  html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px">📍 جزئیات مراکز</div>';
+  
+  var filteredByOwner = {};
+  filteredEntries.forEach(function(en){
+    var o = en.owner || '__none__';
+    if(!filteredByOwner[o]) filteredByOwner[o] = [];
+    filteredByOwner[o].push(en);
+  });
+
+  var displayedDetails = 0;
+  Object.keys(filteredByOwner).sort().forEach(function(ow){
+    var entries = filteredByOwner[ow];
+    if(!entries.length) return;
+    displayedDetails++;
+    
+    var mObj = allMem.find(function(x){return x.id === ow;});
+    var owName = mObj ? mObj.name : (ow === '__none__' ? 'بدون مسئول' : ow);
+    var owColor = (window.umGetColor ? umGetColor(ow) : '#94a3b8');
+    var sectionId = 'dm_sec_' + ow.replace(/[^a-z0-9]/gi, '_');
+    
+    html += '<div style="background:var(--bg-card);border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin-bottom:8px;overflow:hidden">'
+      + '<div onclick="var el=document.getElementById(\'' + sectionId + '\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'" '
+      + 'style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">'
+      + '<span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:' + owColor + '"></span>'
+      + '<span style="font-weight:700;font-size:13px">' + esc(owName) + '</span>'
+      + '<span style="font-size:11px;color:var(--text-muted);margin-right:auto">' + entries.length + ' مرکز — کلیک برای باز/بسته</span>'
+      + '</div>'
+      + '<div id="' + sectionId + '" style="display:block;padding:8px">';
+    
+    entries.forEach(function(en){
+      var icon = en.done ? '✅' : '🔴';
+      var actTypeLabel = en.actType === 'visit' ? '🤝 ویزیت' : '📞 تماس';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px">'
+        + '<span style="font-size:16px">' + icon + '</span>'
+        + '<span style="flex:1"><a href="#" onclick="closeModal(\'dmModal\');openCenterModal(\''+en.rtype+'\',\''+en.rid+'\');return false;" style="color:#2563eb;text-decoration:none;font-weight:600">' + esc(en.name) + '</a></span>'
+        + '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:8px;border:1px solid #7dd3fc">' + actTypeLabel + '</span>'
+        + '<span style="font-size:10px;color:var(--text-muted)">' + esc(en.status) + '</span>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  if (displayedDetails === 0) {
+    html += '<div style="text-align:center;padding:20px;color:var(--text-muted)">🔍 موردی یافت نشد.</div>';
+  }
+
+  var container = document.getElementById('dmModalBody');
+  if(container) container.innerHTML = html;
+}
+
+function sendReminderToAll(){
+  var today=todayStr();
+  _buildPCCache();
+  var experts={};
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];
+    if(we.done||we.scheduledDate!==today||we.rtype==='mtr')return;
+    var rtype=we.rtype||'center',rid=we.rid||'';
+    var owner=_wpGetOwner(we);
+    if(!owner)return;
+    var acts=_getTodayActivities(rtype,rid,today);
+    if(acts.length>0)return;
+    if(!experts[owner])experts[owner]=[];
+    experts[owner].push(we.centerName||getRecLabel(rtype+'_'+rid)||'?');
+  });
+  var cnt=0;
+  Object.keys(experts).forEach(function(exp){
+    var names=experts[exp];
+    if(!names.length)return;
+    cnt++;
+    var msg='📋 برنامه امروز: '+names.length+' مرکز برای بازدید دارید:\n• '
+      +names.slice(0,5).join('\n• ')
+      +(names.length>5?'\nو '+(names.length-5)+' مورد دیگر':'')
+      +'\nوارد برنامه هفته شوید.';
+    sendNotif(exp,msg,'');
+  });
+  if(cnt>0)showToast('🔔 یادآوری برای '+cnt+' کارشناس ارسال شد',3000);
+  else showToast('✅ همه کارشناسان گزارش داده‌اند');
+}
+
+function _getTodayActivities(rtype,rid,today){
+  var rkey=rtype+'_'+rid;
+  var log=DB.changeLog||[];
+  return log.filter(function(l){
+    if(l.rkey!==rkey)return false;
+    if(!l.at)return false;
+    var d=l.at.slice(0,10);
+    var parts=d.split('-').map(Number);
+    if(parts.length!==3)return false;
+    var jd=g2j(parts[0],parts[1],parts[2]);
+    var jdStr=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+    return jdStr===today;
+  });
+}
+
+function _fieldLabel(field){
+  var map={status:'وضعیت',lead:'سرنخ',potential:'فرصت',followupDate:'تاریخ پیگیری',owner:'مسئول',tags:'برچسب',notes:'یادداشت',contacts:'تماس'};
+  return map[field]||field;
+}
+
+function sendReminderToExpert(expertUser){
+  var today=todayStr();
+  var noActEntries=[];
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];
+    if(we.done||we.scheduledDate!==today||we.rtype==='mtr')return;
+    var rtype=we.rtype||'center',rid=we.rid||'';
+    var e=getE(rtype,rid);
+    var owner=e.owner||'';
+    if(!owner){
+      if(rtype==='center'){var c=CENTERS.find(function(x){return x.id===rid;});if(c&&c.owner)owner=c.owner;}
+      else{_buildPCCache();var _pId=rid.split('||')[0];var _arr=_PC_CACHE[_pId]||[];var _c=_arr.find(function(x){return x.id===rid;});if(_c&&_c.owner)owner=_c.owner;}
+    }
+    if(owner!==expertUser)return;
+    var acts=_getTodayActivities(rtype,rid,today);
+    if(acts.length===0)noActEntries.push(we.centerName||getRecLabel(rtype+'_'+rid)||'?');
+  });
+  if(!noActEntries.length){showToast('✅ این کارشناس برای همه مراکز گزارش داده است');return;}
+  var msg='لطفاً برای مراکز زیر که امروز برنامه دارید گزارش وارد کنید: '+noActEntries.slice(0,5).join('، ')+(noActEntries.length>5?' و '+(noActEntries.length-5)+' مرکز دیگر':'');
+  sendNotif(expertUser,msg,'');
+}
+
+
+
+
+// ════════════════════════ CHANGE LOG PAGE ════════════════════
+var _clFilters = {date:'today', owner:'', search:'', field:''};
+var _clAutoRefreshTimer = null;
+
+function renderChangelog(){
+  var el = document.getElementById('changelogPanel');
+  if(!el) return;
+  if(!_isManager()){
+    el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted)">این بخش فقط برای مدیران است</div>';
+    return;
+  }
+  var today = todayStr();
+  var log = (DB.changeLog||[]).slice().reverse(); // newest first
+
+  // اعمال فیلترها
+  var filtered = log.filter(function(l){
+    if(!l.at || !l.rkey) return false;
+    // فیلتر تاریخ
+    var dp = l.at.slice(0,10).split('-').map(Number);
+    if(dp.length !== 3) return false;
+    var jd = g2j(dp[0],dp[1],dp[2]);
+    var jdStr = jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+    if(_clFilters.date === 'today' && jdStr !== today) return false;
+    if(_clFilters.date === 'week'){
+      var jdMs = jMs(jd[0],jd[1],jd[2]);
+      var todayParts = today.split('/').map(Number);
+      var weekStart = jMs(todayParts[0],todayParts[1],todayParts[2]) - 6*86400*1000;
+      if(jdMs < weekStart) return false;
+    }
+    if(_clFilters.date === 'month'){
+      var todayP = today.split('/').map(Number);
+      if(jd[0] !== todayP[0] || jd[1] !== todayP[1]) return false;
+    }
+    // فیلتر کارشناس
+    if(_clFilters.owner && l.by !== _clFilters.owner) return false;
+    // فیلتر فیلد
+    if(_clFilters.field && l.field !== _clFilters.field) return false;
+    // فیلتر جستجو مرکز
+    if(_clFilters.search){
+      var cName = _clGetName(l.rkey);
+      if(fNorm(cName).indexOf(fNorm(_clFilters.search)) < 0) return false;
+    }
+    return true;
+  });
+
+  // آمار
+  var uniqueCenters = {};
+  var uniqueExperts = {};
+  filtered.forEach(function(l){ uniqueCenters[l.rkey]=true; if(l.by)uniqueExperts[l.by]=true; });
+  var cCount = Object.keys(uniqueCenters).length;
+  var eCount = Object.keys(uniqueExperts).length;
+
+  // ساخت HTML
+  var html = '<div class="cl-wrap">'
+    + '<div class="cl-head">'
+    + '<strong style="font-size:14px;white-space:nowrap">🗃 لاگ تغییرات</strong>'
+    + '<div class="cl-filters">'
+    + '<select class="cl-filter" onchange="_clFilters.date=this.value;renderChangelog()">'
+    + '<option value="today"'+(  _clFilters.date==='today'?' selected':'')+'>امروز</option>'
+    + '<option value="week"'+(_clFilters.date==='week'?' selected':'')+'>۷ روز اخیر</option>'
+    + '<option value="month"'+(_clFilters.date==='month'?' selected':'')+'>این ماه</option>'
+    + '<option value="all"'+(_clFilters.date==='all'?' selected':'')+'>همه</option>'
+    + '</select>'
+    + '<select class="cl-filter" onchange="_clFilters.owner=this.value;renderChangelog()">'
+    + '<option value="">همه کارشناسان</option>'
+    + Object.keys(USERS).filter(function(u){return u!=='guest';}).map(function(u){
+        return '<option value="'+u+'"'+(_clFilters.owner===u?' selected':'')+'>'+esc(USERS[u])+'</option>';
+      }).join('')
+    + '</select>'
+    + '<select class="cl-filter" onchange="_clFilters.field=this.value;renderChangelog()">'
+    + '<option value="">همه فیلدها</option>'
+    + ['status','lead','potential','followupDate','owner','contacts'].map(function(f){
+        return '<option value="'+f+'"'+(_clFilters.field===f?' selected':'')+'>'+_fieldLabel(f)+'</option>';
+      }).join('')
+    + '</select>'
+    + '<input type="text" class="cl-filter" placeholder="جستجو مرکز..." value="'+esc(_clFilters.search||'')+'" oninput="_clFilters.search=this.value;renderChangelog()" style="min-width:130px">'
+    + '</div>'
+    + '<button onclick="renderChangelog()" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-family:inherit" title="بروزرسانی">🔄</button>'
+    + '</div>'
+    // stats bar
+    + '<div class="cl-stats">'
+    + '<div class="cl-stat"><div class="cl-stat-n">'+filtered.length+'</div><div class="cl-stat-l">تغییر</div></div>'
+    + '<div class="cl-stat"><div class="cl-stat-n">'+cCount+'</div><div class="cl-stat-l">مرکز</div></div>'
+    + '<div class="cl-stat"><div class="cl-stat-n">'+eCount+'</div><div class="cl-stat-l">کارشناس</div></div>'
+    + '</div>';
+
+  if(!filtered.length){
+    html += '<div class="cl-empty"><div style="font-size:32px;margin-bottom:10px">📋</div>تغییری در این بازه ثبت نشده</div>';
+  } else {
+    html += '<div style="overflow-x:auto"><table class="cl-table"><thead><tr>'
+      + '<th>زمان</th><th>مرکز</th><th>کارشناس</th><th>فیلد</th><th>مقدار جدید</th>'
+      + '</tr></thead><tbody>'
+      + filtered.slice(0,300).map(function(l){
+          var cName = _clGetName(l.rkey);
+          var dp = l.at.slice(0,10).split('-').map(Number);
+          var jd = g2j(dp[0],dp[1],dp[2]);
+          var jdStr = jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2]);
+          var timeStr = l.at.slice(11,16);
+          var rparts = l.rkey.split('_');
+          var rtype = rparts[0]; var rid = rparts.slice(1).join('_');
+          var fieldBadge = _clFieldBadge(l.field);
+          var valDisplay = _clValDisplay(l.field, l.val);
+          return '<tr><td style="white-space:nowrap;color:var(--text-muted);font-size:11px">'+jdStr+'<br><span style="font-size:10px">'+timeStr+'</span></td>'
+            + '<td><span class="cl-center-link" onclick="openCenterModal(\''+rtype+'\',\''+rid+'\')">'+esc(cName)+'</span></td>'
+            + '<td style="font-size:11px">'+esc(USERS[l.by]||l.by||'—')+'</td>'
+            + '<td>'+fieldBadge+'</td>'
+            + '<td class="cl-val" title="'+esc(String(l.val||''))+'">'+valDisplay+'</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+    if(filtered.length > 300){
+      html += '<div style="padding:10px 16px;text-align:center;font-size:12px;color:var(--text-muted)">نمایش ۳۰۰ مورد از '+filtered.length+' — فیلتر را محدودتر کنید</div>';
+    }
+  }
+  html += '</div>';
+  el.innerHTML = html;
+
+  // auto-refresh every 30s
+  clearTimeout(_clAutoRefreshTimer);
+  if(currentTab === 'changelog'){
+    _clAutoRefreshTimer = setTimeout(function(){if(currentTab==='changelog')renderChangelog();}, 30000);
+  }
+}
+
+
+/* ═══ public/js/tasks.js ═══ */
 /* ═══ public/js/tasks.js ═══ */
 // ════════════════════════ TASK MANAGEMENT ════════════════════════
 // ════════════════════════ TASK MANAGEMENT (Monday-style) ════════════════════════
@@ -8112,6 +8746,7 @@ function _getActivitiesOnDate(rtype, rid, jDateStr){
 
 
 /* ═══ public/js/calendar.js ═══ */
+/* ═══ public/js/calendar.js ═══ */
 // ════════════════════════ CALENDAR ════════════════════
 function initEvents(){if(!DB.events)DB.events=[];if(DB.events.length){var _ids=DB.events.map(function(e){return typeof e.id==='number'&&!isNaN(e.id)?e.id:0;});_nextEvId=Math.max.apply(null,_ids)+1;}}
 function collectCalItems(){
@@ -8343,6 +8978,7 @@ function deleteEv(id){
 
 
 /* ═══ public/js/checklist.js ═══ */
+/* ═══ public/js/checklist.js ═══ */
 
 // ── چک‌لیست: آیتم‌های قابل محاسبه اتوماتیک ──────────────────────
 function _ckAutoComputed(){
@@ -8449,6 +9085,7 @@ function ckNav(delta){var p=_ckDate.split('/').map(Number);var d=jAdd(p[0],p[1],
 function ckToday(){_ckDate=todayStr();renderChecklist();}
 
 
+/* ═══ public/js/activity-log.js ═══ */
 /* ═══ public/js/activity-log.js ═══ */
 // ════════════════════════ ACTIVITY ═══════════════════
 function renderActivity(){
@@ -8737,6 +9374,7 @@ function qsSearch(q){
 }
 
 
+/* ═══ public/js/backup.js ═══ */
 /* ═══ public/js/backup.js ═══ */
 // ════════════════════════ EXPORT / BACKUP ════════════
 function exportCSV(){
@@ -9576,6 +10214,7 @@ function doCleanAll(){
 // ═══════════════════════════════════════════════════════════
 
 /* ═══ public/js/manager.js ═══ */
+/* ═══ public/js/manager.js ═══ */
 // ════════════════════════ INIT ════════════════════════
 var _typeFilterBuilt=false;
 function buildTypeFilter(){
@@ -10205,10 +10844,11 @@ function renderManagerPanel(){
       var own=_wpGetOwner(we)||'';
       var ownName=USERS[own]||own;
       var clr=typeof umGetColor==='function'?umGetColor(own):'#6366f1';
+      var name = we.centerName || getRecLabel(we.recKey || (we.rtype + '_' + we.rid)) || '';
       html+='<div style="border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;font-size:11px">'
         +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">'
         +'<span style="width:8px;height:8px;border-radius:50%;background:'+clr+'"></span>'
-        +'<span style="font-weight:600">'+esc(we.centerName||'')+'</span>'
+        +'<span style="font-weight:600">'+esc(name)+'</span>'
         +'<span style="color:var(--text-muted);font-size:10px">'+esc(ownName)+'</span>'
         +'<span style="margin-right:auto;color:var(--text-muted);font-size:10px">'+esc(we.doneDate||'')+'</span>'
         +'</div>';
@@ -10487,7 +11127,7 @@ function renderManagerPanel(){
       var excess=it.days-it.maxDays;
       var urgColor=excess>14?'#ef4444':excess>7?'#f97316':'#f59e0b';
       html+='<tr style="border-bottom:1px solid var(--border)">'
-        +'<td style="padding:4px 8px;color:var(--text)">'+esc(it.name)+'</td>'
+        +'<td style="padding:4px 8px;"><a href="#" onclick="openCenterModal(\''+it.rtype+'\',\''+it.id+'\');return false;" style="color:#2563eb;text-decoration:none;font-weight:600">'+esc(it.name)+'</a></td>'
         +'<td style="padding:4px 8px;text-align:center"><span style="background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 6px">'+it.lead+'</span></td>'
         +'<td style="padding:4px 8px;text-align:center;color:#64748b">'+esc(ownerName)+'</td>'
         +'<td style="padding:4px 8px;text-align:center;font-weight:700;color:'+urgColor+'">'+it.days+'</td>'
@@ -10506,108 +11146,167 @@ function renderManagerPanel(){
       var rt=getProvType(pr.id);
       getProvCenters(pr.id).forEach(function(c){
         var e=getE(rt,c.id);
-        var comp=e.competitor||'';if(!comp)return;
-        if(!compMap[comp])compMap[comp]={name:comp,centers:0,advantage:'',buyReason:''};
-        compMap[comp].centers++;
+        var comp=(e.competitor||'').trim();
+        if(!comp)return;
+        if(!compMap[comp])compMap[comp]={name:comp,centers:[],advantage:'',buyReason:''};
+        compMap[comp].centers.push({rtype:rt,id:c.id,name:e.nameOverride||c.name,owner:e.owner||c.owner||''});
         if(e.competitorAdvantage&&!compMap[comp].advantage)compMap[comp].advantage=e.competitorAdvantage;
         if(e.buyReasonFromCompetitor&&!compMap[comp].buyReason)compMap[comp].buyReason=e.buyReasonFromCompetitor;
       });
     });
-    var comps=Object.values(compMap).sort(function(a,b){return b.centers-a.centers;});
+    var comps=Object.values(compMap).sort(function(a,b){return b.centers.length-a.centers.length;});
     if(!comps.length)return;
     html+='<div style="background:var(--bg-raised);border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid var(--border)">'
       +'<div style="font-weight:700;margin-bottom:10px;font-size:14px;color:var(--text)">🥊 گزارش رقبا</div>'
       +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
       +'<thead><tr style="background:#f1f5f9">'
       +'<th style="padding:4px 8px;text-align:right;color:#64748b">رقیب</th>'
-      +'<th style="padding:4px 8px;text-align:center;color:#64748b">تعداد مراکز</th>'
-      +'<th style="padding:4px 8px;text-align:right;color:#64748b">مزیت</th>'
+      +'<th style="padding:4px 8px;text-align:right;color:#64748b">مراکز تحت پوشش رقیب</th>'
+      +'<th style="padding:4px 8px;text-align:right;color:#64748b">مزیت رقیب</th>'
       +'<th style="padding:4px 8px;text-align:right;color:#64748b">دلیل خرید</th>'
       +'</tr></thead><tbody>';
     comps.forEach(function(cp){
+      var centersListHtml = cp.centers.map(function(c){
+        var ownerName = USERS[c.owner] || c.owner || '';
+        var displayLabel = esc(c.name) + (ownerName ? ' (' + esc(ownerName) + ')' : '');
+        return '<a href="#" onclick="openCenterModal(\''+c.rtype+'\',\''+c.id+'\');return false;" style="color:#2563eb;text-decoration:none;font-weight:600;margin-left:8px;display:inline-block;background:#eff6ff;padding:2px 6px;border-radius:4px;border:1px solid #bfdbfe;font-size:10px;margin-bottom:4px">📍 '+displayLabel+'</a>';
+      }).join('');
+      
       html+='<tr style="border-bottom:1px solid var(--border)">'
-        +'<td style="padding:4px 8px;font-weight:600;color:var(--text)">'+esc(cp.name)+'</td>'
-        +'<td style="padding:4px 8px;text-align:center"><span style="background:#fee2e2;color:#dc2626;font-weight:700;border-radius:4px;padding:1px 8px">'+cp.centers+'</span></td>'
-        +'<td style="padding:4px 8px;color:#64748b;font-size:10px">'+esc(cp.advantage||'-')+'</td>'
-        +'<td style="padding:4px 8px;color:#64748b;font-size:10px">'+esc(cp.buyReason||'-')+'</td>'
+        +'<td style="padding:8px 8px;font-weight:600;color:var(--text);vertical-align:top;width:120px">'+esc(cp.name)+' <span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;border-radius:10px;padding:2px 6px">'+cp.centers.length+'</span></td>'
+        +'<td style="padding:8px 8px;vertical-align:top">'+centersListHtml+'</td>'
+        +'<td style="padding:8px 8px;color:#64748b;font-size:10px;vertical-align:top">'+esc(cp.advantage||'-')+'</td>'
+        +'<td style="padding:8px 8px;color:#64748b;font-size:10px;vertical-align:top">'+esc(cp.buyReason||'-')+'</td>'
         +'</tr>';
     });
     html+='</tbody></table></div>';
   })();
 
-  // ── Pipeline Value by Stage ───────────────────────────────────
+  // ── 📊 جدول نرخ تبدیل و اثربخشی کارشناسان ──────────────────────────
   (function(){
-    var stageData={};
-    var stageOrder=['لید','سرنخ','فرصت','مشتری'];
-    stageOrder.forEach(function(s){stageData[s]={count:0,value:0};});
+    _buildPCCache();
+    var allMem=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
+    var activeExperts=allMem.filter(function(m){return m.role!=='manager';});
+    
+    var stats={};
+    activeExperts.forEach(function(m){
+      stats[m.id] = {name:m.name, total:0, leads:0, opps:0, custs:0, dormant:0};
+    });
+    
     allProvs.forEach(function(pr){
       var rt=getProvType(pr.id);
       getProvCenters(pr.id).forEach(function(c){
         var e=getE(rt,c.id);
-        var lead=e.lead||'';
-        if(stageData[lead]!==undefined){
-          stageData[lead].count++;
-          stageData[lead].value+=(parseFloat(e.oppValue)||0);
+        var owner=e.owner||c.owner||'';
+        if(!owner || !stats[owner]) return;
+        
+        var statObj = stats[owner];
+        statObj.total++;
+        
+        var lead=e.lead||c.lead||'سرنخ';
+        if(lead==='مشتری'){
+          statObj.custs++;
+          var cs=_computeCustomerStatus(rt,c.id);
+          if(cs==='dormant') statObj.dormant++;
+        } else if(lead==='فرصت'){
+          statObj.opps++;
+        } else if(lead==='سرنخ'||lead==='لید'){
+          statObj.leads++;
         }
       });
     });
-    var stageColors={'لید':'#6366f1','سرنخ':'#0284c7','فرصت':'#f59e0b','مشتری':'#16a34a'};
-    html+='<div style="background:var(--bg-raised);border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid var(--border)">'
-      +'<div style="font-weight:700;margin-bottom:12px;font-size:14px;color:var(--text)">💰 ارزش Pipeline</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
-    stageOrder.forEach(function(s){
-      var d=stageData[s]||{count:0,value:0};
-      var col=stageColors[s]||'#6366f1';
-      html+='<div style="background:white;border-radius:8px;padding:10px;border-top:3px solid '+col+';text-align:center">'
-        +'<div style="font-size:11px;color:#64748b;margin-bottom:4px">'+s+'</div>'
-        +'<div style="font-size:20px;font-weight:700;color:'+col+'">'+d.count+'</div>'
-        +(d.value?'<div style="font-size:10px;color:#94a3b8;margin-top:2px">'+d.value.toLocaleString('fa-IR')+'M ریال</div>':'')
-        +'</div>';
+
+    html+='<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:12px">'
+      +'<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">👥 نرخ تبدیل و اثربخشی کارشناسان</div>'
+      +'<div style="overflow-x:auto;padding:10px">'
+      +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+      +'<thead><tr style="background:var(--bg-raised)">'
+      +'<th style="padding:6px 8px;text-align:right;color:#64748b">کارشناس</th>'
+      +'<th style="padding:6px 8px;text-align:center;color:#64748b">کل مراکز</th>'
+      +'<th style="padding:6px 8px;text-align:center;color:#64748b">سرنخ/لید</th>'
+      +'<th style="padding:6px 8px;text-align:center;color:#64748b">فرصت‌ها</th>'
+      +'<th style="padding:6px 8px;text-align:center;color:#16a34a">مشتریان</th>'
+      +'<th style="padding:6px 8px;text-align:center;color:#2563eb">نرخ تبدیل فرصت</th>'
+      +'<th style="padding:6px 8px;text-align:center;color:#dc2626">خوابیده (ریزش)</th>'
+      +'</tr></thead><tbody>';
+      
+    activeExperts.forEach(function(m){
+      var s=stats[m.id];
+      if(!s) return;
+      var oppPct = s.total > 0 ? Math.round(((s.opps + s.custs) / s.total) * 100) : 0;
+      var dormantPct = s.custs > 0 ? Math.round((s.dormant / s.custs) * 100) : 0;
+      var color = (window.umGetColor ? umGetColor(m.id) : '#94a3b8');
+      
+      html+='<tr style="border-bottom:1px solid var(--border)">'
+        +'<td style="padding:8px;font-weight:600"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:'+color+'"></span>'+esc(s.name)+'</span></td>'
+        +'<td style="text-align:center;padding:8px;font-weight:700">'+s.total+'</td>'
+        +'<td style="text-align:center;padding:8px;color:var(--text-muted)">'+s.leads+'</td>'
+        +'<td style="text-align:center;padding:8px;color:#f59e0b;font-weight:700">'+s.opps+'</td>'
+        +'<td style="text-align:center;padding:8px;color:#16a34a;font-weight:700">'+s.custs+'</td>'
+        +'<td style="text-align:center;padding:8px;font-weight:700;color:#2563eb">'+oppPct+'%</td>'
+        +'<td style="text-align:center;padding:8px">'
+          +(s.dormant > 0 ? '<span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:2px 6px;font-weight:700">'+s.dormant+' ('+dormantPct+'%)</span>' : '<span style="color:#16a34a">۰</span>')
+        +'</td>'
+        +'</tr>';
     });
-    html+='</div></div>';
+    
+    html+='</tbody></table></div></div>';
   })();
 
-  // ── Weekly Sales Report ────────────────────────────────────
+  // ── 📊 گزارش جریان و تحرکات پایپ‌لاین در ۷ روز گذشته ──────────
   (function(){
     var now=new Date();
     var weekAgoMs=now.getTime()-(7*24*60*60*1000);
-    var newLeads=0,newOpps=0,newCusts=0,dormantNew=0;
-    allProvs.forEach(function(pr){
-      var rt=getProvType(pr.id);
-      getProvCenters(pr.id).forEach(function(c){
-        var e=getE(rt,c.id);
-        var rkey=rt+'_'+c.id;
-        // Count changes in the last 7 days from changeLog
-        var cls=(DB.changeLog||[]).filter(function(ch){
-          return ch.rkey===rkey && new Date(ch.at).getTime()>weekAgoMs;
-        });
-        var leadChanges=cls.filter(function(ch){return ch.field==='lead';});
-        leadChanges.forEach(function(ch){
-          if(ch.val==='لید'||ch.val==='سرنخ')newLeads++;
-          if(ch.val==='فرصت')newOpps++;
-          if(ch.val==='مشتری')newCusts++;
-        });
-        // Dormant: customerStatus set to dormant this week
-        var dormCh=cls.filter(function(ch){return ch.field==='customerStatus'&&ch.val==='dormant';});
-        dormantNew+=dormCh.length;
-      });
+    var movements=[];
+    
+    (DB.changeLog||[]).forEach(function(l){
+      if(!l || !l.at || l.field!=='lead') return;
+      var t = new Date(l.at).getTime();
+      if(t < weekAgoMs) return;
+      
+      movements.push(l);
     });
-    html+='<div style="background:var(--bg-raised);border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid var(--border)">'
-      +'<div style="font-weight:700;margin-bottom:12px;font-size:14px;color:var(--text)">📊 گزارش هفتگی (۷ روز گذشته)</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
-      +'<div style="background:white;border-radius:8px;padding:10px;border-top:3px solid #6366f1;text-align:center">'
-        +'<div style="font-size:11px;color:#64748b;margin-bottom:4px">لید/سرنخ جدید</div>'
-        +'<div style="font-size:24px;font-weight:700;color:#6366f1">'+newLeads+'</div></div>'
-      +'<div style="background:white;border-radius:8px;padding:10px;border-top:3px solid #f59e0b;text-align:center">'
-        +'<div style="font-size:11px;color:#64748b;margin-bottom:4px">فرصت جدید</div>'
-        +'<div style="font-size:24px;font-weight:700;color:#f59e0b">'+newOpps+'</div></div>'
-      +'<div style="background:white;border-radius:8px;padding:10px;border-top:3px solid #16a34a;text-align:center">'
-        +'<div style="font-size:11px;color:#64748b;margin-bottom:4px">مشتری جدید</div>'
-        +'<div style="font-size:24px;font-weight:700;color:#16a34a">'+newCusts+'</div></div>'
-      +'<div style="background:white;border-radius:8px;padding:10px;border-top:3px solid #94a3b8;text-align:center">'
-        +'<div style="font-size:11px;color:#64748b;margin-bottom:4px">مشتری خوابیده</div>'
-        +'<div style="font-size:24px;font-weight:700;color:#94a3b8">'+dormantNew+'</div></div>'
-      +'</div></div>';
+    
+    movements.reverse(); // newest first
+    
+    html+='<div style="background:var(--bg-card);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:12px">'
+      +'<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">⚡ تحرکات و ارتقای مراحل فروش در ۷ روز گذشته</div>'
+      +'<div style="padding:12px;max-height:240px;overflow-y:auto">';
+      
+    if(!movements.length){
+      html+='<div style="text-align:center;padding:20px;color:var(--text-muted)">هیچ حرکتی در پایپ‌لاین در ۷ روز گذشته ثبت نشده است.</div>';
+    } else {
+      movements.slice(0,30).forEach(function(l){
+        var cName=_clGetName(l.rkey);
+        var rparts=l.rkey.split('_');
+        var rtype=rparts[0]; var rid=rparts.slice(1).join('_');
+        var expName=USERS[l.by]||l.by||'—';
+        var dp=l.at.slice(0,10).split('-').map(Number);
+        var jd=g2j(dp[0],dp[1],dp[2]);
+        var dateStr=jd[0]+'/'+p2(jd[1])+'/'+p2(jd[2])+' '+l.at.slice(11,16);
+        
+        var valBadge = esc(l.val);
+        var badgeColor = '#6366f1';
+        if(l.val==='مشتری') badgeColor='#16a34a';
+        else if(l.val==='فرصت') badgeColor='#f59e0b';
+        else if(l.val==='سرنخ') badgeColor='#0284c7';
+        
+        html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">'
+          +'<div>'
+            +'<a href="#" onclick="openCenterModal(\''+rtype+'\',\''+rid+'\');return false;" style="color:#2563eb;text-decoration:none;font-weight:700;margin-left:6px">🏥 '+esc(cName)+'</a>'
+            +'ارتقا به مرحله <span style="background:'+badgeColor+'22;color:'+badgeColor+';padding:2px 6px;border-radius:4px;font-weight:700">'+valBadge+'</span>'
+          +'</div>'
+          +'<div style="text-align:left;color:var(--text-muted)">'
+            +'<span>👤 '+esc(expName)+'</span> &nbsp; '
+            +'<span style="font-size:10px">'+dateStr+'</span>'
+          +'</div>'
+          +'</div>';
+      });
+      if(movements.length > 30){
+        html+='<div style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:6px">نمایش ۳۰ حرکت اخیر از '+movements.length+' مورد</div>';
+      }
+    }
+    html+='</div></div>';
   })();
 
   // Refresh button
@@ -10762,13 +11461,14 @@ function openManagerDrilldown(memberId){
 
 function overdueSnooze(rtype,id,days,listMemberId){
   var e=getE(rtype,id);
-  var fd=e.followupDate||todayStr();
+  var fd=todayStr(); // Snooze relative to today!
   var parts=fd.split('/').map(Number);
   var gDate=j2g(parts[0],parts[1],parts[2]);
   var d=new Date(gDate[0],gDate[1]-1,gDate[2]+days);
   var nj=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());
   var newDate=nj[0]+'/'+p2(nj[1])+'/'+p2(nj[2]);
   setE(rtype,id,'followupDate',newDate);
+  saveDB(); // Save changes to DB & sync to server!
   renderBanner();
   showToast('⏰ تعویق تا '+newDate,2000);
   closeModal('overdueList');
@@ -10783,80 +11483,235 @@ function overduePickDate(rtype,id,listMemberId){
     inp.remove();
     if(!v)return;
     setE(rtype,id,'followupDate',v);
+    saveDB(); // Save changes to DB & sync to server!
     renderBanner();
     showToast('📅 تاریخ جدید: '+v,2000);
     closeModal('overdueList');
     setTimeout(function(){openOverdueList(listMemberId||undefined);},150);
   });
 }
+var _odFilters = {memberId: '', search: '', bucket: 'all'};
+
 function openOverdueList(memberId){
+  _odFilters.memberId = memberId || '';
+  _odFilters.search = '';
+  _odFilters.bucket = 'all';
+  
+  var allMem = (DB.settings && DB.settings.members) || _DEFAULT_MEMBERS;
+  
+  var body = '<div style="font-size:12px">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;background:var(--bg-raised);padding:8px;border-radius:8px;border:1px solid var(--border)">'
+    + '<input type="text" id="odSearch" placeholder="🔍 جستجو مرکز..." oninput="_odFilters.search=this.value;filterOverdueList()" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px;min-width:140px">'
+    + '<select id="odMember" onchange="_odFilters.memberId=this.value;filterOverdueList()" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px">'
+    + '<option value="">👥 همه کارشناسان</option>'
+    + allMem.filter(function(m){return m.role!=='manager';}).map(function(m){
+        return '<option value="'+m.id+'"'+(_odFilters.memberId===m.id?' selected':'')+'>'+esc(m.name)+'</option>';
+      }).join('')
+    + '</select>'
+    + '<select id="odBucket" onchange="_odFilters.bucket=this.value;filterOverdueList()" style="padding:4px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px">'
+    + '<option value="all">📅 همه بازه‌ها</option>'
+    + '<option value="week">🔴 این هفته (۱–۷ روز)</option>'
+    + '<option value="month">🟠 این ماه (۸–۳۰ روز)</option>'
+    + '<option value="old">⚫ قدیمی (بیش از ۳۰ روز)</option>'
+    + '</select>'
+    + '</div>'
+    + '<div id="overdueListBody" style="max-height:60vh;overflow-y:auto"></div>'
+    + '</div>';
+    
+  openModal('overdueList', '🔴 پیگیری‌های معوق', body, '<button class="btn-secondary" onclick="closeModal(\'overdueList\')">بستن</button>', {lg:true});
+  filterOverdueList();
+}
+
+function filterOverdueList() {
   _buildPCCache();
-  var today=todayStr();
-  var allMem=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
-  var items=[];
+  var today = todayStr();
+  var allMem = (DB.settings && DB.settings.members) || _DEFAULT_MEMBERS;
+  var items = [];
+  
+  var memberId = _odFilters.memberId;
+  var searchQ = fNorm(_odFilters.search || '');
+  var bucketFilter = _odFilters.bucket;
+
   getAllProvinces().forEach(function(p){
-    var rt=getProvType(p.id);
+    var rt = getProvType(p.id);
     getProvCenters(p.id).forEach(function(c){
-      var e=getE(rt,c.id);
-      var owner=e.owner||c.owner||'';
-      if(memberId&&owner!==memberId)return;
-      var fd=e.followupDate||'';
-      if(!fd||fd>=today||e.status==='قرارداد بسته شد'||e.status==='غیرفعال')return;
-      var mObj=allMem.find(function(x){return x.id===owner;});
-      var _fdp2=fd.split('/').map(Number);var _fdg2=j2g(_fdp2[0],_fdp2[1],_fdp2[2]);var daysAgo=Math.round((new Date()-new Date(_fdg2[0],_fdg2[1]-1,_fdg2[2]))/86400000);
-      items.push({rtype:rt,id:c.id,name:e.nameOverride||c.name||'?',followupDate:fd,
-        status:e.status||'بدون تماس',ownerName:mObj?mObj.name:(owner||'بدون مسئول'),
-        potential:e.potential||c.potential||4,daysAgo:daysAgo});
+      var e = getE(rt,c.id);
+      var owner = e.owner || c.owner || '';
+      if(memberId && owner !== memberId) return;
+      var fd = e.followupDate || '';
+      if(!fd || fd >= today || e.status === 'قرارداد بسته شد' || e.status === 'غیرفعال') return;
+      
+      var name = e.nameOverride || c.name || '?';
+      if(searchQ && fNorm(name).indexOf(searchQ) < 0) return;
+      
+      var mObj = allMem.find(function(x){return x.id === owner;});
+      var _fdp2 = fd.split('/').map(Number);
+      var _fdg2 = j2g(_fdp2[0],_fdp2[1],_fdp2[2]);
+      var midnightToday = new Date(); midnightToday.setHours(0,0,0,0);
+      var midnightFd = new Date(_fdg2[0],_fdg2[1]-1,_fdg2[2]);
+      var daysAgo = Math.round((midnightToday.getTime() - midnightFd.getTime()) / 86400000);
+      
+      items.push({
+        rtype: rt,
+        id: c.id,
+        name: name,
+        followupDate: fd,
+        status: e.status || 'بدون تماس',
+        ownerName: mObj ? mObj.name : (owner || 'بدون مسئول'),
+        potential: e.potential || c.potential || 4,
+        daysAgo: daysAgo
+      });
     });
   });
-  items.sort(function(a,b){return a.followupDate<b.followupDate?-1:1;});
+  
+  items.sort(function(a,b){return a.followupDate < b.followupDate ? -1 : 1;});
 
-  var _mid=memberId||'';
-  var renderRow=function(c){
-    return '<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border);border-radius:6px;margin-bottom:4px;background:var(--bg-card)">'
-      +'<span style="color:#dc2626;font-size:11px;min-width:60px;font-weight:700">'+c.followupDate+'</span>'
-      +'<span style="font-size:10px;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:9px;min-width:44px;text-align:center">'+c.daysAgo+' روز</span>'
-      +'<span style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.name)+'</span>'
-      +'<span style="font-size:10px;color:var(--text-muted);flex-shrink:0">'+esc(c.ownerName)+'</span>'
-      +'<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',3,\''+_mid+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۳ روز">+۳</button>'
-      +'<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',7,\''+_mid+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۷ روز">+۷</button>'
-      +'<button onclick="overduePickDate(\''+c.rtype+'\',\''+c.id+'\',\''+_mid+'\')" style="padding:3px 7px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تاریخ جدید">📅</button>'
-      +'<button onclick="closeModal(\'overdueList\');setTimeout(function(){openCenterModal(\''+c.rtype+'\',\''+c.id+'\');},100)" style="padding:3px 9px;background:var(--brand,#6366f1);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">پیگیری</button>'
-      +'</div>';
+  var renderRow = function(c){
+    var rescheduleTreeId = 'rtree_' + c.rtype + '_' + c.id;
+    return '<div style="border-bottom:1px solid var(--border);padding:6px 0;">'
+      + '<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:var(--bg-card)">'
+      + '<span style="color:#dc2626;font-size:11px;min-width:60px;font-weight:700">'+c.followupDate+'</span>'
+      + '<span style="font-size:10px;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:9px;min-width:44px;text-align:center">'+c.daysAgo+' روز</span>'
+      + '<span style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.name)+'</span>'
+      + '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0">'+esc(c.ownerName)+'</span>'
+      + '<button onclick="toggleRescheduleTree(\''+c.rtype+'\',\''+c.id+'\',\''+c.followupDate+'\')" style="padding:3px 7px;background:#f3f4f6;color:#374151;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تاریخچه جابجایی">🕒 تاریخچه</button>'
+      + '<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',3,\''+memberId+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۳ روز">+۳</button>'
+      + '<button onclick="overdueSnooze(\''+c.rtype+'\',\''+c.id+'\',7,\''+memberId+'\')" style="padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تعویق ۷ روز">+۷</button>'
+      + '<button onclick="overduePickDate(\''+c.rtype+'\',\''+c.id+'\',\''+memberId+'\')" style="padding:3px 7px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit" title="تاریخ جدید">📅</button>'
+      + '<button onclick="closeModal(\'overdueList\');setTimeout(function(){openCenterModal(\''+c.rtype+'\',\''+c.id+'\');},100)" style="padding:3px 9px;background:var(--brand,#6366f1);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit">پیگیری</button>'
+      + '</div>'
+      + '<div id="'+rescheduleTreeId+'" style="display:none;margin-top:4px;"></div>'
+      + '</div>';
   };
-  var buckets=[
-    {label:'🔴 این هفته',sub:'۱–۷ روز',min:1,max:7,clr:'#dc2626',items:[]},
-    {label:'🟠 این ماه',sub:'۸–۳۰ روز',min:8,max:30,clr:'#ea580c',items:[]},
-    {label:'⚫ قدیمی',sub:'بیش از ۳۰ روز',min:31,max:999999,clr:'#64748b',items:[]}
+
+  var buckets = [
+    {id:'week', label:'🔴 این هفته', sub:'۱–۷ روز', min:1, max:7, clr:'#dc2626', items:[]},
+    {id:'month', label:'🟠 این ماه', sub:'۸–۳۰ روز', min:8, max:30, clr:'#ea580c', items:[]},
+    {id:'old', label:'⚫ قدیمی', sub:'بیش از ۳۰ روز', min:31, max:999999, clr:'#64748b', items:[]}
   ];
+
   items.forEach(function(c){
-    for(var bi=0;bi<buckets.length;bi++){
-      if(c.daysAgo>=buckets[bi].min&&c.daysAgo<=buckets[bi].max){buckets[bi].items.push(c);break;}
+    for(var bi=0; bi<buckets.length; bi++){
+      if(c.daysAgo >= buckets[bi].min && c.daysAgo <= buckets[bi].max){
+        buckets[bi].items.push(c);
+        break;
+      }
     }
   });
-  var body='<div style="font-size:12px">'
-    +'<div style="color:var(--text-muted);margin-bottom:10px">مراکزی که تاریخ پیگیری آن‌ها گذشته و هنوز پیگیری نشده است</div>'
-    +'<div style="max-height:60vh;overflow-y:auto">';
-  if(!items.length){
-    body+='<div style="text-align:center;padding:30px;color:#16a34a;font-weight:700">🎉 هیچ پیگیری معوقی وجود ندارد!</div>';
+
+  var body = '';
+  var displayedCount = 0;
+  
+  buckets.forEach(function(bk){
+    if(bucketFilter !== 'all' && bk.id !== bucketFilter) return;
+    if(!bk.items.length) return;
+    
+    body += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 4px;border-bottom:2px solid var(--border);margin-bottom:8px;margin-top:12px">'
+      + '<span style="font-size:12px;font-weight:700;color:'+bk.clr+'">'+bk.label+'</span>'
+      + '<span style="font-size:10px;color:var(--text-muted)">'+bk.sub+'</span>'
+      + '<span style="font-size:11px;background:'+bk.clr+'22;color:'+bk.clr+';border-radius:9px;padding:1px 8px;font-weight:700">'+bk.items.length+' مرکز</span>'
+      + '</div>';
+      
+    bk.items.forEach(function(c){
+      body += renderRow(c);
+      displayedCount++;
+    });
+  });
+
+  if(displayedCount === 0){
+    body = '<div style="text-align:center;padding:30px;color:var(--text-muted);font-weight:700">🔍 موردی یافت نشد!</div>';
+  }
+
+  var container = document.getElementById('overdueListBody');
+  if(container) container.innerHTML = body;
+  
+  var titleEl = document.querySelector('#modal_overdueList .modal-title');
+  if(titleEl) titleEl.innerHTML = '🔴 پیگیری‌های معوق ('+items.length+')';
+}
+
+function toggleRescheduleTree(rtype, rid, currentFollowupDate) {
+  var rescheduleTreeId = 'rtree_' + rtype + '_' + rid;
+  var el = document.getElementById(rescheduleTreeId);
+  if(!el) return;
+  if(el.style.display === 'none') {
+    el.innerHTML = buildRescheduleTree(rtype, rid, currentFollowupDate);
+    el.style.display = 'block';
   } else {
-    buckets.forEach(function(bk){
-      if(!bk.items.length)return;
-      body+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0 4px;border-bottom:2px solid var(--border);margin-bottom:8px">'
-        +'<span style="font-size:12px;font-weight:700;color:'+bk.clr+'">'+bk.label+'</span>'
-        +'<span style="font-size:10px;color:var(--text-muted)">'+bk.sub+'</span>'
-        +'<span style="font-size:11px;background:'+bk.clr+'22;color:'+bk.clr+';border-radius:9px;padding:1px 8px;font-weight:700">'+bk.items.length+' مرکز</span>'
-        +'</div>';
-      bk.items.forEach(function(c){body+=renderRow(c);});
+    el.style.display = 'none';
+  }
+}
+
+function buildRescheduleTree(rtype, rid, currentFollowupDate) {
+  var rkey = rtype + '_' + rid;
+  var logs = (DB.changeLog || []).filter(function(l) {
+    return l.rkey === rkey && l.field === 'followupDate';
+  });
+  
+  logs.sort(function(a, b) { return a.at < b.at ? -1 : 1; });
+  
+  var html = '<div style="font-size:10.5px;color:var(--text-secondary);padding:6px 12px 6px 36px;margin:2px 0 6px 0;background:var(--bg-raised);border-radius:6px;border-right:3px solid var(--brand);line-height:1.6">';
+  html += '<div style="font-weight:700;margin-bottom:4px;color:var(--text-primary)">📅 تاریخچه انتقال بین هفته و روز:</div>';
+  
+  var getWeekLabel = function(dStr) {
+    var wk = getWeekForDate(dStr);
+    return wk ? wk.label : 'خارج از محدوده هفته‌ها';
+  };
+  
+  var steps = [];
+  
+  if (logs.length > 0) {
+    logs.forEach(function(l) {
+      var dStr = l.val;
+      var wkLabel = getWeekLabel(dStr);
+      var byName = USERS[l.by] || l.by || 'سیستم';
+      steps.push({
+        date: dStr,
+        week: wkLabel,
+        by: byName
+      });
     });
   }
-  body+='</div></div>';
-  openModal('overdueList','🔴 پیگیری‌های معوق ('+items.length+')',body,'<button class="btn-secondary" onclick="closeModal(\'overdueList\')">بستن</button>',{lg:true});
+  
+  if (steps.length === 0) {
+    var wkLabel = getWeekLabel(currentFollowupDate);
+    html += '<div style="color:var(--text-muted)">— هیچ جابجایی ثبت نشده است. (تاریخ فعلی: ' + currentFollowupDate + ' — ' + wkLabel + ')</div>';
+  } else {
+    for (var i = 0; i < steps.length; i++) {
+      var s = steps[i];
+      var prefix = (i === steps.length - 1) ? '└─ ' : '├─ ';
+      var bold = (i === steps.length - 1) ? 'font-weight:700;color:var(--brand);' : '';
+      html += '<div style="' + bold + '">' + prefix 
+        + 'انتقال به <b>' + s.date + '</b> (' + s.week + ')'
+        + ' <span style="color:var(--text-muted);font-size:9.5px">توسط ' + esc(s.by) + '</span>'
+        + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function getWeekForDate(dateStr) {
+  if (!dateStr) return null;
+  var parts = dateStr.split('/').map(Number);
+  if (parts.length !== 3) return null;
+  var dateMs = jMs(parts[0], parts[1], parts[2]);
+  
+  var yr = parts[0];
+  var wks = typeof getYearWeeks === 'function' ? getYearWeeks(yr) : [];
+  for (var i = 0; i < wks.length; i++) {
+    var wk = wks[i];
+    var wsMs = jMs(wk.wsArr[0], wk.wsArr[1], wk.wsArr[2]);
+    var weMs = jMs(wk.weArr[0], wk.weArr[1], wk.weArr[2]);
+    if (dateMs >= wsMs && dateMs <= weMs) {
+      return wk;
+    }
+  }
+  return null;
 }
 // ════════════════════════ EXPERT REPORT ════════════════════
 function openExpertReport(memberId){
   _buildPCCache();
-  var allMem=(DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS;
+  var allMem=typeof umGetActive==='function'?umGetActive():((DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS);
   var m=allMem.find(function(x){return x.id===memberId;});
   if(!m)return;
   var mon=currentJMonth();
@@ -10866,16 +11721,21 @@ function openExpertReport(memberId){
   var lastDay=jDIM(parseInt(monParts[0]),parseInt(monParts[1]));
   var toDefault=monParts[0]+'/'+monParts[1]+'/'+p2(lastDay);
   function buildReport(fromDate,toDate){
-    var entries=Object.keys(DB.weekEntries||{}).map(function(k){return DB.weekEntries[k];})
-      .filter(function(we){
-        var own=_wpGetOwner(we)||'';
-        return own===memberId&&we.done&&we.doneDate&&we.doneDate>=fromDate&&we.doneDate<=toDate;
-      })
-      .sort(function(a,b){return (a.doneDate||'')<(b.doneDate||'')?-1:1;});
-    var totalAmount=entries.reduce(function(s,e){return s+(e.doneAmount||0);},0);
-    var calls=entries.filter(function(e){return (e.actionType||'call')==='call';}).length;
-    var visits=entries.filter(function(e){return e.actionType==='visit';}).length;
-    var _rptAllMem=((DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS).filter(function(x){return x.active!==false;});
+    var allPlanned=Object.keys(DB.weekEntries||{}).map(function(k){
+      var we = DB.weekEntries[k];
+      we._key = k;
+      return we;
+    }).filter(function(we){
+      var entryDate = we.scheduledDate || we._key.split(':::')[0] || '';
+      return we.addedBy === memberId && entryDate >= fromDate && entryDate <= toDate;
+    });
+
+    var totalPlanned = allPlanned.length;
+    var totalDone = allPlanned.filter(function(we){ return we.done; }).length;
+    var totalNotDone = totalPlanned - totalDone;
+    var donePct = totalPlanned > 0 ? Math.round(totalDone / totalPlanned * 100) : 0;
+
+    var _rptAllMem=typeof umGetActive==='function'?umGetActive():(((DB.settings&&DB.settings.members)||_DEFAULT_MEMBERS).filter(function(x){return x.active!==false;}));
     var _rptMemOpts=_rptAllMem.map(function(x){return'<option value="'+esc(x.id)+'"'+(x.id===memberId?' selected':'')+'>'+esc(x.name||x.id)+'</option>';}).join('');
     var body='<div style="font-size:12px">';
     body+='<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;background:var(--bg-raised);border-radius:8px;padding:8px 12px">';
@@ -10887,10 +11747,11 @@ function openExpertReport(memberId){
     body+='<label style="font-size:11px">تا: <input type="text" id="rptTo" value="'+toDate+'" readonly class="fd-inp" style="cursor:pointer;padding:4px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px"></label>';
     body+='<button onclick="var f=document.getElementById(\'rptFrom\').value,t=document.getElementById(\'rptTo\').value;document.getElementById(\'rptBody\').innerHTML=buildExpertReportHtml(\''+memberId+'\',f,t)" style="padding:4px 12px;background:var(--brand,#6366f1);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit">🔍 فیلتر</button>';
     body+='</div>';
-    body+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">';
-    body+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#1d4ed8">'+calls+'</div><div style="font-size:11px;color:#1d4ed8">تماس</div></div>';
-    body+='<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#16a34a">'+visits+'</div><div style="font-size:11px;color:#16a34a">ملاقات</div></div>';
-    body+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#92400e">'+(totalAmount?totalAmount+'M':'—')+'</div><div style="font-size:11px;color:#92400e">مبلغ (M)</div></div>';
+    body+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">';
+    body+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#1d4ed8">'+totalPlanned+'</div><div style="font-size:11px;color:#1d4ed8">کل برنامه‌ها</div></div>';
+    body+='<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#16a34a">'+totalDone+'</div><div style="font-size:11px;color:#16a34a">انجام شده ✓</div></div>';
+    body+='<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#dc2626">'+totalNotDone+'</div><div style="font-size:11px;color:#dc2626">باقی‌مانده (اختلاف)</div></div>';
+    body+='<div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#7c3aed">'+donePct+'٪</div><div style="font-size:11px;color:#7c3aed">نرخ تحقق</div></div>';
     body+='</div>';
     // قیف فروش برای این کارشناس
     body+='<div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px">';
@@ -10949,24 +11810,199 @@ function _sendReportNotif(memberId,memberName){
   setTimeout(function(){var t=document.getElementById('rptNotifMsg');if(t)t.focus();},100);
 }
 function buildExpertReportHtml(memberId,fromDate,toDate){
-  var entries=Object.keys(DB.weekEntries||{}).map(function(k){return DB.weekEntries[k];})
-    .filter(function(we){
-      var own=_wpGetOwner(we)||'';
-      return own===memberId&&we.done&&we.doneDate&&we.doneDate>=fromDate&&we.doneDate<=toDate;
-    })
-    .sort(function(a,b){return (a.doneDate||'')<(b.doneDate||'')?-1:1;});
-  if(!entries.length)return '<div style="text-align:center;padding:20px;color:var(--text-muted)">فعالیتی در این بازه ثبت نشده</div>';
+  var tab0Html = buildReportEntriesHtml(memberId, fromDate, toDate);
+  var tab1Html = buildChangesByExpertHtml(memberId, fromDate, toDate);
+  var tab2Html = buildChangesOnExpertCentersHtml(memberId, fromDate, toDate);
+
+  var btnStyle = "padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;transition:all 0.2s;";
+  
+  var html = '<div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:6px">'
+    + '<button class="report-tab-btn active" onclick="switchReportTab(0)" style="' + btnStyle + 'background:var(--brand,#6366f1);color:#fff">📋 تماس‌ها و ملاقات‌ها</button>'
+    + '<button class="report-tab-btn" onclick="switchReportTab(1)" style="' + btnStyle + 'background:transparent;color:var(--text-secondary)">🔄 لاگ تغییرات کارشناس</button>'
+    + '<button class="report-tab-btn" onclick="switchReportTab(2)" style="' + btnStyle + 'background:transparent;color:var(--text-secondary)">🏢 عملیات دیگران روی مراکز</button>'
+    + '</div>';
+    
+  html += '<div id="rptTabContent_0" class="report-tab-content" style="display:block">' + tab0Html + '</div>';
+  html += '<div id="rptTabContent_1" class="report-tab-content" style="display:none">' + tab1Html + '</div>';
+  html += '<div id="rptTabContent_2" class="report-tab-content" style="display:none">' + tab2Html + '</div>';
+  
+  return html;
+}
+
+window.switchReportTab = function(index) {
+  document.querySelectorAll('.report-tab-btn').forEach(function(btn, i) {
+    btn.classList.toggle('active', i === index);
+    btn.style.background = i === index ? 'var(--brand,#6366f1)' : 'transparent';
+    btn.style.color = i === index ? '#fff' : 'var(--text-secondary)';
+  });
+  document.querySelectorAll('.report-tab-content').forEach(function(div, i) {
+    div.style.display = i === index ? 'block' : 'none';
+  });
+};
+
+function _isoToJalali(isoStr) {
+  if (!isoStr) return '';
+  try {
+    var d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    if (typeof g2j === 'function') {
+      var r = g2j(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      return r[0] + '/' + String(r[1]).padStart(2, '0') + '/' + String(r[2]).padStart(2, '0');
+    }
+    return (d.getFullYear() - 621) + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+  } catch (e) {
+    return '';
+  }
+}
+
+function buildChangesByExpertHtml(memberId, fromDate, toDate) {
+  var logs = (DB.changeLog || []).filter(function(cl) {
+    if (cl.by !== memberId) return false;
+    var jalaliDate = _isoToJalali(cl.at);
+    return jalaliDate && jalaliDate >= fromDate && jalaliDate <= toDate;
+  }).sort(function(a,b){ return a.at < b.at ? 1 : -1; });
+
+  if (!logs.length) return '<div style="text-align:center;padding:20px;color:var(--text-muted)">هیچ عملیاتی توسط این کارشناس در این بازه ثبت نشده است.</div>';
+
+  var _FLBL={status:'وضعیت پیگیری',lead:'مرحله قیف',followupDate:'تاریخ پیگیری بعدی',potential:'سطح پتانسیل',competitor:'رقیب اصلی',owner:'مسئول مرکز',nameOverride:'نام مرکز'};
+
+  var html = '<div style="max-height:40vh;overflow-y:auto">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<thead><tr style="background:var(--bg-raised)"><th style="padding:6px 8px;text-align:right">تاریخ و ساعت</th><th style="padding:6px 8px;text-align:right">مرکز درمانی</th><th style="padding:6px 8px;text-align:right">بخش تغییر یافته</th><th style="padding:6px 8px;text-align:right">مقدار جدید</th></tr></thead><tbody>';
+  
+  logs.forEach(function(cl, i) {
+    var bg = i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-raised)';
+    var centerName = _getCenterNameFromKey(cl.rkey) || cl.rkey;
+    var fieldLbl = _FLBL[cl.field] || cl.field;
+    var valStr = typeof cl.val === 'object' ? JSON.stringify(cl.val) : String(cl.val || '—');
+    var dt = new Date(cl.at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) + ' ' + _isoToJalali(cl.at);
+    
+    html += '<tr style="background:'+bg+';border-bottom:1px solid var(--border)">'
+      + '<td style="padding:6px 8px;white-space:nowrap;direction:ltr;text-align:right">' + esc(dt) + '</td>'
+      + '<td style="padding:6px 8px">' + esc(centerName) + '</td>'
+      + '<td style="padding:6px 8px;font-weight:700">' + esc(fieldLbl) + '</td>'
+      + '<td style="padding:6px 8px;color:#10b981;font-weight:600">' + esc(valStr) + '</td>'
+      + '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function buildChangesOnExpertCentersHtml(memberId, fromDate, toDate) {
+  var ownedCenterKeys = new Set();
+  _buildPCCache();
+  getAllProvinces().forEach(function(p) {
+    var rt = getProvType(p.id);
+    getProvCenters(p.id).forEach(function(c) {
+      var e = getE(rt, c.id);
+      if ((e.owner || c.owner || '') === memberId) {
+        ownedCenterKeys.add(rt + '_' + c.id);
+      }
+    });
+  });
+
+  var activities = [];
+  
+  (DB.changeLog || []).forEach(function(cl) {
+    if (!ownedCenterKeys.has(cl.rkey)) return;
+    if (cl.by === memberId) return;
+    var jDate = _isoToJalali(cl.at);
+    if (jDate && jDate >= fromDate && jDate <= toDate) {
+      var fieldLbl = {status:'وضعیت پیگیری',lead:'مرحله قیف',followupDate:'تاریخ پیگیری',potential:'سطح پتانسیل',owner:'تغییر مسئول',nameOverride:'نام مرکز'}[cl.field] || cl.field;
+      var valStr = typeof cl.val === 'object' ? JSON.stringify(cl.val) : String(cl.val || '');
+      activities.push({
+        at: cl.at,
+        jDate: jDate,
+        rkey: cl.rkey,
+        by: cl.by,
+        type: 'تغییر فیلد',
+        desc: 'ویرایش ' + fieldLbl + ' به ' + valStr
+      });
+    }
+  });
+
+  Object.keys(DB.notes || {}).forEach(function(rkey) {
+    if (!ownedCenterKeys.has(rkey)) return;
+    var list = DB.notes[rkey] || [];
+    list.forEach(function(n) {
+      if (n.by === memberId) return;
+      var jDate = _isoToJalali(n.at);
+      if (jDate && jDate >= fromDate && jDate <= toDate) {
+        activities.push({
+          at: n.at,
+          jDate: jDate,
+          rkey: rkey,
+          by: n.by,
+          type: 'ثبت یادداشت',
+          desc: n.text
+        });
+      }
+    });
+  });
+
+  activities.sort(function(a,b){ return a.at < b.at ? 1 : -1; });
+
+  if (!activities.length) return '<div style="text-align:center;padding:20px;color:var(--text-muted)">هیچ عملیاتی توسط سایر کاربران روی مراکز این کارشناس ثبت نشده است.</div>';
+
+  var html = '<div style="max-height:40vh;overflow-y:auto">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<thead><tr style="background:var(--bg-raised)"><th style="padding:6px 8px;text-align:right">تاریخ و ساعت</th><th style="padding:6px 8px;text-align:right">مرکز درمانی</th><th style="padding:6px 8px;text-align:right">انجام دهنده</th><th style="padding:6px 8px;text-align:right">نوع عملیات</th><th style="padding:6px 8px;text-align:right">شرح فعالیت</th></tr></thead><tbody>';
+
+  activities.forEach(function(act, i) {
+    var bg = i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-raised)';
+    var centerName = _getCenterNameFromKey(act.rkey) || act.rkey;
+    var dt = new Date(act.at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) + ' ' + act.jDate;
+    var operatorName = (USERS && USERS[act.by]) ? USERS[act.by] : act.by;
+
+    html += '<tr style="background:'+bg+';border-bottom:1px solid var(--border)">'
+      + '<td style="padding:6px 8px;white-space:nowrap;direction:ltr;text-align:right">' + esc(dt) + '</td>'
+      + '<td style="padding:6px 8px">' + esc(centerName) + '</td>'
+      + '<td style="padding:6px 8px;font-weight:600;color:#1e3a8a">' + esc(operatorName) + '</td>'
+      + '<td style="padding:6px 8px"><span style="font-size:10px;background:#fef3c7;color:#d97706;padding:2px 6px;border-radius:4px;font-weight:700">' + esc(act.type) + '</span></td>'
+      + '<td style="padding:6px 8px;max-width:300px;overflow:hidden;text-overflow:ellipsis" title="'+esc(act.desc)+'">' + esc(act.desc) + '</td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function buildReportEntriesHtml(memberId,fromDate,toDate){
+  var entries=Object.keys(DB.weekEntries||{}).map(function(k){
+    var we = DB.weekEntries[k];
+    we._key = k;
+    return we;
+  }).filter(function(we){
+    var entryDate = we.scheduledDate || we._key.split(':::')[0] || '';
+    return we.addedBy === memberId && entryDate >= fromDate && entryDate <= toDate;
+  }).sort(function(a,b){
+    var da = a.scheduledDate || a._key.split(':::')[0] || '';
+    var db = b.scheduledDate || b._key.split(':::')[0] || '';
+    return da < db ? 1 : -1;
+  });
+
+  if(!entries.length)return '<div style="text-align:center;padding:20px;color:var(--text-muted)">هیچ برنامه‌ای در این بازه زمانی یافت نشد.</div>';
+  
   var _FLBL={status:'وضعیت',lead:'مرحله',followupDate:'پیگیری',potential:'پتانسیل',competitor:'رقیب',owner:'مسئول'};
   var _FCLR={status:'#6366f1',lead:'#0ea5e9',followupDate:'#f59e0b',potential:'#8b5cf6',competitor:'#ef4444',owner:'#22c55e'};
   var DAY=86400000;
+  
   var html='<div style="max-height:50vh;overflow-y:auto">';
   html+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
-  html+='<thead><tr style="background:var(--bg-raised)"><th style="padding:6px 8px;text-align:right">تاریخ</th><th style="padding:6px 8px;text-align:right">مرکز</th><th style="padding:6px 8px">نوع</th><th style="padding:6px 8px;text-align:right">نتیجه</th><th style="padding:6px 8px;text-align:right">یادداشت</th><th style="padding:6px 8px;text-align:right">مانع</th><th style="padding:6px 8px">مبلغ</th><th style="padding:6px 8px;text-align:right" title="تغییرات فیلدهای مرکز در روز فعالیت">🔄 تغییرات</th></tr></thead><tbody>';
+  html+='<thead><tr style="background:var(--bg-raised)"><th style="padding:6px 8px;text-align:right">تاریخ برنامه</th><th style="padding:6px 8px;text-align:right">مرکز</th><th style="padding:6px 8px">نوع اقدام</th><th style="padding:6px 8px;text-align:center">وضعیت تحقق</th><th style="padding:6px 8px;text-align:right">تاریخ ثبت</th><th style="padding:6px 8px;text-align:right">نتیجه / یادداشت</th><th style="padding:6px 8px;text-align:right">مانع</th><th style="padding:6px 8px;text-align:right" title="تغییرات فیلدهای مرکز در روز فعالیت">🔄 تغییرات</th></tr></thead><tbody>';
+  
   entries.forEach(function(we,i){
     var bg=i%2===0?'var(--bg-card)':'var(--bg-raised)';
     var typeLabel=(we.actionType==='visit')?'🤝 ملاقات':'📞 تماس';
+    var entryDate = we.scheduledDate || we._key.split(':::')[0] || '';
+    
+    var statusHtml = we.done 
+      ? '<span style="color:#16a34a;font-weight:700">✅ انجام شده</span>' 
+      : '<span style="color:#ea580c;font-weight:700">⏳ در انتظار</span>';
+      
     var changesHtml='<span style="color:var(--text-muted)">—</span>';
-    if(we.doneDate&&we.rtype&&we.rid){
+    if(we.done && we.doneDate && we.rtype && we.rid){
       try{
         var rkey=(we.rtype||'center')+'_'+(we.rid||'');
         var dp=we.doneDate.split('/');
@@ -10988,14 +12024,17 @@ function buildExpertReportHtml(memberId,fromDate,toDate){
         }
       }catch(_e){}
     }
+    var displayName = we.centerName || getRecLabel(we.recKey || (we.rtype + '_' + we.rid)) || '';
+    var outcomeText = we.doneResult ? ('[' + esc(we.doneResult) + '] ' + esc(we.doneNote || '')) : (we.doneNote ? esc(we.doneNote) : '—');
+    
     html+='<tr style="background:'+bg+';border-bottom:1px solid var(--border)">';
-    html+='<td style="padding:5px 8px;white-space:nowrap">'+esc(we.doneDate||'')+'</td>';
-    html+='<td style="padding:5px 8px">'+esc(we.centerName||'')+'</td>';
+    html+='<td style="padding:5px 8px;white-space:nowrap">'+esc(entryDate)+'</td>';
+    html+='<td style="padding:5px 8px">'+esc(displayName)+'</td>';
     html+='<td style="padding:5px 8px;text-align:center">'+typeLabel+'</td>';
-    html+='<td style="padding:5px 8px">'+esc(we.doneResult||'—')+'</td>';
-    html+='<td style="padding:5px 8px">'+esc(we.doneNote||'—')+'</td>';
+    html+='<td style="padding:5px 8px;text-align:center">'+statusHtml+'</td>';
+    html+='<td style="padding:5px 8px;white-space:nowrap">'+esc(we.doneDate||'—')+'</td>';
+    html+='<td style="padding:5px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis" title="'+esc(outcomeText)+'">'+esc(outcomeText)+'</td>';
     html+='<td style="padding:5px 8px;color:#dc2626">'+esc(we.doneObstacle||'—')+'</td>';
-    html+='<td style="padding:5px 8px;text-align:center;color:#16a34a">'+((we.doneAmount)?we.doneAmount+'M':'—')+'</td>';
     html+='<td style="padding:5px 8px">'+changesHtml+'</td>';
     html+='</tr>';
   });
@@ -11396,6 +12435,7 @@ async function init(){
 
 
 /* ═══ public/js/onboarding.js ═══ */
+/* ═══ public/js/onboarding.js ═══ */
 // ════════════════════════ ONBOARDING TUTORIAL ════════════════════════
 var _TAB_TUTORIALS = {
   home: {
@@ -11611,6 +12651,7 @@ function _sseReloadDB(byUser) {
         else if (currentTab === 'provinces') { renderDashboard(); renderTable(); }
         else if (currentTab === 'activity') renderActivity();
         else if (currentTab === 'kpi') renderKPIPanel();
+        else if (currentTab === 'manager') renderManagerPanel();
       }
       var _tgSuffix = triggeredBy && triggeredBy.endsWith(':bot') ? ' (تلگرام)' : '';
       var _tgBy = triggeredBy ? triggeredBy.replace(':bot','') : null;
@@ -11690,6 +12731,7 @@ function checkEmptyDB(){
 
 // ═══════════════════════════════════════════════════════════════════
 
+/* ═══ public/js/kpi.js ═══ */
 /* ═══ public/js/kpi.js ═══ */
 // ═══════════════════════════ KPI MODULE ════════════════════════════
 // ═══════════════════════════════════════════════════════════════════
@@ -12951,6 +13993,7 @@ function _msDelete() {
 
 
 /* ═══ public/js/manager-tasks.js ═══ */
+/* ═══ public/js/manager-tasks.js ═══ */
 // ════════════════════════ MANAGER TASKS ════════════════════════
 var _mgrTasksOpen = true;
 
@@ -14166,6 +15209,7 @@ document.addEventListener('keydown',function(e){
 
 
 
+/* ═══ public/js/mtr.js ═══ */
 /* ═══ public/js/mtr.js ═══ */
 // ══════════════════════════════════════════════════════════════
 // مطالبات ↔ مراکز — اتصال فاکتورهای باز به صفحه مرکز
@@ -16567,4 +17611,595 @@ function _centerNameSimilar(a,b){
   if(na.length>4&&nb.indexOf(na)>=0)return true;
   if(nb.length>4&&na.indexOf(nb)>=0)return true;
   return false;
+}
+
+/* ═══ public/js/hcp.js ═══ */
+'use strict';
+
+// ── HCP DIRECTORY & RELATIONSHIP MODULE ─────────────────────────────────────
+// Handles the Healthcare Professionals (HCP) directory tab, searching, 
+// editing, and managing affiliations with Centers (Healthcare Organizations - HCO).
+
+window._hcpCache = []; // Global cache of HCPs
+
+// ── TAB RENDERING ──────────────────────────────────────────────────────────
+function renderHCPPanel() {
+  var panel = document.getElementById('hcpPanel');
+  if (!panel) return;
+
+  var html = '<div class="hcp-container" style="font-family:inherit;direction:rtl;text-align:right">';
+  
+  // Header
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    + '<h2 style="font-size:18px;font-weight:700;color:var(--text-primary);margin:0">👤 بانک اطلاعات پزشکان و کارشناسان</h2>'
+    + '<button class="btn-primary" onclick="_hcpOpenCreateModal()" style="display:flex;align-items:center;gap:6px;font-weight:700;padding:8px 16px;border-radius:8px">'
+    + '➕ ثبت پزشک / کارشناس جدید</button>'
+    + '</div>';
+
+  // Filters Bar
+  html += '<div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">'
+    + '<div style="flex:1;min-width:200px">'
+    + '<input type="text" id="hcpSearchInput" placeholder="جستجو بر اساس نام، تلفن..." style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:13px;background:var(--bg-input);color:var(--text-primary)" oninput="_hcpDebouncedSearch()">'
+    + '</div>'
+    + '<div style="width:180px">'
+    + '<select id="hcpSpecialtyFilter" style="width:100%;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:13px;background:var(--bg-input);color:var(--text-primary)" onchange="_hcpSearch()">'
+    + '<option value="">همه تخصص‌ها...</option>'
+    + '<option value="رادیولوژی">رادیولوژی</option>'
+    + '<option value="رادیولوژی مداخله‌ای">رادیولوژی مداخله‌ای</option>'
+    + '<option value="ارولوژی">ارولوژی</option>'
+    + '<option value="انکولوژی">انکولوژی</option>'
+    + '<option value="جراحی">جراحی عمومی</option>'
+    + '<option value="نفرولوژی">نفرولوژی</option>'
+    + '<option value="خرید">تجهیزات / خرید</option>'
+    + '</select>'
+    + '</div>'
+    + '</div>';
+
+  // Directory List Container
+  html += '<div id="hcpListArea" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:12px"></div>';
+  html += '</div>';
+
+  panel.innerHTML = html;
+  _hcpSearch();
+}
+
+// ── DIRECTORY SEARCH & LISTING ──────────────────────────────────────────────
+var _hcpSearchTimeout = null;
+function _hcpDebouncedSearch() {
+  if (_hcpSearchTimeout) clearTimeout(_hcpSearchTimeout);
+  _hcpSearchTimeout = setTimeout(_hcpSearch, 300);
+}
+
+function _hcpSearch() {
+  var q = document.getElementById('hcpSearchInput') ? document.getElementById('hcpSearchInput').value.trim() : '';
+  var spec = document.getElementById('hcpSpecialtyFilter') ? document.getElementById('hcpSpecialtyFilter').value : '';
+  var listArea = document.getElementById('hcpListArea');
+  if (!listArea) return;
+
+  listArea.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">⏳ در حال بارگذاری پزشکان...</div>';
+
+  var url = '/api/hcps?q=' + encodeURIComponent(q) + '&specialty=' + encodeURIComponent(spec);
+  fetch(url)
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(data) {
+      window._hcpCache = data;
+      if (!data.length) {
+        listArea.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);background:var(--bg-card);border:1px dashed var(--border);border-radius:10px">'
+          + '<div style="font-size:24px;margin-bottom:8px">👥</div>'
+          + 'هیچ پزشک یا کارشناسی یافت نشد'
+          + '</div>';
+        return;
+      }
+
+      listArea.innerHTML = data.map(function(hcp) {
+        var phonesHtml = (hcp.phones || []).map(function(ph) {
+          return '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);border:1px solid var(--border);padding:2px 8px;border-radius:12px;font-size:11px;direction:ltr">'
+            + '📞 ' + esc(ph)
+            + ' <a href="tel:'+ph+'" style="text-decoration:none">📞</a>'
+            + ' <a href="https://wa.me/'+_waNum(ph)+'" target="_blank" style="text-decoration:none;font-size:12px">💬</a>'
+            + '</div>';
+        }).join(' ') || '<span style="color:var(--text-muted)">بدون شماره تلفن</span>';
+
+        var tagHtml = hcp.specialty 
+          ? '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(hcp.specialty)+'</span>'
+          : '';
+        var rankHtml = hcp.rank ? '<span style="font-size:11px;color:var(--text-secondary);font-weight:600">'+esc(hcp.rank)+'</span> ' : '';
+
+        return '<div class="card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;justify-content:space-between">'
+          + '<div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'
+          + '<div>'
+          + '<div style="font-weight:700;font-size:14px;color:var(--text-primary)">' + rankHtml + esc(hcp.name) + '</div>'
+          + (hcp.medical_council_no ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">نظام پزشکی: ' + esc(hcp.medical_council_no) + '</div>' : '')
+          + '</div>'
+          + tagHtml
+          + '</div>'
+          + '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">' + phonesHtml + '</div>'
+          + (hcp.notes ? '<div style="font-size:11px;color:var(--text-secondary);background:var(--bg-raised);padding:6px 8px;border-radius:6px;margin-top:8px;line-height:1.4">' + esc(hcp.notes) + '</div>' : '')
+          + '</div>'
+          + '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+          + '<button class="btn-secondary" onclick="_hcpShowAffiliations(\''+hcp.id+'\',\''+esc(hcp.name)+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">🏥 مراکز تحت پوشش</button>'
+          + '<div style="display:flex;gap:4px">'
+          + '<button class="btn-secondary" onclick="_hcpOpenEditModal(\''+hcp.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">✏️ ویرایش</button>'
+          + '<button onclick="_hcpDelete(\''+hcp.id+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">🗑 حذف</button>'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    });
+}
+
+// ── SHOW HCP INFLUENCE SPHERE (AFFILIATIONS) ────────────────────────────────
+function _hcpShowAffiliations(hcpId, hcpName) {
+  openModal('hcpAffListModal', '⏳ در حال بارگذاری...', '<div style="text-align:center;padding:20px">در حال خواندن اطلاعات مراکز...</div>', '<button class="btn-secondary" onclick="closeModal(\'hcpAffListModal\')">بستن</button>', { lg: true });
+  
+  fetch('/api/hcps/' + hcpId + '/affiliations')
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(affs) {
+      var title = '🏥 مراکز مرتبط با ' + hcpName;
+      if (!affs.length) {
+        var body = '<div style="text-align:center;padding:30px;color:var(--text-muted)">این پزشک/مخاطب هنوز به هیچ مرکز درمانی متصل نشده است.</div>';
+        openModal('hcpAffListModal', title, body, '<button class="btn-secondary" onclick="closeModal(\'hcpAffListModal\')">بستن</button>', { lg: true });
+        return;
+      }
+
+      var body = '<div style="font-size:12px;direction:rtl;text-align:right">';
+      body += '<table style="width:100%;border-collapse:collapse">';
+      body += '<tr style="border-bottom:2px solid var(--border);font-weight:700"><th style="padding:6px;text-align:right">مرکز درمانی</th><th style="padding:6px;text-align:right">سمت / نقش</th><th style="padding:6px;text-align:center">سطح نفوذ</th><th style="padding:6px;text-align:right">جزئیات / حضور</th></tr>';
+      
+      affs.forEach(function(a) {
+        var centerName = _getCenterNameFromKey(a.center_key);
+        var infColor = a.influence_level === 'KOL' ? '#7c3aed' : (a.influence_level === 'Decision Maker' ? '#22c55e' : '#64748b');
+        body += '<tr style="border-bottom:1px solid var(--border)">'
+          + '<td style="padding:6px;font-weight:600"><a href="#" onclick="closeModal(\'hcpAffListModal\');openCenterModal(\''+a.center_key.split('_')[0]+'\',\''+a.center_key.split('_').slice(1).join('_')+'\');return false;" style="color:#0ea5e9;text-decoration:none">' + esc(centerName) + '</a></td>'
+          + '<td style="padding:6px">' + esc(a.role || '—') + '</td>'
+          + '<td style="padding:6px;text-align:center"><span style="font-size:10px;background:'+infColor+'15;color:'+infColor+';border:1px solid '+infColor+'40;border-radius:4px;padding:1px 6px;font-weight:700">' + esc(a.influence_level || 'Decision Maker') + '</span></td>'
+          + '<td style="padding:6px;color:var(--text-secondary)">'
+          + (a.working_hours ? '🕒 ' + esc(a.working_hours) : '')
+          + (a.notes ? ' <span title="'+esc(a.notes)+'" style="cursor:help">📝</span>' : '')
+          + '</td>'
+          + '</tr>';
+      });
+
+      body += '</table></div>';
+      openModal('hcpAffListModal', title, body, '<button class="btn-secondary" onclick="closeModal(\'hcpAffListModal\')">بستن</button>', { lg: true });
+    });
+}
+
+// Helper to get center name from its database key
+function _getCenterNameFromKey(key) {
+  var parts = key.split('_');
+  var rtype = parts[0];
+  var rid = parts.slice(1).join('_');
+  return _getCenterName(rtype, rid);
+}
+
+// ── CREATE / EDIT HCP MODAL ─────────────────────────────────────────────────
+function _hcpOpenCreateModal() {
+  _hcpRenderFormModal(null);
+}
+
+function _hcpOpenEditModal(id, onSaved) {
+  var hcp = (window._hcpCache || []).find(function(x) { return x.id === id; });
+  if (hcp) {
+    _hcpRenderFormModal(hcp, onSaved);
+  } else {
+    showToast('⏳ در حال دریافت اطلاعات پزشک...');
+    fetch('/api/hcps/' + encodeURIComponent(id))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data) {
+          _hcpRenderFormModal(data, onSaved);
+        } else {
+          showToast('⚠️ پزشک یافت نشد');
+        }
+      })
+      .catch(function() {
+        showToast('⚠️ خطایی رخ داد');
+      });
+  }
+}
+
+function _hcpRenderFormModal(hcp, onSaved) {
+  window._hcpOnSavedCallback = onSaved || null;
+  var title = hcp ? '✏️ ویرایش پزشک / کارشناس' : '👤 ثبت پزشک / کارشناس جدید';
+  var id = hcp ? hcp.id : '';
+  var name = hcp ? hcp.name : '';
+  var rank = hcp ? hcp.rank : '';
+  var specialty = hcp ? hcp.specialty : '';
+  var mcNo = hcp ? hcp.medical_council_no : '';
+  var email = hcp ? hcp.email : '';
+  var notes = hcp ? hcp.notes : '';
+  var phones = hcp ? (hcp.phones || []) : [];
+
+  var inp = 'width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px';
+
+  var body = '<div style="direction:rtl;text-align:right;font-size:12px">'
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">نام و نام خانوادگی <span style="color:#dc2626">*</span></label>'
+    + '<input type="text" id="hcpFormName" value="'+esc(name)+'" style="'+inp+'" placeholder="مثال: دکتر علیرضا عباسی...">'
+    
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-weight:700;display:block;margin-bottom:3px">مرتبه علمی / سمت</label>'
+    + '<input type="text" id="hcpFormRank" value="'+esc(rank)+'" style="'+inp+'" placeholder="مثلاً: دانشیار، مدیر خرید..."></div>'
+    + '<div><label style="font-weight:700;display:block;margin-bottom:3px">تخصص</label>'
+    + '<input type="text" id="hcpFormSpecialty" value="'+esc(specialty)+'" style="'+inp+'" placeholder="مثلاً: رادیولوژیست..."></div>'
+    + '</div>'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div><label style="font-weight:700;display:block;margin-bottom:3px">شماره نظام پزشکی</label>'
+    + '<input type="text" id="hcpFormMC" value="'+esc(mcNo)+'" style="'+inp+'" placeholder="شماره نظام..."></div>'
+    + '<div><label style="font-weight:700;display:block;margin-bottom:3px">ایمیل</label>'
+    + '<input type="text" id="hcpFormEmail" value="'+esc(email)+'" style="'+inp+'" placeholder="email@example.com"></div>'
+    + '</div>'
+
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">شماره‌های تلفن همراه/شخصی</label>'
+    + '<div id="hcpFormPhonesArea" style="margin-bottom:10px">'
+    + phones.map(function(ph, pi) {
+      return '<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px">'
+        + '<input type="text" value="'+esc(ph)+'" class="hcp-form-phone" style="flex:1;direction:ltr;padding:6px 10px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)" placeholder="۰۹۱۲xxxxxxx">'
+        + '<button onclick="this.parentNode.remove()" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;padding:6px 12px">✕</button>'
+        + '</div>';
+    }).join('')
+    + '</div>'
+    + '<button class="btn-secondary" onclick="_hcpAddPhoneRow()" style="font-size:11px;padding:4px 10px;border-radius:6px;margin-bottom:12px">+ افزودن تلفن</button>'
+
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">یادداشت و بیوگرافی</label>'
+    + '<textarea id="hcpFormNotes" rows="2" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);resize:vertical" placeholder="سایر توضیحات...">'+esc(notes)+'</textarea>'
+    + '</div>';
+
+  var foot = '<button class="btn-secondary" onclick="closeModal(\'hcpFormModal\')">لغو</button>'
+    + '<button class="btn-primary" onclick="_hcpSubmitForm(\''+id+'\')" style="font-weight:700">ذخیره 💾</button>';
+
+  openModal('hcpFormModal', title, body, foot, {lg: false});
+}
+
+function _hcpAddPhoneRow() {
+  var area = document.getElementById('hcpFormPhonesArea');
+  if (!area) return;
+  var div = document.createElement('div');
+  div.style.display = 'flex';
+  div.style.gap = '5px';
+  div.style.alignItems = 'center';
+  div.style.marginBottom = '4px';
+  div.innerHTML = '<input type="text" class="hcp-form-phone" style="flex:1;direction:ltr;padding:6px 10px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)" placeholder="۰۹۱۲xxxxxxx">'
+    + '<button onclick="this.parentNode.remove()" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;padding:6px 12px">✕</button>';
+  area.appendChild(div);
+  var inp = div.querySelector('input');
+  if (inp) inp.focus();
+}
+
+function _hcpSubmitForm(id) {
+  var name = document.getElementById('hcpFormName') ? document.getElementById('hcpFormName').value.trim() : '';
+  if (!name) {
+    showToast('⚠️ نام و نام خانوادگی پزشک الزامی است');
+    return;
+  }
+
+  var phones = [];
+  document.querySelectorAll('.hcp-form-phone').forEach(function(el) {
+    var val = el.value.trim();
+    if (val) phones.push(val);
+  });
+
+  var payload = {
+    name: name,
+    rank: document.getElementById('hcpFormRank') ? document.getElementById('hcpFormRank').value.trim() : '',
+    specialty: document.getElementById('hcpFormSpecialty') ? document.getElementById('hcpFormSpecialty').value.trim() : '',
+    medicalCouncilNo: document.getElementById('hcpFormMC') ? document.getElementById('hcpFormMC').value.trim() : '',
+    email: document.getElementById('hcpFormEmail') ? document.getElementById('hcpFormEmail').value.trim() : '',
+    notes: document.getElementById('hcpFormNotes') ? document.getElementById('hcpFormNotes').value.trim() : '',
+    phones: phones
+  };
+
+  var method = id ? 'PUT' : 'POST';
+  var url = id ? '/api/hcps/' + id : '/api/hcps';
+
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d) {
+        showToast('✅ اطلاعات پزشک/کارشناس با موفقیت ذخیره شد');
+        closeModal('hcpFormModal');
+        _hcpSearch();
+        
+        if (typeof window._hcpOnSavedCallback === 'function') {
+          window._hcpOnSavedCallback(d);
+          window._hcpOnSavedCallback = null;
+        }
+        
+        // If we opened this form inside center modal link, we can refresh it
+        if (window._hcpPendingLinkCenterKey) {
+          _hcpLinkAndClose(d.id);
+        }
+      } else {
+        showToast('❌ خطا در ذخیره اطلاعات');
+      }
+    });
+}
+
+function _hcpDelete(id) {
+  if (!confirm('آیا از حذف این پزشک/کارشناس و تمامی ارتباطات مرکز درمانی او مطمئن هستید؟')) return;
+  fetch('/api/hcps/' + id, { method: 'DELETE' })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d && d.ok) {
+        showToast('🗑 پزشک حذف شد');
+        _hcpSearch();
+      } else {
+        showToast('❌ خطا در حذف پزشک');
+      }
+    });
+}
+
+
+// ── CENTER MODAL INTEGRATION ───────────────────────────────────────────────
+
+function _hcpLoadCenterAffiliations(rtype, rid, domId) {
+  var centerKey = rtype + '_' + rid;
+  var area = document.getElementById('contactsArea_' + domId);
+  if (!area) return;
+
+  area.innerHTML = '<div style="text-align:center;padding:10px;color:var(--text-muted)">⏳ در حال بارگذاری پزشکان متصل...</div>';
+
+  fetch('/api/hcps/centers/' + encodeURIComponent(centerKey) + '/affiliations')
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(affs) {
+      if (!affs.length) {
+        area.innerHTML = '<div style="color:var(--text-muted);font-size:11px;padding:12px 0;text-align:center;background:var(--bg-raised);border:1px dashed var(--border);border-radius:6px">'
+          + 'هیچ پزشک یا کارشناسی به این مرکز متصل نشده است'
+          + '</div>';
+        return;
+      }
+
+      area.innerHTML = affs.map(function(a) {
+        var infColor = a.influence_level === 'KOL' ? '#7c3aed' : (a.influence_level === 'Decision Maker' ? '#22c55e' : '#64748b');
+        var roleLabel = a.role ? esc(a.role) : 'مخاطب';
+        var specialtyLabel = a.hcp_specialty ? '<span style="font-size:10px;background:#eff6ff;color:#1d4ed8;padding:1px 5px;border-radius:4px;margin-right:4px">' + esc(a.hcp_specialty) + '</span>' : '';
+        var rankLabel = a.hcp_rank ? esc(a.hcp_rank) + ' ' : '';
+
+        var phonesHtml = (a.hcp_phones || []).map(function(ph) {
+          return '<div style="display:flex;gap:5px;align-items:center;margin-top:3px">'
+            + '<a href="tel:'+ph+'" style="font-size:12px;text-decoration:none" title="تماس">📞</a>'
+            + '<span style="font-size:11px;direction:ltr;flex:1">' + esc(ph) + '</span>'
+            + '<a href="https://wa.me/'+_waNum(ph)+'" target="_blank" title="واتساپ" style="font-size:12px;text-decoration:none">💬</a>'
+            + '<button onclick="_copyPhone(\''+esc(ph)+'\')" title="کپی" style="background:none;border:1px solid var(--border);border-radius:3px;cursor:pointer;font-size:10px;padding:1px 4px">📋</button>'
+            + '</div>';
+        }).join('');
+
+        return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;position:relative">'
+          + '<div style="display:flex;justify-content:space-between;align-items:start">'
+          + '<div>'
+          + '<div style="font-weight:700;font-size:13px;color:var(--text-primary)">'
+          + '<a href="#" onclick="_hcpShowAffiliations(\''+a.hcp_id+'\',\''+esc(a.hcp_name)+'\');return false;" style="color:var(--brand,#6366f1);text-decoration:none">' + rankLabel + esc(a.hcp_name) + '</a>'
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;display:flex;align-items:center;gap:4px">'
+          + '<span>سمت: ' + roleLabel + '</span>'
+          + specialtyLabel
+          + '</div>'
+          + '</div>'
+          + '<div style="display:flex;flex-direction:column;align-items:end;gap:4px">'
+          + '<span style="font-size:9px;background:'+infColor+'12;color:'+infColor+';border:1px solid '+infColor+'40;border-radius:4px;padding:1px 6px;font-weight:700">' + esc(a.influence_level || 'Decision Maker') + '</span>'
+          + '</div>'
+          + '</div>'
+          
+          + '<div style="margin-top:6px;border-top:1px dashed var(--border);padding-top:4px">'
+          + phonesHtml
+          + '</div>'
+
+          + (a.working_hours || a.notes ? '<div style="font-size:10px;color:var(--text-secondary);background:var(--bg-raised);padding:4px 6px;border-radius:4px;margin-top:6px">'
+            + (a.working_hours ? '🕒 حضور: ' + esc(a.working_hours) : '')
+            + (a.notes ? ' | یادداشت: ' + esc(a.notes) : '')
+            + '</div>' : '')
+
+          + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">'
+          + '<button class="btn-secondary" onclick="_hcpOpenEditModal(\''+a.hcp_id+'\', function(){ _hcpLoadCenterAffiliations(\''+rtype+'\', \''+rid+'\', \''+domId+'\'); })" style="font-size:10px;padding:2px 8px;border-radius:4px">👤 ویرایش مشخصات</button>'
+          + '<button class="btn-secondary" onclick="_hcpOpenEditAffiliationModal('+a.id+', \''+rtype+'\', \''+rid+'\', \''+domId+'\')" style="font-size:10px;padding:2px 8px;border-radius:4px">✏️ ویرایش ارتباط</button>'
+          + '<button onclick="_hcpUnlinkAffiliation('+a.id+', \''+rtype+'\', \''+rid+'\', \''+domId+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;font-size:10px;padding:2px 8px;font-family:inherit">🔗 قطع ارتباط</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    });
+}
+
+function _hcpOpenLinkModal(rtype, rid, domId) {
+  var centerKey = rtype + '_' + rid;
+  window._hcpPendingLinkCenterKey = centerKey;
+  window._hcpPendingLinkDomId = domId;
+  window._hcpPendingLinkRtype = rtype;
+  window._hcpPendingLinkRid = rid;
+
+  var title = '🔗 اتصال پزشک / مخاطب به مرکز';
+  var body = '<div style="direction:rtl;text-align:right;font-size:12px">'
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">نام پزشک را جستجو کنید:</label>'
+    + '<div style="position:relative;margin-bottom:12px">'
+    + '<input type="text" id="hcpLinkSearch" placeholder="تایپ کنید تا جستجو شود..." style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary)" oninput="_hcpLinkAutocomplete(this.value)">'
+    + '<div id="hcpAutocompleteResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:999;box-shadow:0 4px 6px rgba(0,0,0,.1)"></div>'
+    + '</div>'
+    
+    + '<div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;text-align:center">'
+    + '<p style="color:var(--text-secondary);font-size:11px;margin-bottom:8px">پزشک مورد نظر را در سیستم ندارید؟</p>'
+    + '<button class="btn-secondary" onclick="closeModal(\'hcpLinkModal\');_hcpOpenCreateModal();" style="font-weight:700;padding:6px 16px">+ ثبت و اتصال پزشک جدید</button>'
+    + '</div>'
+    + '</div>';
+
+  openModal('hcpLinkModal', title, body, '<button class="btn-secondary" onclick="closeModal(\'hcpLinkModal\');window._hcpPendingLinkCenterKey=null;">انصراف</button>');
+}
+
+function _hcpLinkAutocomplete(val) {
+  var container = document.getElementById('hcpAutocompleteResults');
+  if (!container) return;
+  val = val.trim();
+  if (!val) {
+    container.style.display = 'none';
+    return;
+  }
+
+  fetch('/api/hcps?q=' + encodeURIComponent(val))
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(data) {
+      if (!data.length) {
+        container.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted)">هیچ موردی یافت نشد</div>';
+        container.style.display = 'block';
+        return;
+      }
+
+      container.innerHTML = data.map(function(hcp) {
+        var specLabel = hcp.specialty ? ' (' + esc(hcp.specialty) + ')' : '';
+        return '<div class="autocomplete-item" onclick="_hcpLinkAndClose(\''+hcp.id+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-primary)" onmouseover="this.style.background=\'var(--bg-raised)\'" onmouseout="this.style.background=\'none\'">'
+          + '👤 ' + esc(hcp.name) + specLabel
+          + '</div>';
+      }).join('');
+      container.style.display = 'block';
+    });
+}
+
+function _hcpLinkAndClose(hcpId) {
+  var centerKey = window._hcpPendingLinkCenterKey;
+  var domId = window._hcpPendingLinkDomId;
+  var rtype = window._hcpPendingLinkRtype;
+  var rid = window._hcpPendingLinkRid;
+
+  if (!centerKey) return;
+
+  // Open affiliation details modal first so they can specify Role and Influence
+  closeModal('hcpLinkModal');
+  
+  var title = '🔗 تنظیم جزئیات ارتباط پزشک با مرکز';
+  var body = '<div style="direction:rtl;text-align:right;font-size:12px">'
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">سمت / نقش در این مرکز:</label>'
+    + '<input type="text" id="affFormRole" placeholder="مثال: رئیس بخش، جراح ارشد..." style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px">'
+    
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">میزان تأثیرگذاری در خرید تجهیزات:</label>'
+    + '<select id="affFormInfluence" style="width:100%;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px">'
+    + '<option value="Decision Maker">Decision Maker (تصمیم‌گیرنده)</option>'
+    + '<option value="KOL">Key Opinion Leader (پیشرو علمی)</option>'
+    + '<option value="End User">End User (کاربر نهایی)</option>'
+    + '<option value="Influencer">Influencer (تأثیرگذار)</option>'
+    + '</select>'
+
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">روزها / ساعت‌های حضور:</label>'
+    + '<input type="text" id="affFormHours" placeholder="مثال: شنبه‌ها و دوشنبه‌ها صبح..." style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px">'
+
+    + '<label style="font-weight:700;display:block;margin-bottom:3px">توضیحات اختصاصی این مرکز:</label>'
+    + '<textarea id="affFormNotes" rows="2" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);resize:vertical" placeholder="توضیحات..."></textarea>'
+    + '</div>';
+
+  var foot = '<button class="btn-secondary" onclick="closeModal(\'affDetailsModal\')">انصراف</button>'
+    + '<button class="btn-primary" onclick="_hcpSaveAffiliation(\''+centerKey+'\', \''+hcpId+'\', \''+rtype+'\', \''+rid+'\', \''+domId+'\')">تایید و اتصال 🔗</button>';
+
+  openModal('affDetailsModal', title, body, foot);
+}
+
+function _hcpSaveAffiliation(centerKey, hcpId, rtype, rid, domId) {
+  var payload = {
+    centerKey: centerKey,
+    hcpId: hcpId,
+    role: document.getElementById('affFormRole') ? document.getElementById('affFormRole').value.trim() : '',
+    influenceLevel: document.getElementById('affFormInfluence') ? document.getElementById('affFormInfluence').value : 'Decision Maker',
+    workingHours: document.getElementById('affFormHours') ? document.getElementById('affFormHours').value.trim() : '',
+    notes: document.getElementById('affFormNotes') ? document.getElementById('affFormNotes').value.trim() : ''
+  };
+
+  fetch('/api/hcps/affiliations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d) {
+        showToast('🔗 پزشک به مرکز متصل شد');
+        closeModal('affDetailsModal');
+        window._hcpPendingLinkCenterKey = null;
+        _hcpLoadCenterAffiliations(rtype, rid, domId);
+      } else {
+        showToast('❌ خطا در اتصال پزشک');
+      }
+    });
+}
+
+function _hcpOpenEditAffiliationModal(affId, rtype, rid, domId) {
+  openModal('affEditModal', '⏳ در حال بارگذاری...', '<div style="text-align:center;padding:20px">در حال خواندن اطلاعات ارتباط...</div>');
+  
+  // We can fetch from center's affiliations endpoint to find this specific one
+  var centerKey = rtype + '_' + rid;
+  fetch('/api/hcps/centers/' + encodeURIComponent(centerKey) + '/affiliations')
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(affs) {
+      var a = affs.find(function(x) { return x.id === affId; });
+      if (!a) {
+        showToast('❌ ارتباط یافت نشد');
+        closeModal('affEditModal');
+        return;
+      }
+
+      var title = '✏️ ویرایش مشخصات ارتباط ' + esc(a.hcp_name);
+      var body = '<div style="direction:rtl;text-align:right;font-size:12px">'
+        + '<label style="font-weight:700;display:block;margin-bottom:3px">سمت / نقش در این مرکز:</label>'
+        + '<input type="text" id="affEditFormRole" value="'+esc(a.role || '')+'" placeholder="مثال: رئیس بخش..." style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px">'
+        
+        + '<label style="font-weight:700;display:block;margin-bottom:3px">میزان تأثیرگذاری در خرید تجهیزات:</label>'
+        + '<select id="affEditFormInfluence" style="width:100%;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px">'
+        + '<option value="Decision Maker"'+(a.influence_level === 'Decision Maker' ? ' selected' : '')+'>Decision Maker (تصمیم‌گیرنده)</option>'
+        + '<option value="KOL"'+(a.influence_level === 'KOL' ? ' selected' : '')+'>Key Opinion Leader (پیشرو علمی)</option>'
+        + '<option value="End User"'+(a.influence_level === 'End User' ? ' selected' : '')+'>End User (کاربر نهایی)</option>'
+        + '<option value="Influencer"'+(a.influence_level === 'Influencer' ? ' selected' : '')+'>Influencer (تأثیرگذار)</option>'
+        + '</select>'
+
+        + '<label style="font-weight:700;display:block;margin-bottom:3px">روزها / ساعت‌های حضور:</label>'
+        + '<input type="text" id="affEditFormHours" value="'+esc(a.working_hours || '')+'" placeholder="حضور..." style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);margin-bottom:10px">'
+
+        + '<label style="font-weight:700;display:block;margin-bottom:3px">توضیحات اختصاصی این مرکز:</label>'
+        + '<textarea id="affEditFormNotes" rows="2" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-input);border-radius:8px;font-family:inherit;font-size:12px;background:var(--bg-input);color:var(--text-primary);resize:vertical" placeholder="توضیحات...">'+esc(a.notes || '')+'</textarea>'
+        + '</div>';
+
+      var foot = '<button class="btn-secondary" onclick="closeModal(\'affEditModal\')">انصراف</button>'
+        + '<button class="btn-primary" onclick="_hcpUpdateAffiliation('+affId+', \''+rtype+'\', \''+rid+'\', \''+domId+'\')">ذخیره تغییرات 💾</button>';
+
+      openModal('affEditModal', title, body, foot);
+    });
+}
+
+function _hcpUpdateAffiliation(affId, rtype, rid, domId) {
+  var payload = {
+    role: document.getElementById('affEditFormRole') ? document.getElementById('affEditFormRole').value.trim() : '',
+    influenceLevel: document.getElementById('affEditFormInfluence') ? document.getElementById('affEditFormInfluence').value : 'Decision Maker',
+    workingHours: document.getElementById('affEditFormHours') ? document.getElementById('affEditFormHours').value.trim() : '',
+    notes: document.getElementById('affEditFormNotes') ? document.getElementById('affEditFormNotes').value.trim() : ''
+  };
+
+  fetch('/api/hcps/affiliations/' + affId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d) {
+        showToast('💾 تغییرات ارتباط ذخیره شد');
+        closeModal('affEditModal');
+        _hcpLoadCenterAffiliations(rtype, rid, domId);
+      } else {
+        showToast('❌ خطا در ذخیره تغییرات');
+      }
+    });
+}
+
+function _hcpUnlinkAffiliation(affId, rtype, rid, domId) {
+  if (!confirm('آیا از قطع ارتباط این پزشک با این مرکز درمانی مطمئن هستید؟')) return;
+
+  fetch('/api/hcps/affiliations/' + affId, { method: 'DELETE' })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d && d.ok) {
+        showToast('🔗 ارتباط قطع شد');
+        _hcpLoadCenterAffiliations(rtype, rid, domId);
+      } else {
+        showToast('❌ خطا در قطع ارتباط');
+      }
+    });
 }

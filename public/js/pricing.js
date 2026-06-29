@@ -1,3 +1,4 @@
+/* ═══ public/js/pricing.js ═══ */
 // ══════════════════════ PRICING MODULE ══════════════════════════════════════
 var _plInited=false;
 var _plPayMode='d30',_plViewMode='both',_plActiveMethod='rate',_plPending=null;
@@ -725,7 +726,7 @@ document.addEventListener('click', function(ev) {
   if (popup && popup.classList.contains('show') && !popup.contains(ev.target)) hideContactPopup();
 });
 function openCenterAudit(centerKey, centerName) {
-  var rtype=centerKey.split('_')[0], rid=centerKey.split('_')[1];
+  var _ckParts=centerKey.split('_');var rtype=_ckParts[0], rid=_ckParts.slice(1).join('_');
   var events=[];
   // changeLog
   (DB.changeLog||[]).filter(function(h){return h.rkey===centerKey;}).forEach(function(h){
@@ -813,30 +814,145 @@ function _getCompetitorList(){
   return Object.keys(comps).sort(function(a,b){return comps[b]-comps[a];});
 }
 
+// ── Playbook gap: lead-change & status-change helpers ──────────
+var ACTION_TYPE_LABELS={'call':'📞 تماس','visit':'🤝 ملاقات','price_send':'📄 ارسال قیمت','sample_send':'🧪 ارسال نمونه','committee':'🏛 کمیته','meeting':'👥 جلسه','followup':'🔄 پیگیری'};
+// Max days without activity per lead stage (Playbook §7)
+var _STAGE_MAX_DAYS={'لید':7,'سرنخ':7,'فرصت_A':3,'فرصت_B':7,'فرصت_C':14,'فرصت':7,'مشتری':30,'مشتری_dormant':30};
+function _getStageMaxDays(lead,oppGrade,customerStatus){
+  if(lead==='فرصت')return _STAGE_MAX_DAYS['فرصت_'+(oppGrade||'B')]||7;
+  if(lead==='مشتری')return 30;
+  return _STAGE_MAX_DAYS[lead]||14;
+}
+function _getLastActivityDate(rtype,rid){
+  var rkey=rtype+'_'+rid;
+  var cls=(DB.changeLog||[]).filter(function(ch){return ch.rkey===rkey;});
+  if(!cls.length)return null;
+  var latest=cls.reduce(function(a,b){return a.at>b.at?a:b;});
+  return latest.at;
+}
+function _onLeadChange(id,newLead,rtype,rid){
+  var opp=document.getElementById('cmOppSection_'+id);
+  var cust=document.getElementById('cmCustSection_'+id);
+  if(opp)opp.style.display=newLead==='فرصت'?'':'none';
+  if(cust)cust.style.display=newLead==='مشتری'?'':'none';
+  // Stage validation: warn about missing fields
+  if(rtype&&rid){
+    var e=getE(rtype,rid);
+    var missing=[];
+    if(newLead==='سرنخ'||newLead==='فرصت'){
+      if(!e.contacts||!e.contacts.length)missing.push('اطلاعات تماس');
+    }
+    if(newLead==='فرصت'){
+      if(!e.competitor)missing.push('رقیب اصلی');
+      if(!e.oppGrade)missing.push('درجه فرصت (A/B/C)');
+    }
+    if(newLead==='مشتری'){
+      if(!e.lastPurchaseDate)missing.push('تاریخ آخرین خرید');
+    }
+    if(missing.length){
+      var warn=document.getElementById('cmStageWarn_'+id);
+      if(warn){warn.textContent='⚠️ فیلدهای تکمیل‌نشده: '+missing.join(' / ');warn.style.display='';}
+    } else {
+      var warn=document.getElementById('cmStageWarn_'+id);
+      if(warn)warn.style.display='none';
+    }
+  }
+  if(rtype&&rid)setE(rtype,rid,'lead',newLead);
+}
+function _onStatusChange(rtype,rid,newStatus){
+  var needReason=['غیرفعال','قرارداد بسته شد'];
+  setE(rtype,rid,'status',newStatus);
+  if(needReason.indexOf(newStatus)>=0){
+    var existing=getE(rtype,rid).closeReason||'';
+    if(existing)return;
+    var reasons=['قیمت','بودجه','رقیب','عدم نیاز','تصمیم پزشک','تصمیم بیمارستان','زمان خرید','سایر'];
+    var sel='<select id="_crSel" style="width:100%;padding:7px 8px;border:1px solid var(--border-input);border-radius:6px;font-family:inherit;font-size:12px;margin-top:4px"><option value="">انتخاب دلیل...</option>'+reasons.map(function(r){return'<option>'+r+'</option>';}).join('')+'</select>';
+    var body='<div style="font-size:12px"><p style="margin:0 0 8px;color:var(--text-secondary)">دلیل بسته/غیرفعال شدن مرکز را انتخاب کنید:</p>'+sel+'<input id="_crOther" type="text" placeholder="توضیح بیشتر (اختیاری)..." style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px"></div>';
+    var _rt=rtype,_ri=rid;
+    openModal('closeReasonModal','❗ دلیل بستن / غیرفعال کردن',body,
+      '<button class="btn-secondary" onclick="closeModal(\'closeReasonModal\')">بعداً ثبت می‌کنم</button>'
+      +'<button class="btn-primary" onclick="(function(){var s=(document.getElementById(\'_crSel\')||{}).value;var o=(document.getElementById(\'_crOther\')||{}).value||\'\';if(!s){showToast(\'دلیل را انتخاب کنید\');return;}setE(_rt,_ri,\'closeReason\',s+(o?\' — \'+o:\'\'));closeModal(\'closeReasonModal\');showToast(\'✓ دلیل ثبت شد\');})()">ثبت دلیل</button>'
+    );
+  }
+}
+function _computeCustomerStatus(rtype,rid){
+  var e=getE(rtype,rid);
+  var lpd=e.lastPurchaseDate||'';
+  if(!lpd)return'';
+  var today=todayStr();
+  var dp=lpd.split('/');var tp=today.split('/');
+  try{
+    var lpdMs=jMs(parseInt(dp[0]),parseInt(dp[1]),parseInt(dp[2]));
+    var todMs=jMs(parseInt(tp[0]),parseInt(tp[1]),parseInt(tp[2]));
+    var days=Math.floor((todMs-lpdMs)/86400000);
+    if(days>90)return'dormant';
+    if(days>0)return'active';
+    return'active_new';
+  }catch(_){return'';}
+}
+function openCloseReasonModal(rtype,rid){_onStatusChange(rtype,rid,getE(rtype,rid).status);}
+function _cmSetLastPurch(rtype,rid,id,v){
+  var el=document.getElementById('cmLastPurch_'+id);
+  if(el)el.value=v;
+  setE(rtype,rid,'lastPurchaseDate',v);
+  var cs=_computeCustomerStatus(rtype,rid);
+  if(cs)setE(rtype,rid,'customerStatus',cs);
+}
 function openCenterModal(rtype,id){
   // Track recent centers
   var _rcKey=rtype+'_'+id;
   _recentCenters=_recentCenters.filter(function(x){return x.key!==_rcKey;});
   _recentCenters.unshift({key:_rcKey,rtype:rtype,id:id,name:_getCenterName(rtype,id),ts:Date.now()});
   if(_recentCenters.length>8)_recentCenters=_recentCenters.slice(0,8);
-  var prov=_currentProvId;
-  if(!prov){
-    // باید استان را پیدا کنیم
-    getAllProvinces().some(function(p){
-      var pt=getProvType(p.id);
-      if(pt===rtype||rtype==='center'&&p.id==='tehran'){
-        var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
-        if(c){prov=p.id;return true;}
-      }else if(pt==='pc'&&rtype==='pc'){
-        var c2=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
-        if(c2){prov=p.id;return true;}
-      }
-      return false;
-    });
+  var prov=null;
+  // For PC centers: ID encodes the province (format: 'provId||n') — extract first
+  if(rtype==='pc'&&typeof id==='string'&&id.indexOf('||')>=0){
+    prov=id.split('||')[0];
   }
-  var centers=getProvCenters(prov||'tehran');
-  var r=centers.find(function(x){return String(x.id)===String(id);});
-  if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);});}
+  if(!prov){
+    // Search PC cache FIRST (before DB.extra) to avoid ID collisions with extra centers
+    if(rtype==='pc'){
+      _buildPCCache();
+      Object.keys(_PC_CACHE||{}).some(function(pid){
+        if(pid==='tehran')return false;
+        var found=(_PC_CACHE[pid]||[]).find(function(x){return String(x.id)===String(id);});
+        if(found){prov=pid;return true;}
+        return false;
+      });
+    }
+    if(!prov){
+      // Fall back to full province search (includes DB.extra)
+      getAllProvinces().some(function(p){
+        var pt=getProvType(p.id);
+        if(pt===rtype||(rtype==='center'&&p.id==='tehran')){
+          var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
+          if(c){prov=p.id;return true;}
+        }
+        return false;
+      });
+    }
+  }
+  if(!prov){
+    prov=_currentProvId||'tehran';
+  }
+  // DB.extra wins over PC cache when IDs collide — check it first
+  var r=(DB.extra||[]).find(function(x){
+    var xrt=x.province_id==='tehran'?'center':'pc';
+    return xrt===rtype&&String(x.id)===String(id);
+  })||null;
+  if(!r){
+    var centers=getProvCenters(prov||'tehran');
+    r=centers.find(function(x){return String(x.id)===String(id);});
+    if(!r&&prov){
+      getAllProvinces().some(function(p){
+        if(p.id===prov)return false;
+        var c=getProvCenters(p.id).find(function(x){return String(x.id)===String(id);});
+        if(c){r=c;prov=p.id;return true;}
+        return false;
+      });
+    }
+    if(!r){r=(DB.extra||[]).find(function(x){return String(x.id)===String(id);})||null;}
+  }
   if(!r){showToast('مرکز یافت نشد');return;}
   var e=getE(rtype,r.id);
   var st=e.status||'بدون تماس';var lead=e.lead||r.lead||'سرنخ';
@@ -872,21 +988,64 @@ function openCenterModal(rtype,id){
     +'<span class="owner-dot" data-uid="'+encodeURIComponent(e.owner||r.owner||'')+'"></span>'
     +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'owner\',this.value);var _d=this.previousElementSibling;if(_d)_d.style.background=window.umGetColor?umGetColor(this.value):\'#e2e8f0\'">'
     +'<option value="">—</option>'
-    +Object.keys(USERS).map(function(u){return'<option value="'+u+'"'+((e.owner||r.owner||'')==u?' selected':'')+'>'+USERS[u]+'</option>';}).join('')+'</select></div>'
+    +(function(){var _act=typeof umGetActive==='function'?umGetActive():[];return _act.map(function(m){return'<option value="'+m.id+'"'+((e.owner||r.owner||'')==m.id?' selected':'')+'>'+m.name+'</option>';}).join('');})()+'</select></div>'
     +(function(){var _typeOpts=[''].concat(TYPE_LIST);var _curType=e.type||r.type||'';return'<div><label>نوع مرکز</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'type\',this.value)">'+_typeOpts.map(function(t){return'<option value="'+t+'"'+(_curType===t?' selected':'')+'>'+(t||'-- نوع --')+'</option>';}).join('')+'</select></div>';})()
     +'</div><div class="m-2col">'
-    +'<div><label>وضعیت</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'status\',this.value)">'
+    +'<div><label>وضعیت</label><select class="ed-sel" onchange="_onStatusChange(\''+rtype+'\',\''+r.id+'\',this.value)">'
     +STATUS_LIST.map(function(s){return'<option'+(s===st?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'
-    +'<div><label>سرنخ</label><select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'lead\',this.value)">'
+    +'<div><label>سرنخ</label><select class="ed-sel" onchange="_onLeadChange(\''+id+'\',this.value,\''+rtype+'\',\''+r.id+'\')">'
     +LEAD_LIST.map(function(l){return'<option'+(l===lead?' selected':'')+'>'+l+'</option>';}).join('')+'</select></div>'
+    +'</div>'
+    // Stage validation warning
+    +'<div id="cmStageWarn_'+id+'" style="display:none;background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-top:4px;font-size:10px;color:#92400e"></div>'
+    // ── بخش فرصت (فقط وقتی lead=فرصت) ──
+    +'<div id="cmOppSection_'+id+'" style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px 12px;margin-top:6px;'+(lead==='فرصت'?'':'display:none')+'">'
+    +'<div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:8px">🎯 جزئیات فرصت</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">احتمال موفقیت</label>'
+    +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'oppProbability\',this.value)">'
+    +'<option value="">—</option>'
+    +'<option value="low"'+(e.oppProbability==='low'?' selected':'')+'>کم</option>'
+    +'<option value="medium"'+(e.oppProbability==='medium'?' selected':'')+'>متوسط</option>'
+    +'<option value="high"'+(e.oppProbability==='high'?' selected':'')+'>زیاد ✅</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">درجه فرصت</label>'
+    +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'oppGrade\',this.value)">'
+    +'<option value="">—</option>'
+    +'<option value="A"'+(e.oppGrade==='A'?' selected':'')+'>🔥 A (داغ)</option>'
+    +'<option value="B"'+(e.oppGrade==='B'?' selected':'')+'>☀️ B (گرم)</option>'
+    +'<option value="C"'+(e.oppGrade==='C'?' selected':'')+'>❄️ C (سرد)</option>'
+    +'</select></div>'
+    +'</div>'
+    +'<label style="font-size:10px;display:block;margin-bottom:3px">💰 ارزش فرصت (میلیون ریال)</label>'
+    +'<input type="number" min="0" step="1" value="'+(e.oppValue||'')+'" placeholder="مثلاً: 150" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'oppValue\',parseFloat(this.value)||0)" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+    +'</div>'
+    // ── بخش مشتری (فقط وقتی lead=مشتری) ──
+    +'<div id="cmCustSection_'+id+'" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;'+(lead==='مشتری'?'':'display:none')+'">'
+    +'<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">🏆 اطلاعات مشتری</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">وضعیت مشتری</label>'
+    +'<select class="ed-sel" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'customerStatus\',this.value)">'
+    +'<option value="">خودکار</option>'
+    +'<option value="new"'+(e.customerStatus==='new'?' selected':'')+'>🆕 جدید</option>'
+    +'<option value="active_new"'+(e.customerStatus==='active_new'?' selected':'')+'>✨ فعال - جدید</option>'
+    +'<option value="active"'+(e.customerStatus==='active'?' selected':'')+'>✅ فعال</option>'
+    +'<option value="dormant"'+(e.customerStatus==='dormant'?' selected':'')+'>😴 خوابیده (+90 روز)</option>'
+    +'<option value="lost"'+(e.customerStatus==='lost'?' selected':'')+'>❌ از دست رفته</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:10px;display:block;margin-bottom:3px">📅 آخرین خرید</label>'
+    +'<input type="text" id="cmLastPurch_'+id+'" value="'+(e.lastPurchaseDate||'')+'" readonly class="fd-inp" style="cursor:pointer;width:100%;box-sizing:border-box" placeholder="انتخاب تاریخ" onclick="openJDP(this,function(v){_cmSetLastPurch(\''+rtype+'\',\''+r.id+'\',\''+id+'\',v);})">'
+    +'</div></div>'
+    +(function(){var _cs=_computeCustomerStatus(rtype,r.id);return _cs==='dormant'?'<div style="font-size:10px;background:#fef9c3;border:1px solid #fde047;border-radius:5px;padding:4px 8px;color:#92400e">⚠️ مشتری خوابیده — بیش از ۹۰ روز از آخرین خرید گذشته</div>':'';})()+''
     +'</div>'
     +'<label>تاریخ پیگیری بعدی</label>'
     +'<div style="display:flex;gap:5px;align-items:center">'
     +'<input id="mfd_'+id+'" type="text" value="'+fd+'" readonly class="fd-inp'+(fd&&fd<today?' ov':'')+'" style="cursor:pointer;flex:1" '
-    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
-    +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
+    +'onclick="openJDP(this,function(v){var _in=document.getElementById(\'mfd_'+id+'\');if(_in){_in.value=v;_in.className=\'fd-inp\'+(v&&v<todayStr()?\'ov\':\'\');}setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',v);var _lbl=document.getElementById(\'mfd_wk_'+id+'\');if(_lbl){_lbl.textContent=v?\' (\'+getWeekLabelForDate(v)+\')\':\'\';}renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);})">'
+    +(fd?'<button onclick="setE(\''+rtype+'\',\''+r.id+'\',\'followupDate\',\'\');document.getElementById(\'mfd_'+id+'\').value=\'\';document.getElementById(\'mfd_'+id+'\').className=\'fd-inp\';var _lbl=document.getElementById(\'mfd_wk_'+id+'\');if(_lbl){_lbl.textContent=\'\';}renderBanner();if(currentTab===\'provinces\'&&_currentProvId)renderTable();if(currentTab===\'weekplan\')setTimeout(renderWeekPlan,80);" title="حذف تاریخ" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">✕ حذف</button>':'')
     +'<button onclick="convertFollowupToTask(\''+esc(rtype)+'\',\''+esc(r.id)+'\')" title="تبدیل به وظیفه" style="background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;white-space:nowrap">📌 وظیفه</button>'
     +'</div>'
+    +'<div id="mfd_wk_'+id+'" style="font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:700">'+(fd?' ('+getWeekLabelForDate(fd)+')':'')+'</div>'
     +'<label>برچسب‌ها</label>'
     +'<div id="tagArea_'+id+'" style="display:flex;flex-wrap:wrap;gap:4px;padding:7px;background:var(--bg-raised);border-radius:6px;min-height:30px;border:1px solid var(--border)">'
     +tgs.map(function(tid){var t=tagById(tid);return t?'<span class="tag-badge" style="background:'+_safeColor(t.color)+';display:inline-flex;align-items:center;gap:3px">'+esc(t.name)+'<button onclick="removeCenterTag(event,\''+rtype+'\',\''+r.id+'\',\''+tid+'\')" style="background:rgba(0,0,0,.2);border:none;color:var(--text-primary);width:14px;height:14px;border-radius:50%;cursor:pointer;font-size:9px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center">✕</button></span>':'';}).join('')
@@ -896,9 +1055,9 @@ function openCenterModal(rtype,id){
     +'<div style="background:var(--bg-raised);border-radius:8px;padding:10px 12px;margin-top:6px;border:1px solid var(--border)">'
     +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">'
     +'<span>📞 اطلاعات تماس</span>'
-    +'<button onclick="addContact(\''+rtype+'\',\''+r.id+'\',\''+id+'\')" style="padding:3px 10px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:11px;font-family:inherit;cursor:pointer;font-weight:700">+ افزودن مخاطب</button>'
+    +'<button onclick="if(typeof _hcpOpenLinkModal===\'function\')_hcpOpenLinkModal(\''+rtype+'\',\''+r.id+'\',\''+id+'\');else addContact(\''+rtype+'\',\''+r.id+'\',\''+id+'\')" style="padding:3px 10px;border-radius:6px;border:none;background:#0ea5e9;color:#fff;font-size:11px;font-family:inherit;cursor:pointer;font-weight:700">+ افزودن مخاطب</button>'
     +'</div>'
-    +'<div id="contactsArea_'+id+'">'+_buildContactsHTML(rtype,r.id,id)+'</div>'
+    +'<div id="contactsArea_'+id+'">⏳ در حال بارگذاری پزشکان متصل...</div>'
     // آدرس
     +'<label style="font-size:10px;margin-top:8px;display:block">آدرس</label>'
     +'<textarea id="maddr_'+id+'" placeholder="آدرس کامل مرکز..." rows="2" style="width:100%;box-sizing:border-box;padding:5px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;background:var(--bg-input);color:var(--text-primary);direction:rtl" '
@@ -910,7 +1069,33 @@ function openCenterModal(rtype,id){
     +'<div><label style="font-size:10px;display:block;margin-bottom:3px">🤖 رقیب اصلی</label>'
     +'<input type="text" list="compDatalist_'+r.id+'" value="'+esc(e.competitor||'')+'" placeholder="نام رقیب / برند..." onchange="setE(\''+rtype+'\',\''+r.id+'\',\'competitor\',this.value)" style="width:100%;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-family:inherit;font-size:11px;background:var(--bg-input);color:var(--text-primary)"><datalist id="compDatalist_'+r.id+'">'+_getCompetitorList().map(function(c){return'<option value="'+esc(c)+'">';}).join('')+'</datalist></div>'
     +'<div id="cmCommission_'+r.id+'" style="font-size:10px;color:var(--text-muted);padding:4px 0"></div>'
+    +'</div>'
+    // ── جزئیات رقیب ──
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">'
+    +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">💪 مزیت رقیب</label>'
+    +'<input type="text" value="'+(e.competitorAdvantage||'')+'" placeholder="مثلاً: قیمت پایین‌تر" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'competitorAdvantage\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)"></div>'
+    +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">🎯 دلیل خرید از رقیب</label>'
+    +'<input type="text" value="'+(e.buyReasonFromCompetitor||'')+'" placeholder="مثلاً: رابطه قدیمی" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'buyReasonFromCompetitor\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)"></div>'
     +'</div></div>'
+    +(function(){
+      if(e.lead!=='سرنخ'&&e.lead!=='فرصت')return '';
+      var pm=e.purchaseMethod||'';
+      var pt=e.paymentTerms||'';
+      return '<div style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border)">'
+        +'<div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px">📋 اطلاعات Prospect</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+        +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">📦 میزان مصرف تقریبی</label>'
+        +'<input type="text" value="'+(e.approxConsumption||'')+'" placeholder="مثلاً: ۵۰ عدد/ماه" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'approxConsumption\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)"></div>'
+        +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">🛒 نحوه خرید</label>'
+        +'<select onchange="setE(\''+rtype+'\',\''+r.id+'\',\'purchaseMethod\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+        +['','مستقیم','توزیع‌کننده','بیمارستانی','مناقصه'].map(function(v){return'<option'+(v===pm?' selected':'')+'>'+v+'</option>';}).join('')+'</select></div>'
+        +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">💳 شرایط پرداخت</label>'
+        +'<select onchange="setE(\''+rtype+'\',\''+r.id+'\',\'paymentTerms\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+        +['','نقدی','۳۰ روزه','۶۰ روزه','۹۰ روزه','اعتباری'].map(function(v){return'<option'+(v===pt?' selected':'')+'>'+v+'</option>';}).join('')+'</select></div>'
+        +'<div><label style="font-size:9px;color:var(--text-muted);display:block;margin-bottom:2px">📅 زمان تقریبی سفارش</label>'
+        +'<input type="text" value="'+(e.approxOrderTime||'')+'" placeholder="مثلاً: اسفند ۱۴۰۳" onchange="setE(\''+rtype+'\',\''+r.id+'\',\'approxOrderTime\',this.value)" style="width:100%;padding:3px 6px;border:1px solid var(--border-input);border-radius:4px;font-size:10px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)"></div>'
+        +'</div></div>';
+    })()
     +'<div id="cmPricingInfo_'+r.id+'" style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);font-size:11px"><span style="color:var(--text-muted)">در حال بارگذاری قیمت‌گذاری...</span></div>'
    // برنامه هفته
     +(wkEntries.length?'<label>برنامه هفته</label><div style="background:var(--bg-raised);border-radius:5px;padding:7px;font-size:11px">'
@@ -930,7 +1115,7 @@ function openCenterModal(rtype,id){
       var tagChips=allTags.length
         ?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px" id="mnoteTagRow_'+id+'">'
           +allTags.map(function(t){
-            return '<span onclick="_noteToggleTag(\''+id+'\','+t.id+')" data-tagid="'+t.id+'" '
+            return '<span onclick="_noteToggleTag(\''+id+'\',\''+t.id+'\')" data-tagid="'+t.id+'" '
               +'style="cursor:pointer;padding:2px 8px;border-radius:9px;font-size:10px;font-weight:600;border:1.5px solid var(--border);color:var(--text-secondary);background:var(--bg-raised);transition:all .15s" '
               +'class="note-tag-chip">'+esc(t.name)+'</span>';
           }).join('')
@@ -971,6 +1156,7 @@ function openCenterModal(rtype,id){
     +'<button style="background:#faf5ff;color:#7c3aed;border:1px solid #d8b4fe;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openPreCallBrief(\''+rtype+'\',' +'\''+r.id+'\')">🎯 خلاصه</button>'
     +'<button style="background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openCenterAudit(\''+recK(rtype,r.id)+'\',\''+esc(displayName)+'\')">📋 تاریخچه</button>'
     +'<button style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openMergeCenterModal(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">🔀 ادغام</button>'
+    +(_isManager()?'<button style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit" onclick="openChangeProvinceModal(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">🗺 تغییر استان</button>':'')
     +'<button class="btn-secondary" onclick="closeModal(\'cm_'+id+'\')">بستن</button>'
     +'<button class="btn-primary" onclick="openAssignWeekForCenter(\''+rtype+'\',\''+r.id+'\',\''+esc(displayName)+'\')">📋 اضافه به هفته</button>';
   // ── مطالبات section ──
@@ -980,6 +1166,7 @@ function openCenterModal(rtype,id){
     if(mtrHtml) body+=mtrHtml;
   }
   openModal('cm_'+id,'🏥 '+esc(displayName),body,foot,{lg:true});
+  if(typeof _hcpLoadCenterAffiliations==='function'){setTimeout(function(){_hcpLoadCenterAffiliations(rtype,r.id,id);},20);}
   if(window.umGetColor){setTimeout(function(){document.querySelectorAll('.owner-dot[data-uid]').forEach(function(d){var u=decodeURIComponent(d.dataset.uid);if(u)d.style.background=umGetColor(u);});},0);}
   // ── قیمت‌گذاری ──
   (function(_rid,_rname){
@@ -996,7 +1183,7 @@ function openCenterModal(rtype,id){
         if(parseFloat(cfg.discount_ceiling_pct)>0)parts.push('⬇ سقف تخفیف: <b>'+cfg.discount_ceiling_pct+'%</b>');
         if(cfg.payment_terms)parts.push('📅 شرایط پرداخت: <b>'+cfg.payment_terms+'</b>');
         el.innerHTML=parts.length?'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:5px">💰 قیمت‌گذاری</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+parts.map(function(p){return'<span style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:2px 7px;color:var(--text-primary)">'+p+'</span>';}).join('')+'</div>':'<span style="color:var(--text-muted);font-size:10px">قیمت‌گذاری تنظیم نشده</span>';
-  var elCom=document.getElementById('cmCommission_'+_rid);if(elCom){elCom.innerHTML=cfg&&cfg.commission_level?'<span style="font-size:11px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;font-weight:600">💼 پورسانت: '+esc(cfg.commission_level)+'</span>':'';}
+  var elCom=document.getElementById('cmCommission_'+_rid);if(elCom){var _curLvl=cfg&&cfg.commission_level?String(cfg.commission_level):'';elCom.innerHTML='<div style="display:flex;align-items:center;gap:5px"><label style="font-size:10px;color:var(--text-muted);flex-shrink:0">💼 پورسانت:</label><select onchange="(function(sel,nm){fetch(\'/api/pricing/center/\'+encodeURIComponent(nm),{method:\'PUT\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({commission_level:sel.value||null})}).then(function(){showToast(sel.value?\'💼 سطح پورسانت ذخیره شد\':\'💼 پورسانت حذف شد\');}).catch(function(){showToast(\'خطا در ذخیره پورسانت\');});})(this,\''+esc(_rname)+'\')" style="font-size:10px;padding:2px 5px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);font-family:inherit;color:var(--text-primary)"><option value="">---</option><option value="1"'+(_curLvl==='1'?' selected':'')+'>سطح ۱</option><option value="2"'+(_curLvl==='2'?' selected':'')+'>سطح ۲</option><option value="3"'+(_curLvl==='3'?' selected':'')+'>سطح ۳</option></select>'+(function(){var _owId=e.owner||r.owner||'';var _owM=_DEFAULT_MEMBERS&&_DEFAULT_MEMBERS.find(function(mm){return mm.id===_owId;});return(_owM&&_owM.commissionPct)?'<span style="font-size:10px;color:#7c3aed;background:#f5f3ff;border:1px solid #e9d5ff;border-radius:4px;padding:1px 6px;margin-right:4px"> 👤 نرخ: '+_owM.commissionPct+'٪</span>':'';})()+' </div>';}
       }).catch(function(){var el=document.getElementById('cmPricingInfo_'+_rid);if(el)el.style.display='none';});
   })(r.id, r.name);
 }
@@ -1063,6 +1250,38 @@ function doMergeCenter(srcType,srcId,srcName,tgtType,tgtId,tgtName){
     else showToast('\u274C خطا: '+(d.error||'نامشخص'));
   })
   .catch(function(){showToast('\u274C خطای ارتباط');});
+}
+
+function openChangeProvinceModal(rtype,id,name){
+  if(!_isManager()){showToast('⚠ فقط مدیران دسترسی دارند');return;}
+  _buildPCCache();
+  var DB_provOverrides=DB.provOverrides||{};
+  var rkey=rtype+'_'+id;
+  var currentPO=DB_provOverrides[rkey]||'';
+  var provList=getAllProvinces();
+  var provOpts=provList.map(function(p){return '<option value="'+p.id+'"'+(currentPO===p.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('');
+  var body='<div style="font-size:12px">'
+    +'<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;margin-bottom:12px">⚠ تغییر استان در دیتابیس دشما ذخیره می‌شود.</div>'
+    +'<label style="display:block;margin-bottom:8px">استان جدید برای <strong>'+esc(name)+'</strong>:</label>'
+    +'<select id="_cprovSel" style="width:100%;padding:8px;border:1px solid var(--border-input);border-radius:6px;font-size:12px;font-family:inherit;background:var(--bg-input);color:var(--text-primary)">'
+    +'<option value="">— بدون تغییر (پیش‌فرض) —</option>'
+    +provOpts
+    +'</select></div>';
+  openModal('_cprovModal','🗺 تغییر استان',body,'<button class="btn-secondary" onclick="closeModal(\'_cprovModal\')">لغو</button><button class="btn-primary" onclick="_doChangeProvince(\''+rtype+'\',\''+id+'\')">\u0630\u062e\u06cc\u0631\u0647 \u2705</button>',{lg:false});
+}
+function _doChangeProvince(rtype,id){
+  var sel=document.getElementById('_cprovSel');
+  if(!sel)return;
+  var newProv=sel.value;
+  DB.provOverrides=DB.provOverrides||{};
+  var rkey=rtype+'_'+id;
+  if(newProv)DB.provOverrides[rkey]=newProv;
+  else delete DB.provOverrides[rkey];
+  clearPCCache();
+  saveDB();
+  closeModal('_cprovModal');
+  showToast('\u2705 \u0627\u0633\u062a\u0627\u0646 \u062a\u063a\u06cc\u06cc\u0631 \u06a9\u0631\u062f');
+  setTimeout(function(){renderDashboard();if(currentTab==='provinces')renderTable();},300);
 }
 
 function confirmDeleteCenter(rtype,id,name){
@@ -1136,7 +1355,7 @@ function _cleanCenterData(rtype,id){
   Object.keys(DB.weekEntries||{}).forEach(function(k){
     var we=DB.weekEntries[k];
     if(we.recKey===recKey||(we.rtype===rtype&&we.rid===id))
-      delete DB.weekEntries[k];
+      _weRemove(k);
   });
   // حذف followupDate از DB.edits (بقیه CRM حفظ می‌شه)
   if(DB.edits[recKey])delete DB.edits[recKey].followupDate;
@@ -1166,9 +1385,9 @@ function _noteToggleTag(modalId, tagId){
   var row=document.getElementById('mnoteTagRow_'+modalId);
   if(!row)return;
   row.querySelectorAll('.note-tag-chip').forEach(function(chip){
-    var tid=parseInt(chip.dataset.tagid);
+    var tid=chip.dataset.tagid;
     var sel=arr.indexOf(tid)>=0;
-    var t=(DB.tags||[]).find(function(x){return x.id===tid;});
+    var t=(DB.tags||[]).find(function(x){return String(x.id)===String(tid);});
     var col=t?(t.color||'#6366f1'):'#6366f1';
     chip.style.background=sel?col:'var(--bg-raised)';
     chip.style.color=sel?'#fff':'var(--text-secondary)';
