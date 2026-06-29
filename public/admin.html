@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مدیریت ورک‌فلو — Click CRM</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.003.0/Vazirmatn-font-face.css" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Vazirmatn,sans-serif;background:#f1f5f9;color:#1e293b;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* Topbar */
+#topbar{background:#1e293b;color:#fff;padding:0 20px;height:52px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+#topbar .logo{font-size:16px;font-weight:700;color:#a5b4fc}
+#topbar .sep{color:#475569}
+#topbar .pg-title{font-size:14px;color:#cbd5e1}
+#topbar .spacer{flex:1}
+#topbar .user-badge{background:#334155;border-radius:20px;padding:4px 12px;font-size:12px;color:#94a3b8}
+#topbar a{color:#a5b4fc;text-decoration:none;font-size:13px;padding:4px 10px;border-radius:6px;transition:background .2s}
+#topbar a:hover{background:#334155}
+
+/* Layout */
+#layout{display:flex;flex:1;overflow:hidden}
+
+/* Sidebar */
+#sidebar{width:240px;background:#fff;border-left:1px solid #e2e8f0;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+.sb-sect{padding:12px}
+.sb-sect-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;padding:0 4px}
+.sb-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;color:#334155;transition:background .15s}
+.sb-item:hover{background:#f8fafc}
+.sb-item.active{background:#ede9fe;color:#6366f1;font-weight:600}
+.sb-item .badge{margin-right:auto;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;font-size:11px}
+.sb-item.active .badge{background:#c7d2fe;color:#4338ca}
+.sb-divider{height:1px;background:#f1f5f9;margin:8px 0}
+.sb-add-btn{width:100%;padding:8px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600;margin-top:4px;transition:background .2s}
+.sb-add-btn:hover{background:#4f46e5}
+
+/* Main area */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#toolbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:8px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.tb-group{display:flex;gap:4px;padding-left:8px;border-left:1px solid #e2e8f0}
+.tb-group:first-child{border-left:none}
+.tool-btn{padding:6px 12px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;font-family:inherit;font-size:12px;cursor:pointer;color:#475569;transition:all .15s;display:flex;align-items:center;gap:5px}
+.tool-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+.tool-btn.active{background:#ede9fe;border-color:#a5b4fc;color:#6366f1;font-weight:600}
+.tool-btn.danger{border-color:#fecdd3;color:#e11d48}
+.tool-btn.danger:hover{background:#fff1f2}
+.tool-btn.danger.active{background:#fff1f2;border-color:#e11d48}
+.tool-btn.success{border-color:#bbf7d0;color:#16a34a}
+.tool-btn.success:hover{background:#f0fdf4}
+.tool-btn.primary{background:#6366f1;color:#fff;border-color:#6366f1;font-weight:600}
+.tool-btn.primary:hover{background:#4f46e5}
+#wf-name-inp{padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;width:180px;color:#1e293b}
+#wf-name-inp:focus{outline:none;border-color:#a5b4fc}
+.wf-status-badge{font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600}
+.wf-status-badge.active{background:#dcfce7;color:#16a34a}
+.wf-status-badge.inactive{background:#f1f5f9;color:#64748b}
+
+/* Canvas + props */
+#canvas-area{flex:1;display:flex;overflow:hidden}
+#cv-wrap{flex:1;position:relative;overflow:hidden;background:#f8fafc}
+#cv{width:100%;height:100%;cursor:default}
+#cv.tool-add-state{cursor:crosshair}
+#cv.tool-connect{cursor:cell}
+#cv.tool-delete{cursor:not-allowed}
+
+/* Canvas hints */
+#cv-hint{position:absolute;bottom:12px;right:50%;transform:translateX(50%);background:rgba(30,41,59,.75);color:#fff;padding:6px 14px;border-radius:20px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .3s}
+#cv-hint.show{opacity:1}
+
+/* Properties panel */
+#props{width:240px;background:#fff;border-right:1px solid #e2e8f0;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column}
+#props-header{padding:14px 16px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:700;color:#334155}
+#props-body{padding:12px;flex:1}
+.prop-row{margin-bottom:12px}
+.prop-label{font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:4px;display:block}
+.prop-inp{width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px;color:#1e293b}
+.prop-inp:focus{outline:none;border-color:#a5b4fc}
+.prop-colors{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.color-dot{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.color-dot.selected{border-color:#1e293b;transform:scale(1.2)}
+.prop-check{display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;cursor:pointer;margin-bottom:6px}
+.prop-check input{cursor:pointer;width:16px;height:16px;accent-color:#6366f1}
+.roles-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.role-chip{padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer;text-align:center;transition:all .15s;color:#475569}
+.role-chip.selected{background:#ede9fe;border-color:#a5b4fc;color:#6366f1;font-weight:600}
+.prop-btn{width:100%;padding:8px;border-radius:6px;border:none;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600;margin-top:4px}
+.prop-btn-del{background:#fff1f2;color:#e11d48}
+.prop-btn-del:hover{background:#ffe4e6}
+.empty-props{text-align:center;padding:40px 16px;color:#94a3b8;font-size:13px;line-height:1.6}
+
+/* State machine SVG styles */
+.wf-state{cursor:pointer}
+.wf-state .state-rect{transition:filter .15s}
+.wf-state:hover .state-rect{filter:brightness(1.1)}
+.wf-state.selected .state-rect{filter:drop-shadow(0 0 6px rgba(99,102,241,.6))}
+.wf-txn{cursor:pointer}
+.wf-txn.selected .txn-path{stroke:#6366f1!important;stroke-width:2.5}
+.wf-txn.selected .txn-label{fill:#6366f1}
+
+/* Empty state */
+#empty-wf{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#94a3b8;pointer-events:none}
+#empty-wf .ico{font-size:48px;opacity:.4}
+#empty-wf p{font-size:14px}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+
+/* Auth overlay */
+#auth-overlay{position:fixed;inset:0;background:#f1f5f9;display:flex;align-items:center;justify-content:center;z-index:1000}
+.auth-card{background:#fff;border-radius:16px;padding:32px;width:340px;box-shadow:0 4px 24px rgba(0,0,0,.08);text-align:center}
+.auth-card h2{font-size:18px;margin-bottom:8px;color:#1e293b}
+.auth-card p{font-size:13px;color:#64748b;margin-bottom:20px}
+.auth-inp{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:14px;margin-bottom:12px}
+.auth-inp:focus{outline:none;border-color:#a5b4fc}
+.auth-btn{width:100%;padding:10px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.auth-btn:hover{background:#4f46e5}
+.auth-err{color:#e11d48;font-size:12px;margin-top:4px}
+
+/* Modal */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:500}
+.mo.open{display:flex}
+.md{background:#fff;border-radius:16px;padding:24px;width:420px;max-width:95vw}
+.mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.mh .mt{font-size:16px;font-weight:700;color:#1e293b}
+.mh .mx{border:none;background:none;font-size:20px;cursor:pointer;color:#64748b;padding:4px}
+.mb{margin-bottom:16px}
+.mf{display:flex;justify-content:flex-end;gap:8px}
+.btn{padding:8px 16px;border-radius:8px;border:none;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600;transition:all .2s}
+.btn-primary{background:#6366f1;color:#fff}
+.btn-primary:hover{background:#4f46e5}
+.btn-ghost{background:#f1f5f9;color:#475569}
+.btn-ghost:hover{background:#e2e8f0}
+.fi{width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:14px;margin-bottom:10px}
+.fi:focus{outline:none;border-color:#a5b4fc}
+.fl{font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px}
+select.fi{cursor:pointer}
+</style>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <div class="auth-card">
+    <div style="font-size:36px;margin-bottom:8px">⚙️</div>
+    <h2>ورود به پنل مدیریت</h2>
+    <p>این بخش مخصوص مدیران سیستم است</p>
+    <input class="auth-inp" id="auth-user" placeholder="نام کاربری" autocomplete="username">
+    <input class="auth-inp" id="auth-pass" placeholder="رمز عبور" type="password" autocomplete="current-password">
+    <button class="auth-btn" onclick="_login()">ورود</button>
+    <div class="auth-err" id="auth-err"></div>
+  </div>
+</div>
+
+<div id="topbar">
+  <span class="logo">Click CRM</span>
+  <span class="sep">›</span>
+  <span class="pg-title">مدیریت ورک‌فلو</span>
+  <div class="spacer"></div>
+  <a href="/">بازگشت به CRM</a>
+  <span class="user-badge" id="topbar-user">—</span>
+</div>
+
+<div id="layout">
+  <!-- Sidebar: list of entity types -->
+  <div id="sidebar">
+    <div class="sb-sect">
+      <div class="sb-sect-title">بخش‌ها</div>
+      <div class="sb-item active" data-et="wms_proforma" onclick="_selectEntity('wms_proforma',this)">
+        <span>📄</span> پیشفاکتور WMS
+        <span class="badge" id="badge-wms_proforma">0</span>
+      </div>
+      <div class="sb-item" data-et="letters" onclick="_selectEntity('letters',this)">
+        <span>✉️</span> دبیرخونه
+        <span class="badge" id="badge-letters">0</span>
+      </div>
+      <div class="sb-item" data-et="tasks" onclick="_selectEntity('tasks',this)">
+        <span>📌</span> وظایف
+        <span class="badge" id="badge-tasks">0</span>
+      </div>
+      <div class="sb-item" data-et="crm_centers" onclick="_selectEntity('crm_centers',this)">
+        <span>🏥</span> مراکز CRM
+        <span class="badge" id="badge-crm_centers">0</span>
+      </div>
+    </div>
+    <div class="sb-sect">
+      <div class="sb-divider"></div>
+      <div class="sb-sect-title">ورک‌فلوهای این بخش</div>
+      <div id="wf-list"></div>
+      <button class="sb-add-btn" onclick="_newWorkflow()">+ ورک‌فلو جدید</button>
+    </div>
+  </div>
+
+  <!-- Main editor -->
+  <div id="main">
+    <div id="toolbar">
+      <div class="tb-group">
+        <button class="tool-btn active" id="tb-select" onclick="_setTool('select',this)" title="انتخاب / جابه‌جایی">⬛ انتخاب</button>
+        <button class="tool-btn" id="tb-add" onclick="_setTool('add_state',this)" title="افزودن مرحله جدید">➕ مرحله</button>
+        <button class="tool-btn" id="tb-connect" onclick="_setTool('connect',this)" title="اتصال دو مرحله">➡ اتصال</button>
+        <button class="tool-btn danger" id="tb-delete" onclick="_setTool('delete',this)" title="حذف">🗑 حذف</button>
+      </div>
+      <div class="tb-group">
+        <input type="text" id="wf-name-inp" placeholder="نام ورک‌فلو" oninput="_wfNameChange(this.value)">
+      </div>
+      <div class="tb-group">
+        <button class="tool-btn" onclick="_loadTemplate()" title="بارگذاری قالب پیش‌فرض">📐 قالب پیش‌فرض</button>
+        <button class="tool-btn" onclick="_clearCanvas()" title="پاک کردن بوم">🧹 پاک کردن</button>
+      </div>
+      <div class="tb-group" style="margin-right:auto">
+        <span class="wf-status-badge inactive" id="active-badge">غیرفعال</span>
+        <button class="tool-btn success" id="btn-activate" onclick="_toggleActivate()" style="display:none">✅ فعال‌سازی</button>
+        <button class="tool-btn danger" id="btn-deactivate" onclick="_toggleActivate()" style="display:none">⏹ غیرفعال‌سازی</button>
+        <button class="tool-btn primary" onclick="_save()">💾 ذخیره</button>
+      </div>
+    </div>
+
+    <div id="canvas-area">
+      <!-- SVG Canvas -->
+      <div id="cv-wrap">
+        <div id="empty-wf">
+          <div class="ico">🔀</div>
+          <p>یک ورک‌فلو انتخاب کنید یا ورک‌فلو جدید بسازید</p>
+        </div>
+        <svg id="cv" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+              <polygon points="0 0, 9 3.5, 0 7" fill="#64748b"/>
+            </marker>
+            <marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+              <polygon points="0 0, 9 3.5, 0 7" fill="#6366f1"/>
+            </marker>
+            <marker id="arrow-preview" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+              <polygon points="0 0, 9 3.5, 0 7" fill="#6366f1" opacity=".7"/>
+            </marker>
+          </defs>
+        </svg>
+        <div id="cv-hint"></div>
+      </div>
+
+      <!-- Properties panel -->
+      <div id="props">
+        <div id="props-header">ویژگی‌ها</div>
+        <div id="props-body">
+          <div class="empty-props">
+            روی یک مرحله یا اتصال کلیک کنید تا ویژگی‌های آن را ویرایش کنید.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: new workflow -->
+<div class="mo" id="mo-new">
+  <div class="md">
+    <div class="mh"><span class="mt">ورک‌فلو جدید</span><button class="mx" onclick="_closeMo('mo-new')">✕</button></div>
+    <div class="mb">
+      <label class="fl">نام ورک‌فلو</label>
+      <input class="fi" id="new-wf-name" placeholder="مثال: ورک‌فلو پیشفاکتور">
+      <label class="fl">بخش</label>
+      <select class="fi" id="new-wf-et">
+        <option value="wms_proforma">پیشفاکتور WMS</option>
+        <option value="letters">دبیرخونه</option>
+        <option value="tasks">وظایف</option>
+        <option value="crm_centers">مراکز CRM</option>
+      </select>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="_closeMo('mo-new')">انصراف</button>
+      <button class="btn btn-primary" onclick="_createWorkflow()">ساخت</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ── Auth & API ───────────────────────────────────────────────────────────────
+var _token = '';
+var _user = null;
+
+async function _login() {
+  const u = document.getElementById('auth-user').value.trim();
+  const p = document.getElementById('auth-pass').value;
+  document.getElementById('auth-err').textContent = '';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username:u, password:p})
+    });
+    const d = await r.json();
+    if (!r.ok) { document.getElementById('auth-err').textContent = d.error || 'خطا'; return; }
+    _token = d.token || '';
+    _user = d.user || {username:u, role:d.role||'sales'};
+    if (_user.role !== 'manager' && _user.role !== 'مدیر') {
+      document.getElementById('auth-err').textContent = 'فقط مدیران به این بخش دسترسی دارند';
+      return;
+    }
+    document.getElementById('auth-overlay').style.display = 'none';
+    document.getElementById('topbar-user').textContent = _user.name || _user.username;
+    _init();
+  } catch(e) {
+    document.getElementById('auth-err').textContent = 'خطا در اتصال';
+  }
+}
+
+async function api(method, path, body) {
+  const opts = {method, credentials:'include', headers:{'Content-Type':'application/json'}};
+  if (_token) opts.headers['Authorization'] = 'Bearer ' + _token;
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch('/api' + path, opts);
+  if (!r.ok) { const e = await r.json().catch(()=>({error:'خطا'})); throw new Error(e.error||r.status); }
+  return r.json();
+}
+
+// Try auto-login from existing session
+async function _tryAutoLogin() {
+  try {
+    const d = await api('GET', '/auth/me');
+    if (!d || (d.role !== 'manager' && d.role !== 'مدیر')) throw new Error('not manager');
+    _token = d.token || '';
+    _user = d;
+    document.getElementById('auth-overlay').style.display = 'none';
+    document.getElementById('topbar-user').textContent = _user.name || _user.username;
+    _init();
+  } catch(e) { /* show login form */ }
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+var _currentEntity = 'wms_proforma';
+var _currentWfId = null;
+var _wf = { name:'', states:[], transitions:[] };
+var _allWfs = []; // list for sidebar
+
+var _tool = 'select';
+var _sel = null; // {type:'state'|'transition', id}
+var _dragging = null; // {id, startMouseX, startMouseY, origX, origY}
+var _connecting = null; // {fromId}
+var _mousePos = {x:0, y:0};
+
+// State colors palette
+var COLORS = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#0ea5e9','#64748b'];
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function _init() {
+  await _loadAllWfs();
+  _selectEntity('wms_proforma', document.querySelector('.sb-item[data-et="wms_proforma"]'));
+  _setupCanvas();
+}
+
+async function _loadAllWfs() {
+  try {
+    _allWfs = await api('GET', '/admin/workflows');
+    _updateBadges();
+  } catch(e) { _toast('خطا در بارگذاری: ' + e.message); }
+}
+
+function _updateBadges() {
+  ['wms_proforma','letters','tasks','crm_centers'].forEach(et => {
+    const count = _allWfs.filter(w => w.entity_type === et).length;
+    const badge = document.getElementById('badge-' + et);
+    if (badge) badge.textContent = count;
+  });
+}
+
+function _selectEntity(et, el) {
+  _currentEntity = et;
+  document.querySelectorAll('.sb-item[data-et]').forEach(x => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('new-wf-et').value = et;
+  _renderWfList();
+}
+
+function _renderWfList() {
+  const list = _allWfs.filter(w => w.entity_type === _currentEntity);
+  const el = document.getElementById('wf-list');
+  if (!list.length) { el.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:4px 6px">هنوز ورک‌فلویی وجود ندارد</div>'; return; }
+  el.innerHTML = list.map(w => {
+    const active = w.is_active ? '🟢 ' : '';
+    const sel = _currentWfId === w.id ? ' active' : '';
+    return `<div class="sb-item${sel}" onclick="_loadWf('${w.id}')">${active}${_esc(w.name)}</div>`;
+  }).join('');
+}
+
+// ── Workflow load/save ────────────────────────────────────────────────────────
+async function _loadWf(id) {
+  try {
+    const wf = await api('GET', '/admin/workflows/' + id);
+    _currentWfId = id;
+    _wf = {
+      name: wf.name,
+      states: (wf.definition.states || []).map(s => ({...s})),
+      transitions: (wf.definition.transitions || []).map(t => ({...t}))
+    };
+    document.getElementById('wf-name-inp').value = _wf.name;
+    const isActive = wf.is_active;
+    document.getElementById('active-badge').textContent = isActive ? 'فعال' : 'غیرفعال';
+    document.getElementById('active-badge').className = 'wf-status-badge ' + (isActive ? 'active' : 'inactive');
+    document.getElementById('btn-activate').style.display = isActive ? 'none' : '';
+    document.getElementById('btn-deactivate').style.display = isActive ? '' : 'none';
+    document.getElementById('empty-wf').style.display = 'none';
+    _sel = null;
+    _renderProps();
+    _renderCanvas();
+    _renderWfList();
+  } catch(e) { _toast('خطا: ' + e.message); }
+}
+
+async function _save() {
+  if (!_currentWfId) { _toast('ابتدا یک ورک‌فلو بسازید یا انتخاب کنید'); return; }
+  try {
+    await api('PUT', '/admin/workflows/' + _currentWfId, {
+      name: _wf.name,
+      definition: { states: _wf.states, transitions: _wf.transitions }
+    });
+    _toast('✅ ذخیره شد');
+    await _loadAllWfs();
+    _renderWfList();
+  } catch(e) { _toast('خطا: ' + e.message); }
+}
+
+async function _toggleActivate() {
+  if (!_currentWfId) return;
+  try {
+    const wf = _allWfs.find(w => w.id === _currentWfId);
+    if (!wf) return;
+    if (wf.is_active) {
+      await api('POST', '/admin/workflows/' + _currentWfId + '/deactivate');
+      _toast('ورک‌فلو غیرفعال شد');
+    } else {
+      await api('POST', '/admin/workflows/' + _currentWfId + '/activate');
+      _toast('✅ ورک‌فلو فعال شد');
+    }
+    await _loadAllWfs();
+    await _loadWf(_currentWfId);
+  } catch(e) { _toast('خطا: ' + e.message); }
+}
+
+// ── New workflow modal ────────────────────────────────────────────────────────
+function _newWorkflow() {
+  document.getElementById('new-wf-name').value = '';
+  document.getElementById('new-wf-et').value = _currentEntity;
+  document.getElementById('mo-new').classList.add('open');
+  setTimeout(() => document.getElementById('new-wf-name').focus(), 50);
+}
+
+async function _createWorkflow() {
+  const name = document.getElementById('new-wf-name').value.trim();
+  const et = document.getElementById('new-wf-et').value;
+  if (!name) { _toast('نام وارد کنید'); return; }
+  try {
+    const { id } = await api('POST', '/admin/workflows', {entity_type: et, name, definition: {states:[], transitions:[]}});
+    _closeMo('mo-new');
+    await _loadAllWfs();
+    _selectEntity(et, document.querySelector(`.sb-item[data-et="${et}"]`));
+    await _loadWf(id);
+  } catch(e) { _toast('خطا: ' + e.message); }
+}
+
+function _closeMo(id) { document.getElementById(id).classList.remove('open'); }
+
+function _wfNameChange(val) { _wf.name = val; }
+
+// ── Templates ────────────────────────────────────────────────────────────────
+const TEMPLATES = {
+  wms_proforma: {
+    states: [
+      {id:'draft',      name:'پیش‌نویس',    color:'#64748b', isInitial:true,  isFinal:false, x:60,  y:160},
+      {id:'sent',       name:'ارسال شده',    color:'#f59e0b', isInitial:false, isFinal:false, x:260, y:160},
+      {id:'approved',   name:'تایید شده',    color:'#22c55e', isInitial:false, isFinal:false, x:460, y:80},
+      {id:'rejected',   name:'رد شده',       color:'#ef4444', isInitial:false, isFinal:false, x:460, y:240},
+      {id:'cancelled',  name:'لغو شده',      color:'#94a3b8', isInitial:false, isFinal:true,  x:260, y:320},
+      {id:'voucher_issued', name:'حواله صادر', color:'#6366f1', isInitial:false, isFinal:true, x:660, y:80}
+    ],
+    transitions: [
+      {id:'t1', from:'draft',     to:'sent',          label:'ارسال',        roles:['all']},
+      {id:'t2', from:'sent',      to:'approved',       label:'تایید',        roles:['manager']},
+      {id:'t3', from:'sent',      to:'rejected',       label:'رد',           roles:['manager']},
+      {id:'t4', from:'rejected',  to:'draft',          label:'بازگشایی',     roles:['all']},
+      {id:'t5', from:'approved',  to:'voucher_issued', label:'صدور حواله',   roles:['manager']},
+      {id:'t6', from:'draft',     to:'cancelled',      label:'لغو',          roles:['all']},
+    ]
+  },
+  letters: {
+    states: [
+      {id:'draft',      name:'پیش‌نویس',    color:'#64748b', isInitial:true,  isFinal:false, x:80,  y:180},
+      {id:'registered', name:'ثبت شده',     color:'#6366f1', isInitial:false, isFinal:false, x:280, y:180},
+      {id:'archived',   name:'بایگانی',     color:'#94a3b8', isInitial:false, isFinal:true,  x:480, y:180}
+    ],
+    transitions: [
+      {id:'t1', from:'draft',      to:'registered', label:'ثبت اندیکاتور', roles:['manager']},
+      {id:'t2', from:'registered', to:'archived',   label:'بایگانی',       roles:['all']},
+    ]
+  },
+  tasks: {
+    states: [
+      {id:'todo',    name:'انجام نشده', color:'#64748b', isInitial:true,  isFinal:false, x:60,  y:180},
+      {id:'doing',   name:'در جریان',   color:'#f59e0b', isInitial:false, isFinal:false, x:240, y:180},
+      {id:'waiting', name:'در انتظار',  color:'#8b5cf6', isInitial:false, isFinal:false, x:420, y:180},
+      {id:'done',    name:'انجام شد',   color:'#22c55e', isInitial:false, isFinal:true,  x:600, y:180}
+    ],
+    transitions: [
+      {id:'t1', from:'todo',    to:'doing',   label:'شروع',       roles:['all']},
+      {id:'t2', from:'doing',   to:'waiting', label:'انتظار',     roles:['all']},
+      {id:'t3', from:'doing',   to:'done',    label:'اتمام',      roles:['all']},
+      {id:'t4', from:'waiting', to:'doing',   label:'ادامه',      roles:['all']},
+      {id:'t5', from:'todo',    to:'done',    label:'اتمام مستقیم', roles:['all']},
+    ]
+  },
+  crm_centers: {
+    states: [
+      {id:'lead',       name:'لید',        color:'#94a3b8', isInitial:true,  isFinal:false, x:60,  y:180},
+      {id:'فرصت',       name:'فرصت',       color:'#f59e0b', isInitial:false, isFinal:false, x:240, y:100},
+      {id:'active',     name:'فعال',       color:'#22c55e', isInitial:false, isFinal:false, x:420, y:180},
+      {id:'dormant',    name:'خوابیده',    color:'#8b5cf6', isInitial:false, isFinal:false, x:420, y:280},
+      {id:'lost',       name:'از دست رفته', color:'#ef4444', isInitial:false, isFinal:true,  x:240, y:280}
+    ],
+    transitions: [
+      {id:'t1', from:'lead',    to:'فرصت',   label:'پیشرفت',     roles:['all']},
+      {id:'t2', from:'فرصت',   to:'active',  label:'تبدیل مشتری', roles:['all']},
+      {id:'t3', from:'active',  to:'dormant', label:'خوابیده',    roles:['all']},
+      {id:'t4', from:'dormant', to:'active',  label:'بازگشت',     roles:['all']},
+      {id:'t5', from:'فرصت',   to:'lost',    label:'از دست رفت', roles:['all']},
+      {id:'t6', from:'active',  to:'lost',    label:'از دست رفت', roles:['all']},
+    ]
+  }
+};
+
+function _loadTemplate() {
+  const tpl = TEMPLATES[_currentEntity];
+  if (!tpl) { _toast('قالبی برای این بخش وجود ندارد'); return; }
+  if (_wf.states.length && !confirm('بوم فعلی پاک می‌شود. ادامه می‌دهید؟')) return;
+  _wf.states = tpl.states.map(s => ({...s}));
+  _wf.transitions = tpl.transitions.map(t => ({...t}));
+  _sel = null;
+  _renderProps();
+  _renderCanvas();
+  document.getElementById('empty-wf').style.display = 'none';
+}
+
+function _clearCanvas() {
+  if (_wf.states.length && !confirm('همه مراحل و اتصالات پاک می‌شوند؟')) return;
+  _wf.states = [];
+  _wf.transitions = [];
+  _sel = null;
+  _renderProps();
+  _renderCanvas();
+}
+
+// ── SVG Canvas ────────────────────────────────────────────────────────────────
+function _setupCanvas() {
+  const cv = document.getElementById('cv');
+  cv.addEventListener('click', _onCanvasClick);
+  cv.addEventListener('mousemove', _onCanvasMouseMove);
+  cv.addEventListener('mouseup', _onCanvasMouseUp);
+  document.addEventListener('mouseup', _onCanvasMouseUp);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { _setTool('select', document.getElementById('tb-select')); _connecting = null; _renderCanvas(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && _sel && document.activeElement.tagName !== 'INPUT') {
+      _deleteSelected();
+    }
+  });
+}
+
+function _setTool(tool, btn) {
+  _tool = tool;
+  _connecting = null;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const cv = document.getElementById('cv');
+  cv.className = tool === 'add_state' ? 'tool-add-state' : tool === 'connect' ? 'tool-connect' : tool === 'delete' ? 'tool-delete' : '';
+  const hints = {
+    select: 'کلیک = انتخاب · درگ = جابه‌جایی',
+    add_state: 'روی بوم کلیک کنید تا مرحله جدید اضافه شود',
+    connect: 'روی مرحله اول کلیک کنید، سپس روی مرحله دوم',
+    delete: 'روی مرحله یا اتصال کلیک کنید تا حذف شود'
+  };
+  _showHint(hints[tool] || '');
+}
+
+function _showHint(msg) {
+  const el = document.getElementById('cv-hint');
+  el.textContent = msg;
+  el.classList.toggle('show', !!msg);
+}
+
+function _onCanvasClick(e) {
+  if (e.target === e.currentTarget || e.target.id === 'cv') {
+    // Click on empty canvas
+    if (_tool === 'add_state') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left - 60;
+      const y = e.clientY - rect.top - 25;
+      _addState(x, y);
+      return;
+    }
+    if (_tool === 'connect' && _connecting) {
+      _connecting = null; _renderCanvas(); return;
+    }
+    _sel = null;
+    _renderProps();
+    _renderCanvas();
+  }
+}
+
+function _onCanvasMouseMove(e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  _mousePos = {x: e.clientX - rect.left, y: e.clientY - rect.top};
+  if (_dragging) {
+    const dx = e.clientX - _dragging.startMouseX;
+    const dy = e.clientY - _dragging.startMouseY;
+    const s = _wf.states.find(s => s.id === _dragging.id);
+    if (s) { s.x = _dragging.origX + dx; s.y = _dragging.origY + dy; }
+    _renderCanvas();
+  } else if (_connecting) {
+    _renderCanvas(); // redraw preview arrow
+  }
+}
+
+function _onCanvasMouseUp(e) {
+  _dragging = null;
+}
+
+// ── State management ─────────────────────────────────────────────────────────
+function _addState(x, y) {
+  const id = 'state_' + Date.now().toString(36);
+  _wf.states.push({id, name:'مرحله', color: COLORS[_wf.states.length % COLORS.length], isInitial: _wf.states.length === 0, isFinal: false, x: Math.max(0, x), y: Math.max(0, y)});
+  _sel = {type:'state', id};
+  _renderProps();
+  _renderCanvas();
+}
+
+function _deleteSelected() {
+  if (!_sel) return;
+  if (_sel.type === 'state') {
+    _wf.states = _wf.states.filter(s => s.id !== _sel.id);
+    _wf.transitions = _wf.transitions.filter(t => t.from !== _sel.id && t.to !== _sel.id);
+  } else if (_sel.type === 'transition') {
+    _wf.transitions = _wf.transitions.filter(t => t.id !== _sel.id);
+  }
+  _sel = null;
+  _renderProps();
+  _renderCanvas();
+}
+
+function _onStateMouseDown(e, stateId) {
+  e.stopPropagation();
+  if (_tool === 'select') {
+    const s = _wf.states.find(s => s.id === stateId);
+    if (!s) return;
+    _dragging = {id: stateId, startMouseX: e.clientX, startMouseY: e.clientY, origX: s.x, origY: s.y};
+  }
+}
+
+function _onStateClick(e, stateId) {
+  e.stopPropagation();
+  if (_tool === 'delete') {
+    _sel = {type:'state', id: stateId};
+    _deleteSelected();
+    return;
+  }
+  if (_tool === 'connect') {
+    if (!_connecting) {
+      _connecting = {fromId: stateId};
+      _showHint('حالا روی مرحله مقصد کلیک کنید');
+      _renderCanvas();
+    } else {
+      if (_connecting.fromId !== stateId) {
+        const id = 't_' + Date.now().toString(36);
+        _wf.transitions.push({id, from: _connecting.fromId, to: stateId, label:'انتقال', roles:['all']});
+        _sel = {type:'transition', id};
+        _renderProps();
+      }
+      _connecting = null;
+      _showHint('روی مرحله اول کلیک کنید، سپس روی مرحله دوم');
+      _renderCanvas();
+    }
+    return;
+  }
+  // Select tool
+  _sel = {type:'state', id: stateId};
+  _renderProps();
+  _renderCanvas();
+}
+
+function _onTxnClick(e, txnId) {
+  e.stopPropagation();
+  if (_tool === 'delete') {
+    _sel = {type:'transition', id: txnId};
+    _deleteSelected();
+    return;
+  }
+  _sel = {type:'transition', id: txnId};
+  _renderProps();
+  _renderCanvas();
+}
+
+// ── Canvas render ─────────────────────────────────────────────────────────────
+function _svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs||{}).forEach(([k,v]) => el.setAttribute(k, v));
+  return el;
+}
+
+function _edgePoint(cx, cy, w, h, tx, ty) {
+  const hw = w/2, hh = h/2;
+  const dx = tx-cx, dy = ty-cy;
+  if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return {x:cx, y:cy};
+  if (Math.abs(dx)*hh >= Math.abs(dy)*hw) {
+    const xEdge = dx>0 ? hw : -hw;
+    return {x:cx+xEdge, y:cy+dy*(xEdge/dx)};
+  } else {
+    const yEdge = dy>0 ? hh : -hh;
+    return {x:cx+dx*(yEdge/dy), y:cy+yEdge};
+  }
+}
+
+function _renderCanvas() {
+  const svg = document.getElementById('cv');
+  const defs = svg.querySelector('defs');
+  // Remove all except defs
+  Array.from(svg.childNodes).forEach(n => { if (n !== defs) svg.removeChild(n); });
+
+  // Draw transitions
+  _wf.transitions.forEach(t => {
+    const fs = _wf.states.find(s => s.id === t.from);
+    const ts = _wf.states.find(s => s.id === t.to);
+    if (!fs || !ts) return;
+    const isSel = _sel && _sel.type === 'transition' && _sel.id === t.id;
+    const strokeColor = isSel ? '#6366f1' : '#94a3b8';
+
+    const g = _svgEl('g', {class:'wf-txn'+(isSel?' selected':'')});
+
+    const fcx = fs.x+60, fcy = fs.y+25;
+    const tcx = ts.x+60, tcy = ts.y+25;
+
+    let pathD, lx, ly;
+    if (t.from === t.to) {
+      // Self-loop
+      const cx = fs.x+60, cy = fs.y;
+      pathD = `M${cx-15},${cy} C${cx-40},${cy-60} ${cx+40},${cy-60} ${cx+15},${cy}`;
+      lx = cx; ly = cy-55;
+    } else {
+      const ep1 = _edgePoint(fcx,fcy,120,50,tcx,tcy);
+      const ep2 = _edgePoint(tcx,tcy,120,50,fcx,fcy);
+      const dx = ep2.x-ep1.x, dy = ep2.y-ep1.y;
+      const len = Math.sqrt(dx*dx+dy*dy)||1;
+      const cpx = (ep1.x+ep2.x)/2 - (dy/len)*40;
+      const cpy = (ep1.y+ep2.y)/2 + (dx/len)*40;
+      pathD = `M${ep1.x},${ep1.y} Q${cpx},${cpy} ${ep2.x},${ep2.y}`;
+      lx = 0.25*ep1.x+0.5*cpx+0.25*ep2.x;
+      ly = 0.25*ep1.y+0.5*cpy+0.25*ep2.y;
+    }
+
+    const path = _svgEl('path', {d:pathD, stroke:strokeColor, 'stroke-width':'2', fill:'none', 'marker-end':'url(#'+(isSel?'arrow-blue':'arrow')+')'});
+    g.appendChild(path);
+
+    // Hit area
+    const hit = _svgEl('path', {d:pathD, stroke:'transparent', 'stroke-width':'14', fill:'none', cursor:'pointer'});
+    g.appendChild(hit);
+
+    // Label background + text
+    if (t.label) {
+      const tw = Math.max(60, t.label.length*9+16);
+      const bg = _svgEl('rect', {x:lx-tw/2, y:ly-11, width:tw, height:22, rx:5, fill:'white', stroke:isSel?'#a5b4fc':'#e2e8f0', 'stroke-width':'1'});
+      const txt = _svgEl('text', {x:lx, y:ly+5, 'text-anchor':'middle', 'font-size':'11', 'font-family':'Vazirmatn,sans-serif', fill:isSel?'#6366f1':'#475569'});
+      txt.textContent = t.label;
+      g.appendChild(bg);
+      g.appendChild(txt);
+    }
+
+    g.addEventListener('click', e => _onTxnClick(e, t.id));
+    svg.appendChild(g);
+  });
+
+  // Draw states
+  _wf.states.forEach(s => {
+    const isSel = _sel && _sel.type === 'state' && _sel.id === s.id;
+    const g = _svgEl('g', {class:'wf-state'+(isSel?' selected':''), transform:`translate(${s.x},${s.y})`});
+
+    // Drop shadow for selected
+    const rect = _svgEl('rect', {
+      class:'state-rect',
+      x:0, y:0, width:120, height:50, rx:10,
+      fill: s.color||'#6366f1',
+      stroke: isSel ? '#fff' : 'rgba(255,255,255,0.25)',
+      'stroke-width': isSel ? '3' : '1',
+      filter: isSel ? 'drop-shadow(0 0 8px rgba(99,102,241,0.5))' : ''
+    });
+    g.appendChild(rect);
+
+    // Initial dot
+    if (s.isInitial) {
+      const dot = _svgEl('circle', {cx:10, cy:10, r:5, fill:'rgba(255,255,255,0.9)'});
+      g.appendChild(dot);
+      const inner = _svgEl('circle', {cx:10, cy:10, r:3, fill:s.color||'#6366f1'});
+      g.appendChild(inner);
+    }
+
+    // Final double border
+    if (s.isFinal) {
+      const r2 = _svgEl('rect', {x:5, y:5, width:110, height:40, rx:7, fill:'none', stroke:'rgba(255,255,255,0.6)', 'stroke-width':'2'});
+      g.appendChild(r2);
+    }
+
+    const txt = _svgEl('text', {x:60, y:31, 'text-anchor':'middle', 'font-size':'12', 'font-weight':'600', 'font-family':'Vazirmatn,sans-serif', fill:'white'});
+    txt.textContent = s.name;
+    g.appendChild(txt);
+
+    g.addEventListener('mousedown', e => _onStateMouseDown(e, s.id));
+    g.addEventListener('click', e => _onStateClick(e, s.id));
+    svg.appendChild(g);
+  });
+
+  // Connection preview arrow
+  if (_connecting) {
+    const fs = _wf.states.find(s => s.id === _connecting.fromId);
+    if (fs) {
+      const line = _svgEl('line', {
+        x1:fs.x+60, y1:fs.y+25, x2:_mousePos.x, y2:_mousePos.y,
+        stroke:'#6366f1', 'stroke-width':'2', 'stroke-dasharray':'6,4',
+        'marker-end':'url(#arrow-preview)'
+      });
+      svg.appendChild(line);
+    }
+  }
+}
+
+// ── Properties panel ──────────────────────────────────────────────────────────
+function _renderProps() {
+  const body = document.getElementById('props-body');
+  const header = document.getElementById('props-header');
+
+  if (!_sel) {
+    header.textContent = 'ویژگی‌ها';
+    body.innerHTML = '<div class="empty-props">روی یک مرحله یا اتصال کلیک کنید تا ویژگی‌های آن را ویرایش کنید.</div>';
+    return;
+  }
+
+  if (_sel.type === 'state') {
+    const s = _wf.states.find(x => x.id === _sel.id);
+    if (!s) return;
+    header.textContent = 'ویژگی مرحله';
+    body.innerHTML = `
+      <div class="prop-row">
+        <label class="prop-label">نام مرحله</label>
+        <input class="prop-inp" id="pp-name" value="${_esc(s.name)}" oninput="_updateState('name',this.value)">
+      </div>
+      <div class="prop-row">
+        <label class="prop-label">شناسه (ID — برای API)</label>
+        <input class="prop-inp" id="pp-id" value="${_esc(s.id)}" oninput="_updateStateId(this.value)" style="direction:ltr;font-size:12px;color:#64748b">
+      </div>
+      <div class="prop-row">
+        <label class="prop-label">رنگ</label>
+        <div class="prop-colors">${COLORS.map(c=>`<div class="color-dot${s.color===c?' selected':''}" style="background:${c}" onclick="_updateState('color','${c}')"></div>`).join('')}</div>
+      </div>
+      <div class="prop-row">
+        <label class="prop-check"><input type="checkbox" ${s.isInitial?'checked':''} onchange="_updateState('isInitial',this.checked)"> مرحله شروع (Initial)</label>
+        <label class="prop-check"><input type="checkbox" ${s.isFinal?'checked':''} onchange="_updateState('isFinal',this.checked)"> مرحله پایان (Final)</label>
+      </div>
+      <button class="prop-btn prop-btn-del" onclick="_deleteSelected()">🗑 حذف این مرحله</button>
+    `;
+  } else if (_sel.type === 'transition') {
+    const t = _wf.transitions.find(x => x.id === _sel.id);
+    if (!t) return;
+    header.textContent = 'ویژگی اتصال';
+    const allSelected = !t.roles || t.roles.includes('all');
+    const mgrSelected = t.roles && t.roles.includes('manager');
+    const salesSelected = t.roles && t.roles.includes('sales');
+    const fromState = _wf.states.find(s => s.id === t.from);
+    const toState = _wf.states.find(s => s.id === t.to);
+    body.innerHTML = `
+      <div class="prop-row" style="font-size:12px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px">
+        ${_esc(fromState?.name||t.from)} → ${_esc(toState?.name||t.to)}
+      </div>
+      <div class="prop-row">
+        <label class="prop-label">برچسب دکمه / اقدام</label>
+        <input class="prop-inp" value="${_esc(t.label||'')}" oninput="_updateTxn('label',this.value)">
+      </div>
+      <div class="prop-row">
+        <label class="prop-label">چه کسانی می‌توانند این اقدام را انجام دهند؟</label>
+        <div class="roles-grid">
+          <div class="role-chip${allSelected?' selected':''}" onclick="_setTxnRoles('all')">همه</div>
+          <div class="role-chip${mgrSelected&&!allSelected?' selected':''}" onclick="_setTxnRoles('manager')">فقط مدیر</div>
+          <div class="role-chip${salesSelected&&!allSelected?' selected':''}" onclick="_setTxnRoles('sales')">فقط کارشناس</div>
+        </div>
+      </div>
+      <div class="prop-row">
+        <label class="prop-label">پیام تایید (اختیاری)</label>
+        <input class="prop-inp" value="${_esc(t.confirmMsg||'')}" placeholder="مثال: آیا مطمئن هستید؟" oninput="_updateTxn('confirmMsg',this.value)">
+      </div>
+      <button class="prop-btn prop-btn-del" onclick="_deleteSelected()">🗑 حذف این اتصال</button>
+    `;
+  }
+}
+
+function _updateState(field, val) {
+  const s = _wf.states.find(x => x.id === _sel.id);
+  if (!s) return;
+  s[field] = val;
+  _renderCanvas();
+  if (field === 'color') _renderProps();
+}
+
+function _updateStateId(newId) {
+  const s = _wf.states.find(x => x.id === _sel.id);
+  if (!s) return;
+  const oldId = s.id;
+  s.id = newId;
+  _wf.transitions.forEach(t => {
+    if (t.from === oldId) t.from = newId;
+    if (t.to === oldId) t.to = newId;
+  });
+  _sel.id = newId;
+  _renderCanvas();
+}
+
+function _updateTxn(field, val) {
+  const t = _wf.transitions.find(x => x.id === _sel.id);
+  if (!t) return;
+  t[field] = val;
+  _renderCanvas();
+}
+
+function _setTxnRoles(role) {
+  const t = _wf.transitions.find(x => x.id === _sel.id);
+  if (!t) return;
+  t.roles = [role];
+  _renderProps();
+  _renderCanvas();
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function _toast(msg, dur) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur||2500);
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  // Try auto-login
+  _tryAutoLogin();
+  // Enter key in login form
+  document.getElementById('auth-pass').addEventListener('keydown', e => { if (e.key==='Enter') _login(); });
+  document.getElementById('auth-user').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('auth-pass').focus(); });
+  document.getElementById('new-wf-name').addEventListener('keydown', e => { if (e.key==='Enter') _createWorkflow(); });
+});
+</script>
+</body>
+</html>

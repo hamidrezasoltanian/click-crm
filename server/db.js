@@ -1653,6 +1653,21 @@ async function initSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_wpf_created_by ON wms_proformas(created_by)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_wpf_created_at ON wms_proformas(created_at DESC)`);
 
+  // ── Workflows (visual workflow designer) ───────────────────────────────────
+  await query(`
+    CREATE TABLE IF NOT EXISTS workflows (
+      id            VARCHAR(50)  PRIMARY KEY,
+      entity_type   VARCHAR(50)  NOT NULL,
+      name          VARCHAR(200) NOT NULL,
+      is_active     BOOLEAN      DEFAULT false,
+      definition    JSONB        NOT NULL DEFAULT '{"states":[],"transitions":[]}',
+      created_by    VARCHAR(100),
+      created_at    TIMESTAMPTZ  DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ  DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_workflows_entity ON workflows(entity_type)`);
+
   console.log('[DB] Schema initialized');
 }
 

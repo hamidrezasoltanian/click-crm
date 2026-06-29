@@ -86,6 +86,7 @@ const faradisData = require('./routes/faradis-data');
 app.use('/api/faradis-data', faradisData);
 app.use('/api/letters', require('./routes/letters'));
 app.use('/api/wms-proforma', require('./routes/wms-proforma'));
+app.use('/api/admin', require('./routes/admin'));
 
 // Health check — بدون auth، قابل دسترس از هر جا
 app.get('/api/health', async function (req, res) {
@@ -144,6 +145,16 @@ app.get('/api/health', async function (req, res) {
 
   result.elapsed_ms = Date.now() - start;
   res.status(result.ok ? 200 : 503).json(result);
+});
+
+// Admin — workflow designer (manager-only)
+app.get('/admin', function (req, res) {
+  const adminPath = path.join(publicDir, 'admin.html');
+  if (fs.existsSync(adminPath)) {
+    res.sendFile(adminPath);
+  } else {
+    res.status(404).send('Admin panel not deployed');
+  }
 });
 
 // Letters (دبیرخونه) page — standalone, like /wms
