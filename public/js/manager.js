@@ -658,7 +658,7 @@ function renderManagerPanel(){
         if(stCounts[st]!==undefined)stCounts[st]++;
       });
     });
-    var funnelSts=STATUS_LIST.slice(0,-1); // exclude غیرفعال from funnel
+    var funnelSts=STATUS_LIST.filter(function(s){return s!=='غیرفعال'&&s!=='عدم نیاز فاکتور کنسل شد';}); // exclude closed statuses from funnel
     var maxVal=Math.max.apply(null,funnelSts.map(function(s){return stCounts[s]||0;}));
     if(maxVal===0)return;
     var fColors=['#94a3b8','#0ea5e9','#f59e0b','#0284c7','#22c55e'];

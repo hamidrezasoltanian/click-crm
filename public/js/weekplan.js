@@ -356,7 +356,7 @@ function renderWeekPlan(){
   daysEl.innerHTML = days.map(function(d){
     var items = byDay[d.str] || [];
     return '<div class="wp-day'+(d.isToday?' today':'')+'">'
-      + '<div class="wp-day-head">'+d.name+'<br><small>'+d.str.split('/').slice(1).join('/')+'</small>'
+      + '<div class="wp-day-head" onclick="wpOpenTodayPlanModal(\''+d.str+'\')" style="cursor:pointer" title="مشاهده برنامه روزانه با جزئیات">'+d.name+'<br><small>'+d.str.split('/').slice(1).join('/')+'</small>'
       + (items.length?'<span class="wp-cnt">'+items.length+'</span>':'')+'</div>'
       + '<div class="wp-day-body" ondragover="event.preventDefault();this.classList.add(\'wp-drop-over\')" ondragleave="this.classList.remove(\'wp-drop-over\')" ondrop="wpDrop(event,\''+d.str+'\')">'
       + (items.length ? items.map(function(e){return renderWpItem(e,weekId);}).join('') : '<div class="wp-empty">—</div>')
@@ -666,6 +666,7 @@ function wpRemoveFromOtherWeeks(recKey, keepWeekId){
     if(keepWeekId && k.startsWith(keepWeekId+':::')) return;
     var we=DB.weekEntries[k];
     if(!we||typeof we!=='object')return;
+    if(we.done) return;
     var rk=we.recKey||(we.rtype+'_'+we.rid);
     if(rk===recKey) _weRemove(k);
   });
@@ -1432,14 +1433,20 @@ function wpOpenAssignAll(){
 
 function saveWpAssign(weekId){
   var actType = document.getElementById('wpAssignActType').value || 'call';
-  Object.keys(DB.weekEntries||{}).filter(function(k){return k.startsWith(weekId+':::');}).forEach(function(k){_weRemove(k);});
+  Object.keys(DB.weekEntries||{}).filter(function(k){
+    var we=DB.weekEntries[k];
+    return k.startsWith(weekId+':::') && we && !we.done;
+  }).forEach(function(k){_weRemove(k);});
+  
   document.querySelectorAll('#wpAList input[type=checkbox]').forEach(function(cb){
     if(!cb.checked)return;
     var rtype=cb.getAttribute('data-rtype');var rid=cb.getAttribute('data-rid');
     var eKey=wpEntryKey(weekId,rtype,rid);
     var _rk=rtype+'_'+rid;
     wpRemoveFromOtherWeeks(_rk, weekId);
-    DB.weekEntries[eKey]={scheduledDate:null,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:rtype+'_'+rid,centerName:getRecLabel(rtype+'_'+rid),actionType:actType,addedBy:currentUser};(function(_k,_we){var _pts=_k.split(':::');fetch('/api/week-entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'we_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),weekId:_pts[0],recKey:_pts[1],rtype:_we.rtype,rid:_we.rid,scheduledDate:_we.scheduledDate||null,actionType:_we.actionType||'call',done:false,doneDate:null,addedBy:_we.addedBy||currentUser,centerName:_we.centerName||''})}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.id&&DB.weekEntries[_k])DB.weekEntries[_k].sqlId=d.id;}).catch(function(){});})(eKey,DB.weekEntries[eKey]);
+    if(!DB.weekEntries[eKey] || !DB.weekEntries[eKey].done){
+      DB.weekEntries[eKey]={scheduledDate:null,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:rtype+'_'+rid,centerName:getRecLabel(rtype+'_'+rid),actionType:actType,addedBy:currentUser};(function(_k,_we){var _pts=_k.split(':::');fetch('/api/week-entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'we_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),weekId:_pts[0],recKey:_pts[1],rtype:_we.rtype,rid:_we.rid,scheduledDate:_we.scheduledDate||null,actionType:_we.actionType||'call',done:false,doneDate:null,addedBy:_we.addedBy||currentUser,centerName:_we.centerName||''})}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.id&&DB.weekEntries[_k])DB.weekEntries[_k].sqlId=d.id;}).catch(function(){});})(eKey,DB.weekEntries[eKey]);
+    }
   });
   saveDB();
   var selWp=document.getElementById('wpSel');
@@ -2196,4 +2203,140 @@ function renderChangelog(){
     _clAutoRefreshTimer = setTimeout(function(){if(currentTab==='changelog')renderChangelog();}, 30000);
   }
 }
+
+function wpOpenTodayPlanModal(dateStr) {
+  var today = dateStr || todayStr();
+  var todayJd = today;
+
+  _buildPCCache();
+  var todayEntries = [];
+
+  if (typeof window._wpTodayModalOwnerF === 'undefined') {
+    window._wpTodayModalOwnerF = '';
+  }
+
+  Object.keys(DB.weekEntries || {}).forEach(function(k) {
+    var we = DB.weekEntries[k];
+    if (we.rtype === 'mtr') return;
+    if (we.scheduledDate !== today) return;
+
+    var rtype = we.rtype || 'center', rid = we.rid || '';
+    var e = getE(rtype, rid);
+    var owner = _wpGetOwner(we);
+
+    if (!_isManager() && owner && owner !== currentUser) return;
+
+    if (_isManager() && window._wpTodayModalOwnerF && owner !== window._wpTodayModalOwnerF) return;
+
+    var rk = we.recKey || (rtype + '_' + rid);
+    var name = we.centerName || getRecLabel(rk) || '?';
+    
+    var notesList = DB.notes[rk] || [];
+    var lastNote = notesList[0] ? notesList[0].text : '—';
+
+    todayEntries.push({
+      key: k,
+      rtype: rtype,
+      rid: rid,
+      recKey: rk,
+      name: name,
+      owner: owner,
+      ownerName: owner ? (USERS[owner] || owner) : 'بدون مسئول',
+      actType: we.actionType || 'call',
+      status: e.status || 'بدون تماس',
+      lastNote: lastNote,
+      done: we.done,
+      doneResult: we.doneResult
+    });
+  });
+
+  var filterHtml = '';
+  if (_isManager()) {
+    var activeUsers = typeof umGetActive === 'function' ? umGetActive() : [];
+    var options = '<option value="">همه کارشناسان</option>' + activeUsers.filter(function(u){ return u.id !== 'guest'; }).map(function(u) {
+      return '<option value="' + esc(u.id) + '"' + (window._wpTodayModalOwnerF === u.id ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+    }).join('');
+    filterHtml = '<div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; background: var(--bg-raised); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border)">'
+      + '<span style="font-size: 11px; font-weight: 700; color: var(--text-secondary)">👤 کارشناس مسئول:</span>'
+      + '<select onchange="window._wpTodayModalOwnerF=this.value; wpOpenTodayPlanModal(\'' + today + '\')" style="padding: 4px 8px; border: 1px solid var(--border-input); border-radius: 5px; font-size: 12px; background: var(--bg-input); color: var(--text-primary)">'
+      + options
+      + '</select>'
+      + '</div>';
+  }
+
+  var listHtml = '';
+  if (todayEntries.length === 0) {
+    listHtml = '<div style="text-align:center;padding:40px;color:var(--text-muted)">برنامه‌ای برای این روز ثبت نشده است.</div>';
+  } else {
+    var rows = todayEntries.map(function(en) {
+      var actBadge = en.actType === 'visit' 
+        ? '<span style="background:#fef3c7;color:#d97706;border:1px solid #fde68a;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">🤝 ملاقات</span>'
+        : '<span style="background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">📞 تماس</span>';
+      
+      var doneHtml = '';
+      if (en.done) {
+        var resText = en.doneResult === 'won' ? 'قرارداد بسته شد' : en.doneResult === 'inactive' ? 'غیرفعال' : 'نیاز به پیگیری';
+        var resBg = en.doneResult === 'won' ? '#dcfce7' : en.doneResult === 'inactive' ? '#fee2e2' : '#f0f9ff';
+        var resFg = en.doneResult === 'won' ? '#15803d' : en.doneResult === 'inactive' ? '#b91c1c' : '#0369a1';
+        doneHtml = '<span style="background:' + resBg + ';color:' + resFg + ';padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600">✓ انجام شد (' + resText + ')</span>';
+      } else {
+        doneHtml = '<button onclick="closeModal(\'todayPlanModal\'); wpMarkDoneKey(\'' + en.key + '\')" style="background:#22c55e;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:600">✓ ثبت نتیجه</button>';
+      }
+
+      var removeBtn = '<button onclick="wpRemoveTodayPlanItem(\'' + en.key + '\', \'' + today + '\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;font-family:inherit" title="حذف از امروز">❌ حذف</button>';
+
+      return '<tr style="border-bottom:1px solid var(--border)">'
+        + '<td style="padding:10px 8px"><a href="#" onclick="closeModal(\'todayPlanModal\'); openCenterModal(\'' + en.rtype + '\',\'' + en.rid + '\'); return false;" style="color:#0ea5e9;text-decoration:none;font-weight:600">' + esc(en.name) + '</a></td>'
+        + '<td style="padding:10px 8px;text-align:center">' + actBadge + '</td>'
+        + '<td style="padding:10px 8px;text-align:center;font-size:11px">' + esc(en.ownerName) + '</td>'
+        + '<td style="padding:10px 8px;text-align:center;font-size:11px">' + esc(en.status) + '</td>'
+        + '<td style="padding:10px 8px;font-size:11px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(en.lastNote) + '">' + esc(en.lastNote) + '</td>'
+        + '<td style="padding:10px 8px;text-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:8px">' + doneHtml + removeBtn + '</td>'
+        + '</tr>';
+    }).join('');
+
+    listHtml = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">'
+      + '<thead><tr style="background:var(--bg-raised);border-bottom:1.5px solid var(--border)">'
+      + '<th style="padding:8px;text-align:right">نام مرکز</th>'
+      + '<th style="padding:8px;text-align:center">نوع اقدام</th>'
+      + '<th style="padding:8px;text-align:center">مسئول</th>'
+      + '<th style="padding:8px;text-align:center">وضعیت</th>'
+      + '<th style="padding:8px;text-align:right">آخرین یادداشت</th>'
+      + '<th style="padding:8px;text-align:center">عملیات</th>'
+      + '</tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '</table></div>';
+  }
+
+  var body = '<div style="direction:rtl;text-align:right">'
+    + filterHtml
+    + listHtml
+    + '</div>';
+
+  var foot = '<button class="btn-secondary" onclick="closeModal(\'todayPlanModal\')">بستن</button>';
+  openModal('todayPlanModal', '📅 جزئیات برنامه روز: ' + today, body, foot, { lg: true });
+}
+
+function wpRemoveTodayPlanItem(eKey, dateStr) {
+  if (!confirm('آیا مطمئن هستید که این مرکز از برنامه امروز حذف شود؟')) return;
+  
+  if (DB.weekEntries[eKey]) {
+    DB.weekEntries[eKey].scheduledDate = null;
+    
+    var _we = DB.weekEntries[eKey];
+    if (_we.sqlId) {
+      fetch('/api/week-entries/' + encodeURIComponent(_we.sqlId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done: _we.done, doneDate: _we.doneDate || null, scheduledDate: null })
+      }).catch(function() {});
+    }
+    
+    saveDB();
+    showToast('❌ از برنامه امروز حذف شد');
+    wpOpenTodayPlanModal(dateStr);
+    renderWeekPlan();
+  }
+}
+
 

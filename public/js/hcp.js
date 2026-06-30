@@ -37,10 +37,14 @@ function renderHCPPanel() {
     + '<option value="خرید">تجهیزات / خرید</option>'
     + '</select>'
     + '</div>'
+    + '<div style="display:flex;gap:6px">'
+    + '<button id="hcpViewGridBtn" onclick="window._hcpView=\'grid\';_renderHCPData()" class="btn-primary" style="padding:6px 12px;border-radius:8px">🗂 کارتی</button>'
+    + '<button id="hcpViewTreeBtn" onclick="window._hcpView=\'tree\';_renderHCPData()" class="btn-secondary" style="padding:6px 12px;border-radius:8px">🌳 درختی</button>'
+    + '</div>'
     + '</div>';
 
   // Directory List Container
-  html += '<div id="hcpListArea" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:12px"></div>';
+  html += '<div id="hcpListArea"></div>';
   html += '</div>';
 
   panel.innerHTML = html;
@@ -67,50 +71,153 @@ function _hcpSearch() {
     .then(function(r) { return r.ok ? r.json() : []; })
     .then(function(data) {
       window._hcpCache = data;
-      if (!data.length) {
-        listArea.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);background:var(--bg-card);border:1px dashed var(--border);border-radius:10px">'
-          + '<div style="font-size:24px;margin-bottom:8px">👥</div>'
-          + 'هیچ پزشک یا کارشناسی یافت نشد'
-          + '</div>';
-        return;
-      }
-
-      listArea.innerHTML = data.map(function(hcp) {
-        var phonesHtml = (hcp.phones || []).map(function(ph) {
-          return '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);border:1px solid var(--border);padding:2px 8px;border-radius:12px;font-size:11px;direction:ltr">'
-            + '📞 ' + esc(ph)
-            + ' <a href="tel:'+ph+'" style="text-decoration:none">📞</a>'
-            + ' <a href="https://wa.me/'+_waNum(ph)+'" target="_blank" style="text-decoration:none;font-size:12px">💬</a>'
-            + '</div>';
-        }).join(' ') || '<span style="color:var(--text-muted)">بدون شماره تلفن</span>';
-
-        var tagHtml = hcp.specialty 
-          ? '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(hcp.specialty)+'</span>'
-          : '';
-        var rankHtml = hcp.rank ? '<span style="font-size:11px;color:var(--text-secondary);font-weight:600">'+esc(hcp.rank)+'</span> ' : '';
-
-        return '<div class="card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;justify-content:space-between">'
-          + '<div>'
-          + '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'
-          + '<div>'
-          + '<div style="font-weight:700;font-size:14px;color:var(--text-primary)">' + rankHtml + esc(hcp.name) + '</div>'
-          + (hcp.medical_council_no ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">نظام پزشکی: ' + esc(hcp.medical_council_no) + '</div>' : '')
-          + '</div>'
-          + tagHtml
-          + '</div>'
-          + '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">' + phonesHtml + '</div>'
-          + (hcp.notes ? '<div style="font-size:11px;color:var(--text-secondary);background:var(--bg-raised);padding:6px 8px;border-radius:6px;margin-top:8px;line-height:1.4">' + esc(hcp.notes) + '</div>' : '')
-          + '</div>'
-          + '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
-          + '<button class="btn-secondary" onclick="_hcpShowAffiliations(\''+hcp.id+'\',\''+esc(hcp.name)+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">🏥 مراکز تحت پوشش</button>'
-          + '<div style="display:flex;gap:4px">'
-          + '<button class="btn-secondary" onclick="_hcpOpenEditModal(\''+hcp.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">✏️ ویرایش</button>'
-          + '<button onclick="_hcpDelete(\''+hcp.id+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">🗑 حذف</button>'
-          + '</div>'
-          + '</div>'
-          + '</div>';
-      }).join('');
+      _renderHCPData();
     });
+}
+
+function _renderHCPData() {
+  var data = window._hcpCache || [];
+  var listArea = document.getElementById('hcpListArea');
+  if (!listArea) return;
+  
+  window._hcpView = window._hcpView || 'grid';
+  
+  var gridBtn = document.getElementById('hcpViewGridBtn');
+  var treeBtn = document.getElementById('hcpViewTreeBtn');
+  if (gridBtn && treeBtn) {
+    gridBtn.className = window._hcpView === 'grid' ? 'btn-primary' : 'btn-secondary';
+    treeBtn.className = window._hcpView === 'tree' ? 'btn-primary' : 'btn-secondary';
+  }
+
+  if (!data.length) {
+    listArea.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);background:var(--bg-card);border:1px dashed var(--border);border-radius:10px">'
+      + '<div style="font-size:24px;margin-bottom:8px">👥</div>'
+      + 'هیچ پزشک یا کارشناسی یافت نشد'
+      + '</div>';
+    listArea.style.display = 'block';
+    return;
+  }
+
+  if (window._hcpView === 'grid') {
+    listArea.style.display = 'grid';
+    listArea.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
+    listArea.style.gap = '12px';
+    listArea.innerHTML = data.map(function(hcp) {
+      var phonesHtml = (hcp.phones || []).map(function(ph) {
+        return '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);border:1px solid var(--border);padding:2px 8px;border-radius:12px;font-size:11px;direction:ltr">'
+          + '📞 ' + esc(ph)
+          + ' <a href="tel:'+ph+'" style="text-decoration:none">📞</a>'
+          + ' <a href="https://wa.me/'+_waNum(ph)+'" target="_blank" style="text-decoration:none;font-size:12px">💬</a>'
+          + '</div>';
+      }).join(' ') || '<span style="color:var(--text-muted)">بدون شماره تلفن</span>';
+
+      var tagHtml = hcp.specialty 
+        ? '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(hcp.specialty)+'</span>'
+        : '';
+      var rankHtml = hcp.rank ? '<span style="font-size:11px;color:var(--text-secondary);font-weight:600">'+esc(hcp.rank)+'</span> ' : '';
+
+      return '<div class="card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;justify-content:space-between">'
+        + '<div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'
+        + '<div>'
+        + '<div style="font-weight:700;font-size:14px;color:var(--text-primary)">' + rankHtml + esc(hcp.name) + '</div>'
+        + (hcp.medical_council_no ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">نظام پزشکی: ' + esc(hcp.medical_council_no) + '</div>' : '')
+        + '</div>'
+        + tagHtml
+        + '</div>'
+        + '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">' + phonesHtml + '</div>'
+        + (hcp.notes ? '<div style="font-size:11px;color:var(--text-secondary);background:var(--bg-raised);padding:6px 8px;border-radius:6px;margin-top:8px;line-height:1.4">' + esc(hcp.notes) + '</div>' : '')
+        + '</div>'
+        + '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+        + '<button class="btn-secondary" onclick="_hcpShowAffiliations(\''+hcp.id+'\',\''+esc(hcp.name)+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">🏥 مراکز تحت پوشش</button>'
+        + '<div style="display:flex;gap:4px">'
+        + '<button onclick="_hcpToggleActive(\''+hcp.id+'\', '+(hcp.is_active === false ? 'true' : 'false')+')" style="background:'+(hcp.is_active === false ? '#dcfce7' : '#fef9c3')+';color:'+(hcp.is_active === false ? '#166534' : '#854d0e')+';border:1px solid '+(hcp.is_active === false ? '#bbf7d0' : '#fef08a')+';border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">'+(hcp.is_active === false ? '✅ فعال' : '🚫 غیرفعال')+'</button>'
+        + '<button class="btn-secondary" onclick="_hcpOpenEditModal(\''+hcp.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">✏️ ویرایش</button>'
+        + '<button onclick="_hcpDelete(\''+hcp.id+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">🗑 حذف</button>'
+        + '</div>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  } else {
+    // Tree View
+    _renderHCPTreeView(data, listArea);
+  }
+}
+
+function _renderHCPTreeView(data, listArea) {
+  listArea.style.display = 'block';
+  var tree = {};
+  
+  // Group by Province -> Center
+  data.forEach(function(hcp) {
+    var affs = hcp.affiliations || [];
+    if (!affs.length) affs = [{ center_key: 'no_center' }];
+    
+    affs.forEach(function(aff) {
+      var centerName = 'بدون مرکز';
+      var provName = 'نامشخص';
+      var cKey = aff.center_key;
+      
+      if (cKey !== 'no_center') {
+        var rtype = cKey.split('_')[0] || cKey.split('||')[0];
+        var id = cKey.replace(rtype+'_','').replace(rtype+'||','');
+        var centerObj = (typeof getProvCenters === 'function') ? null : null; // we need to find the center
+        // Let's look up in DB.edits or window.DATA if available
+        var centerData = window.DB && window.DB.edits && window.DB.edits[cKey];
+        var baseName = (window.DATA || []).find(c => String(c.id) === id && c.rtype === rtype);
+        if (baseName) {
+           centerName = baseName.name;
+           if (window.PROVINCES) {
+             var p = window.PROVINCES.find(x => x.id == baseName.province_id);
+             if (p) provName = p.name;
+           }
+        } else if (centerData && centerData.name) {
+           centerName = centerData.name;
+        }
+      }
+      
+      if (!tree[provName]) tree[provName] = {};
+      if (!tree[provName][centerName]) tree[provName][centerName] = [];
+      tree[provName][centerName].push(hcp);
+    });
+  });
+
+  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  var provKeys = Object.keys(tree).sort();
+  
+  provKeys.forEach(function(prov) {
+    html += '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+    html += '<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'" style="padding:12px 16px;background:var(--bg-raised);cursor:pointer;font-weight:700;display:flex;justify-content:space-between;align-items:center">';
+    html += '<span>📍 استان ' + esc(prov) + '</span><span style="font-size:12px;color:var(--text-muted)">▼</span></div>';
+    html += '<div style="display:block;padding:12px">';
+    
+    var centerKeys = Object.keys(tree[prov]).sort();
+    centerKeys.forEach(function(center) {
+      html += '<div style="margin-bottom:12px;border:1px solid var(--border-input);border-radius:8px;overflow:hidden">';
+      html += '<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'" style="padding:10px 12px;background:rgba(0,0,0,0.02);cursor:pointer;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-input)">';
+      html += '<span>🏥 ' + esc(center) + ' <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">(' + tree[prov][center].length + ' مخاطب)</span></span><span style="font-size:10px;color:var(--text-muted)">▼</span></div>';
+      html += '<div style="display:none;padding:8px">';
+      
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+      tree[prov][center].forEach(function(hcp) {
+        var inactiveStyle = hcp.is_active === false ? 'opacity:0.6;text-decoration:line-through' : '';
+        html += '<tr style="border-bottom:1px solid var(--border-input)">';
+        html += '<td style="padding:8px;'+inactiveStyle+'">👤 ' + esc(hcp.name) + '</td>';
+        html += '<td style="padding:8px;color:var(--text-secondary)">' + esc(hcp.specialty || '-') + '</td>';
+        html += '<td style="padding:8px;direction:ltr;text-align:right">' + (hcp.phones||[]).join(', ') + '</td>';
+        html += '<td style="padding:8px;text-align:left"><button onclick="_hcpOpenEditModal(\''+hcp.id+'\')" class="btn-secondary" style="font-size:10px;padding:2px 6px">ویرایش</button></td>';
+        html += '</tr>';
+      });
+      html += '</table>';
+      
+      html += '</div></div>';
+    });
+    
+    html += '</div></div>';
+  });
+  
+  html += '</div>';
+  listArea.innerHTML = html;
 }
 
 // ── SHOW HCP INFLUENCE SPHERE (AFFILIATIONS) ────────────────────────────────
@@ -306,15 +413,32 @@ function _hcpSubmitForm(id) {
 }
 
 function _hcpDelete(id) {
-  if (!confirm('آیا از حذف این پزشک/کارشناس و تمامی ارتباطات مرکز درمانی او مطمئن هستید؟')) return;
+  if (!confirm('آیا از حذف این پزشک/کارشناس مطمئن هستید؟ (این عمل قابل بازگشت نیست)')) return;
   fetch('/api/hcps/' + id, { method: 'DELETE' })
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(d) {
-      if (d && d.ok) {
+      if (d && (d.ok || d.success)) {
         showToast('🗑 پزشک حذف شد');
         _hcpSearch();
       } else {
         showToast('❌ خطا در حذف پزشک');
+      }
+    });
+}
+
+function _hcpToggleActive(id, activate) {
+  fetch('/api/hcps/' + id + '/active', { 
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: activate })
+  })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d && (d.ok || d.success)) {
+        showToast(activate ? '✅ پزشک فعال شد' : '🚫 پزشک غیرفعال شد');
+        _hcpSearch();
+      } else {
+        showToast('❌ خطا در تغییر وضعیت');
       }
     });
 }
@@ -413,6 +537,20 @@ function _hcpOpenLinkModal(rtype, rid, domId) {
   openModal('hcpLinkModal', title, body, '<button class="btn-secondary" onclick="closeModal(\'hcpLinkModal\');window._hcpPendingLinkCenterKey=null;">انصراف</button>');
 }
 
+function getProvNameFromKey(recKey) {
+  if (!recKey) return '';
+  var pts = recKey.split('_');
+  var tp = pts[0];
+  var id = pts.slice(1).join('_');
+  if (tp === 'center') return 'تهران';
+  if (tp === 'pc') {
+    var provId = id.split('||')[0];
+    var p = (typeof PROVINCES !== 'undefined' ? PROVINCES : []).find(function(x){return x.id === provId;});
+    return p ? p.name : '';
+  }
+  return '';
+}
+
 function _hcpLinkAutocomplete(val) {
   var container = document.getElementById('hcpAutocompleteResults');
   if (!container) return;
@@ -432,9 +570,41 @@ function _hcpLinkAutocomplete(val) {
       }
 
       container.innerHTML = data.map(function(hcp) {
-        var specLabel = hcp.specialty ? ' (' + esc(hcp.specialty) + ')' : '';
-        return '<div class="autocomplete-item" onclick="_hcpLinkAndClose(\''+hcp.id+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-primary)" onmouseover="this.style.background=\'var(--bg-raised)\'" onmouseout="this.style.background=\'none\'">'
-          + '👤 ' + esc(hcp.name) + specLabel
+        var rankLabel = hcp.rank ? esc(hcp.rank) + ' ' : '';
+        var specLabel = hcp.specialty ? '<span style="background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:4px;padding:1px 6px;font-size:10px;margin-right:4px">' + esc(hcp.specialty) + '</span>' : '';
+        var mcLabel = hcp.medical_council_no ? '<span style="font-size:10px;color:var(--text-muted)"> | نظام پزشکی: ' + esc(hcp.medical_council_no) + '</span>' : '';
+        
+        var affs = (hcp.affiliations || []).filter(function(a){ return a && a.center_key; });
+        var affsLabel = '';
+        if (affs.length > 0) {
+          // Use stored center_name/province_name from DB, fall back to client-side resolve
+          var parts = affs.map(function(a) {
+            var cname = a.center_name;
+            var pname = a.province_name;
+            // Fallback to client-side resolve if not stored yet
+            if (!cname && typeof getRecLabel === 'function') {
+              var resolved = getRecLabel(a.center_key);
+              if (resolved && resolved !== a.center_key) cname = resolved;
+            }
+            if (!pname && typeof getProvNameFromKey === 'function') {
+              pname = getProvNameFromKey(a.center_key);
+            }
+            if (cname && pname) return esc(cname) + ' <span style="opacity:.7">(' + esc(pname) + ')</span>';
+            if (cname) return esc(cname);
+            if (pname) return '<span style="opacity:.7">(' + esc(pname) + ')</span>';
+            return '';
+          }).filter(Boolean);
+          
+          if (parts.length > 0) {
+            affsLabel = '<div style="font-size:10px;color:var(--text-muted);margin-top:3px">🏥 ' + parts.join(' · ') + '</div>';
+          }
+        } else {
+          affsLabel = '<div style="font-size:10px;color:var(--text-muted);margin-top:3px">🏥 بدون اتصال قبلی</div>';
+        }
+        
+        return '<div class="autocomplete-item" onclick="_hcpLinkAndClose(\''+hcp.id+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text-primary)" onmouseover="this.style.background=\'var(--bg-raised)\'" onmouseout="this.style.background=\'none\'">'
+          + '<div style="font-weight:600;font-size:13px">👤 ' + rankLabel + esc(hcp.name) + '&nbsp;&nbsp;' + specLabel + mcLabel + '</div>'
+          + affsLabel
           + '</div>';
       }).join('');
       container.style.display = 'block';
@@ -479,13 +649,35 @@ function _hcpLinkAndClose(hcpId) {
 }
 
 function _hcpSaveAffiliation(centerKey, hcpId, rtype, rid, domId) {
+  // Resolve center name and province name from client-side data for storage
+  var cname = '';
+  var pname = '';
+  try {
+    if (typeof getRecLabel === 'function') cname = getRecLabel(centerKey) || '';
+    if (typeof getProvNameFromKey === 'function') pname = getProvNameFromKey(centerKey) || '';
+    // If getRecLabel returns raw key (not resolved), try direct lookup
+    if (cname === centerKey || !cname) {
+      var pts = centerKey.split('_'); var tp = pts[0]; var id2 = pts.slice(1).join('_');
+      if (tp === 'center' && typeof CENTERS !== 'undefined') {
+        var cc = CENTERS.find(function(x){ return x.id === id2; });
+        if (cc) cname = cc.name || '';
+      }
+      if (!cname && typeof DB !== 'undefined' && DB.extra) {
+        var ex = DB.extra.find(function(x){ return x.id === id2; });
+        if (ex) cname = ex.name || '';
+      }
+    }
+  } catch(e) {}
+
   var payload = {
     centerKey: centerKey,
     hcpId: hcpId,
     role: document.getElementById('affFormRole') ? document.getElementById('affFormRole').value.trim() : '',
     influenceLevel: document.getElementById('affFormInfluence') ? document.getElementById('affFormInfluence').value : 'Decision Maker',
     workingHours: document.getElementById('affFormHours') ? document.getElementById('affFormHours').value.trim() : '',
-    notes: document.getElementById('affFormNotes') ? document.getElementById('affFormNotes').value.trim() : ''
+    notes: document.getElementById('affFormNotes') ? document.getElementById('affFormNotes').value.trim() : '',
+    centerName: cname,
+    provinceName: pname
   };
 
   fetch('/api/hcps/affiliations', {

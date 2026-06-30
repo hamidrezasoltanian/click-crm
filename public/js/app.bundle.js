@@ -7,12 +7,12 @@ var PC_RAW = {}; // loaded from IndexedDB
 
 /* ══ BLOCK 2: Main Application Code ══ */
 // ════════════════════════ CONSTANTS ═══════════════════════
-var STATUS_LIST=['بدون تماس','تماس اولیه','ملاقات انجام شد','پیشنهاد ارسال شد','قرارداد بسته شد','غیرفعال'];
-var STATUS_CLS=['st-0','st-1','st-2','st-3','st-4','st-5'];
-var H_CLS=['h-st-0','h-st-1','h-st-2','h-st-3','h-st-4','h-st-5'];
+var STATUS_LIST=['بدون تماس','تماس اولیه','ملاقات انجام شد','پیشنهاد ارسال شد','قرارداد بسته شد','عدم نیاز فاکتور کنسل شد','غیرفعال'];
+var STATUS_CLS=['st-0','st-1','st-2','st-3','st-4','st-5','st-5'];
+var H_CLS=['h-st-0','h-st-1','h-st-2','h-st-3','h-st-4','h-st-5','h-st-5'];
 var LEAD_LIST=['مشتری','لید','فرصت','سرنخ','ندارد','بدون مصرف'];
 var TYPE_LIST=['بیمارستان','کلینیک','درمانگاه','مطب','آزمایشگاه','داروخانه','دیگر'];
-var _PIPELINE_META={'بدون تماس':{ic:'⬜',c:'#94a3b8'},'تماس اولیه':{ic:'📞',c:'#0ea5e9'},'ملاقات انجام شد':{ic:'📋',c:'#8b5cf6'},'پیشنهاد ارسال شد':{ic:'📄',c:'#06b6d4'},'قرارداد بسته شد':{ic:'✅',c:'#22c55e'},'غیرفعال':{ic:'🚫',c:'#ef4444'}};
+var _PIPELINE_META={'بدون تماس':{ic:'⬜',c:'#94a3b8'},'تماس اولیه':{ic:'📞',c:'#0ea5e9'},'ملاقات انجام شد':{ic:'📋',c:'#8b5cf6'},'پیشنهاد ارسال شد':{ic:'📄',c:'#06b6d4'},'قرارداد بسته شد':{ic:'✅',c:'#22c55e'},'عدم نیاز فاکتور کنسل شد':{ic:'❌',c:'#f43f5e'},'غیرفعال':{ic:'🚫',c:'#ef4444'}};
 var LEAD_CLS={'مشتری':'lead-cust','لید':'lead-lid','فرصت':'lead-opp','سرنخ':'lead-srnkh','ندارد':'lead-none','بدون مصرف':'lead-nouse'};
 var J_MONTHS=['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 var J_DAYS=['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه'];
@@ -172,30 +172,47 @@ function _saveDBNow(){
   return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(payload)})
     .then(function(r){
       if(r.status===409){
-        // Merge latest server data and retry once — no page reload
-        return fetch('/api/data/db').then(function(r2){return r2.ok?r2.json():null;}).then(function(d){
-          if(!d||typeof d!=='object'){showToast('⚠ خطای همگام‌سازی — لطفاً صفحه را رفرش کنید',5000);return;}
-          if(d._serverTs)_dbServerTs=d._serverTs;
-          // Merge: local edits + weekEntries win over server (preserve unsaved work)
-          var merged=Object.assign({},DB,d);
-          merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
-          // Don't let server revive locally-deleted entries
-          (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
-          merged.edits=Object.assign({},d.edits||{},DB.edits||{});
-          // Preserve local read=true for notifications on 409 retry
-          if(DB.notifications&&d.notifications){
-            var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
-            merged.notifications=(d.notifications||[]).map(function(n){return _lr409[n.id]?Object.assign({},n,{read:true}):n;});
-          }
-          delete merged._serverTs;delete merged._clientTs;
-          Object.keys(merged).forEach(function(k){DB[k]=merged[k];});
-          // Retry save with updated timestamp
-          var p2=JSON.parse(JSON.stringify(DB));
-          if(_dbServerTs)p2._clientTs=_dbServerTs;
-          return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(p2)})
-            .then(function(r3){if(!r3.ok)return;return r3.json().then(function(res){if(res&&res._serverTs)_dbServerTs=res._serverTs;if(seq===_saveSeq)DB._weDeletedKeys=[];});})
-            .catch(function(){});
-        }).catch(function(){showToast('⚠ خطای شبکه — لطفاً صفحه را رفرش کنید',5000);});
+        // 409 means another user saved since our last known timestamp — merge and retry
+        return r.json().catch(function(){return {};}).then(function(errData){
+          var conflictBy = errData && errData.by ? (USERS && USERS[errData.by] ? USERS[errData.by] : errData.by) : null;
+          return fetch('/api/data/db').then(function(r2){return r2.ok?r2.json():null;}).then(function(d){
+            if(!d||typeof d!=='object'){showToast('⚠ خطای همگام‌سازی — لطفاً صفحه را رفرش کنید',5000);return;}
+            if(d._serverTs)_dbServerTs=d._serverTs;
+            // Merge: local edits + weekEntries win over server (preserve unsaved work)
+            var merged=Object.assign({},DB,d);
+            merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
+            // Don't let server revive locally-deleted entries
+            (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
+            // Smart edits merge using timestamps
+            var mEd=Object.assign({},d.edits||{});
+            var lEd=DB.edits||{};
+            Object.keys(lEd).forEach(function(k){
+              var le=lEd[k]||{};var se=mEd[k]||{};
+              if((le._ts||0)>=(se._ts||0))mEd[k]=le;
+              else mEd[k]=Object.assign({},le,se);
+            });
+            merged.edits=mEd;
+            // Preserve local new centers (DB.extra)
+            var _extMap={};
+            (d.extra||[]).forEach(function(x){_extMap[x.id]=x;});
+            (DB.extra||[]).forEach(function(x){_extMap[x.id]=x;});
+            merged.extra=Object.keys(_extMap).map(function(k){return _extMap[k];});
+            // Preserve local read=true for notifications on 409 retry
+            if(DB.notifications&&d.notifications){
+              var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
+              merged.notifications=(d.notifications||[]).map(function(n){return _lr409[n.id]?Object.assign({},n,{read:true}):n;});
+            }
+            delete merged._serverTs;delete merged._clientTs;
+            Object.keys(merged).forEach(function(k){DB[k]=merged[k];});
+            if(conflictBy)showToast('🔄 تغییرات '+conflictBy+' ادغام شد',3000);
+            // Retry save with updated timestamp
+            var p2=JSON.parse(JSON.stringify(DB));
+            if(_dbServerTs)p2._clientTs=_dbServerTs;
+            return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(p2)})
+              .then(function(r3){if(!r3.ok)return;return r3.json().then(function(res){if(res&&res._serverTs)_dbServerTs=res._serverTs;if(seq===_saveSeq)DB._weDeletedKeys=[];});})
+              .catch(function(){});
+          }).catch(function(){showToast('⚠ خطای شبکه — لطفاً صفحه را رفرش کنید',5000);});
+        });
       }
       return r.json().then(function(result){
         if(result&&result._serverTs&&seq===_saveSeq)_dbServerTs=result._serverTs;
@@ -1091,12 +1108,26 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
   var _cFields=['contactName','contactTitle','phones','address','contacts'];
   if(_cFields.indexOf(field)>=0){
     var _ce=DB.edits[k];
+    var _names=[],_titles=[],_phns=[];
+    if(_ce.contacts&&_ce.contacts.length){
+      _ce.contacts.forEach(function(c){
+        if(c.name)_names.push(c.name);
+        if(c.title)_titles.push(c.title);
+        if(c.phones)_phns=_phns.concat(c.phones);
+      });
+    }else{
+      if(_ce.contactName)_names.push(_ce.contactName);
+      if(_ce.contactTitle)_titles.push(_ce.contactTitle);
+      if(_ce.phones)_phns=_phns.concat(_ce.phones);
+    }
     fetch('/api/contacts/'+encodeURIComponent(k),{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         centerName:_getCenterName(type,id),
-        contacts:_ce.contacts||[],
+        contactName:_names.join(' - '),
+        contactTitle:_titles.join(' - '),
+        phones:_phns,
         address:_ce.address||''
       })
     }).catch(function(){});
@@ -2888,7 +2919,69 @@ function renderProvList(){
   if(_provSort==='alpha'){filtProvs=filtProvs.slice().sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});}
   else if(_provSort==='potential'){filtProvs=filtProvs.slice().sort(function(a,b){return (a.potential||9)-(b.potential||9);});}
   else if(_provSort==='owner'){filtProvs=filtProvs.slice().sort(function(a,b){var oa=USERS[(getE('pc',a.id).owner||a.owner||'')]||'ω';var ob=USERS[(getE('pc',b.id).owner||b.owner||'')]||'ω';return oa<ob?-1:oa>ob?1:0;});}
-  var rows=filtProvs.map(function(p){
+  else if(_provSort==='custom'){
+    var cOrder = localStorage.getItem('prov_custom_sort');
+    if(cOrder) {
+      try {
+        var arr = JSON.parse(cOrder);
+        filtProvs=filtProvs.slice().sort(function(a,b){
+          var ia=arr.indexOf(a.id); var ib=arr.indexOf(b.id);
+          if(ia===-1)ia=999; if(ib===-1)ib=999;
+          return ia-ib;
+        });
+      } catch(e){}
+    }
+  }
+
+  // هید/نمایش table
+  var tbl=document.getElementById('mainTable');if(tbl)tbl.style.display='none';
+  var kb=document.getElementById('kanbanView');if(kb)kb.style.display='none';
+  var cv=document.getElementById('cardView');if(cv)cv.style.display='none';
+  var pg=document.getElementById('provGrid');if(!pg)return;
+  pg.style.display='';
+
+  var treeBtn = document.getElementById('provTreeBtn');
+  if(treeBtn) {
+    treeBtn.style.display = '';
+    treeBtn.className = window._provViewTree ? 'btn-primary' : 'btn-secondary';
+  }
+
+  if(window._provViewTree) {
+    // نمای درختی
+    pg.style.display = 'block';
+    pg.innerHTML = '';
+    
+    var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+    filtProvs.forEach(function(p){
+      var centers = getProvCenters(p.id);
+      html += '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+      html += '<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'" style="padding:12px 16px;background:var(--bg-raised);cursor:pointer;font-weight:700;display:flex;justify-content:space-between;align-items:center">';
+      html += '<span>📍 استان ' + esc(p.name) + ' ('+centers.length+' مرکز)</span><span style="font-size:12px;color:var(--text-muted)">▼</span></div>';
+      html += '<div style="display:none;padding:12px">';
+      
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:8px">';
+      centers.forEach(function(c){
+        var e = getE(getProvType(p.id), c.id);
+        var st = e.status||'بدون تماس';
+        html += '<div onclick="openCenterModal(\''+getProvType(p.id)+'\',\''+c.id+'\')" style="padding:8px 10px;background:var(--bg-raised);border:1px solid var(--border-input);border-radius:8px;cursor:pointer;font-size:11px">';
+        html += '<div style="font-weight:600;margin-bottom:4px">🏥 '+esc(c.name)+'</div>';
+        html += '<div style="color:var(--text-secondary)">'+esc(st)+'</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      
+      html += '</div></div>';
+    });
+    html += '</div>';
+    pg.innerHTML = html;
+
+    var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent=filtProvs.length+' استان';
+    return;
+  }
+
+  // نمای Grid
+  pg.style.display='grid';
+  var rows=filtProvs.map(function(p, i){
     var e=getE('pc',p.id);
     var owner=e.owner||p.owner||'';
     var _owMem=_DEFAULT_MEMBERS&&_DEFAULT_MEMBERS.find(function(m){return m.id===owner;});
@@ -2896,14 +2989,12 @@ function renderProvList(){
     var ownerName=owner?((USERS[owner]||owner)+(_owInactive?' ⚠️ (غیرفعال)':'')):'بدون مسئول';
     var ownerColor=owner&&typeof umGetColor==='function'?umGetColor(owner):'#e2e8f0';
     var isMyProv=(owner===currentUser);
-    var dimmed=false; // پنهان نمی‌کنیم، فقط highlight می‌کنیم
+    var dimmed=false;
     var tp=getProvType(p.id);
-    // count از DB.edits بدون iterate همه مراکز
     var contracted=0,meetings=0,overdueCount=0;
     var today2=todayStr();
     Object.keys(DB.edits||{}).forEach(function(k){
       var e=DB.edits[k];
-      // بررسی کن آیا مال این استان است
       var pts=k.split('_');var ktp=pts[0];var kid=pts.slice(1).join('_');
       var belongsHere=false;
       if(p.id==='tehran'&&ktp==='center')belongsHere=true;
@@ -2914,19 +3005,28 @@ function renderProvList(){
       else if(st==='ملاقات انجام شد')meetings++;
       if(e.followupDate&&e.followupDate<today2&&st!=='قرارداد بسته شد'&&st!=='غیرفعال')overdueCount++;
     });
-    var centers=getProvCenters(p.id); // برای تعداد کل مراکز
+    var centers=getProvCenters(p.id);
     var _heatRatio=centers.length>0?overdueCount/centers.length:0;
     var _heatCls=contracted>0&&_heatRatio<0.1?' heat-green':_heatRatio>=0.3?' heat-red':_heatRatio>=0.1?' heat-yellow':'';
     var cls='prov-card'+(p.id==='tehran'?' tehran':'')+(isMyProv&&_globalOwnerFilter?' prov-mine':'')+(dimmed?' prov-dimmed':'')+_heatCls;
     var style=dimmed?'opacity:.4;pointer-events:none':'';
-    var ownerColor=owner?(isMyProv||!_globalOwnerFilter?'#0369a1':'#94a3b8'):'#cbd5e1';
     var cntLabel=String(centers.length);
     var div=document.createElement('div');
     div.className=cls;if(style)div.style.cssText=style;
     div.setAttribute('data-pid',p.id);
     div.onclick=function(){openProvince(this.getAttribute('data-pid'));};
+    
+    var upDownHtml = '';
+    if(_provSort === 'custom') {
+      upDownHtml = '<div style="position:absolute;top:5px;left:5px;display:flex;flex-direction:column;gap:2px" onclick="event.stopPropagation()">'
+        + '<button onclick="moveProvCustomSort(\''+p.id+'\', -1)" style="border:none;background:rgba(0,0,0,0.1);cursor:pointer;font-size:10px;border-radius:3px">▲</button>'
+        + '<button onclick="moveProvCustomSort(\''+p.id+'\', 1)" style="border:none;background:rgba(0,0,0,0.1);cursor:pointer;font-size:10px;border-radius:3px">▼</button>'
+        + '</div>';
+    }
+
     div.innerHTML=
-      '<div class="prov-card-name">'+esc(p.name)+(overdueCount?'<span class="risk-badge" title="'+overdueCount+' پیگیری معوق">🟠</span>':'')+'</div>'
+      upDownHtml
+      +'<div class="prov-card-name">'+esc(p.name)+(overdueCount?'<span class="risk-badge" title="'+overdueCount+' پیگیری معوق">🟠</span>':'')+'</div>'
       +'<div style="font-size:11px;font-weight:600;margin:3px 0 6px;display:flex;align-items:center;gap:4px;color:'+ownerColor+'">'
       +'<span>👤</span><span>'+esc(ownerName)+'</span></div>'
       +'<div class="prov-card-stats">'
@@ -2955,19 +3055,43 @@ function renderProvList(){
       }).join('');
       return '<div style="margin-top:7px;border-top:1px solid var(--border);padding-top:5px">'+bars+'</div>';
     })():'');
+    div.style.position = 'relative';
     return div;
   });
-  // هید/نمایش table
-  var tbl=document.getElementById('mainTable');if(tbl)tbl.style.display='none';
-  var kb=document.getElementById('kanbanView');if(kb)kb.style.display='none';
-  var cv=document.getElementById('cardView');if(cv)cv.style.display='none';
-  var pg=document.getElementById('provGrid');if(!pg)return;
-  pg.style.display='';
-  // DOM-based render (no string)
+
   pg.innerHTML='';
   rows.forEach(function(d){pg.appendChild(d);});
-  var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent=filtProvs.length+' استان'+(filtProvs.length<provs.length?' (فیلتر شده)':'')+(
+  var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent=filtProvs.length+' استان'+(filtProvs.length<getAllowedProvinces(getAllProvinces()).length?' (فیلتر شده)':'')+(
     _globalOwnerFilter?' (فیلتر: '+esc(USERS[_globalOwnerFilter]||_globalOwnerFilter)+')':'');
+}
+
+function toggleProvTreeView() {
+  window._provViewTree = !window._provViewTree;
+  renderProvList();
+}
+
+function moveProvCustomSort(id, direction) {
+  var cOrder = localStorage.getItem('prov_custom_sort');
+  var arr = [];
+  if(cOrder) {
+    try { arr = JSON.parse(cOrder); } catch(e){}
+  }
+  if (!arr.length) {
+    arr = getAllProvinces().map(function(p){return p.id;});
+  }
+  var idx = arr.indexOf(id);
+  if(idx === -1) return;
+  var newIdx = idx + direction;
+  if(newIdx < 0 || newIdx >= arr.length) return;
+  
+  // swap
+  var tmp = arr[idx];
+  arr[idx] = arr[newIdx];
+  arr[newIdx] = tmp;
+  
+  localStorage.setItem('prov_custom_sort', JSON.stringify(arr));
+  renderProvList();
+
 }
 // ════════════════════════ PROVINCE TABLE ═════════════
 function renderProvTable(){
@@ -3213,6 +3337,30 @@ function addCenter(){
   setTimeout(function(){var n=document.getElementById('ac_name');if(n)n.focus();},100);
 }
 
+function getAllCentersAcrossAllProvinces() {
+  _buildPCCache();
+  var list = [];
+  if (_PC_CACHE) {
+    for (var provId in _PC_CACHE) {
+      list = list.concat(_PC_CACHE[provId]||[]);
+    }
+  }
+  list = list.concat(DB.extra || []);
+  var seen = {};
+  return list.filter(function(c) {
+    if (!c || !c.id) return false;
+    if (seen[c.id]) return false;
+    seen[c.id] = true;
+    return true;
+  });
+}
+
+function getProvNameFromId(provId) {
+  if (provId === 'tehran') return 'تهران';
+  var p = (typeof PROVINCES !== 'undefined' ? PROVINCES : []).find(function(x){return x.id === provId;});
+  return p ? p.name : provId;
+}
+
 function _doAddCenter(){
   try{
     if(!_currentProvId){showToast('⚠ استان مشخص نیست');return;}
@@ -3222,11 +3370,21 @@ function _doAddCenter(){
     if(!name){showToast('نام مرکز را وارد کنید');return;}
     name=name.replace(/[ي]/g,'ی').replace(/[ك]/g,'ک');
 
-    var centers=getProvCenters(_currentProvId);
-    var dup=centers.find(function(c){return fNorm(c.name)===fNorm(name);});
-    var similar=!dup&&centers.find(function(c){return _centerNameSimilar(c.name,name);});
-    if(dup){showToast('⚠ مرکز «'+dup.name+'» قبلاً ثبت شده',3000);return;}
-    if(similar){if(!confirm('⚠ مرکز مشابه «'+similar.name+'» در این استان وجود دارد.\nآیا می‌خواهید «'+name+'» را اضافه کنید؟'))return;}
+    var allCents = getAllCentersAcrossAllProvinces();
+    var dup = allCents.find(function(c){return fNorm(c.name)===fNorm(name);});
+    var similar = !dup && allCents.find(function(c){return _centerNameSimilar(c.name,name);});
+
+    if(dup){
+      var dpId = dup.province_id || (dup.id && dup.id.indexOf('||') >= 0 ? dup.id.split('||')[0] : 'tehran');
+      var pName = getProvNameFromId(dpId);
+      showToast('⚠ مرکز «'+dup.name+'» قبلاً در استان «'+(pName||dpId)+'» ثبت شده است',4000);
+      return;
+    }
+    if(similar){
+      var dpId = similar.province_id || (similar.id && similar.id.indexOf('||') >= 0 ? similar.id.split('||')[0] : 'tehran');
+      var pName = getProvNameFromId(dpId);
+      if(!confirm('⚠ مرکز مشابه «'+similar.name+'» در استان «'+(pName||dpId)+'» وجود دارد.\nآیا مطمئن هستید که می‌خواهید «'+name+'» را اضافه کنید؟')) return;
+    }
 
     var type=(document.getElementById('ac_type').value||'').trim()||'سایر';
     var pot=parseInt((document.getElementById('ac_pot')||{}).value)||2;
@@ -3240,10 +3398,22 @@ function _doAddCenter(){
     DB.extra.push({id:id,row:maxRow+1,name:name,potential:pot,type:type,lead:lead,province_id:_currentProvId,owner:owner});
     saveDB();
     closeModal('addCenterModal');
+    // Clear filters to ensure the new center is visible
+    var _fp=document.getElementById('fPot');if(_fp)_fp.value='';
+    var _fo=document.getElementById('fOwner');if(_fo)_fo.value='';
+    var _fs=document.getElementById('fStatus');if(_fs)_fs.value='';
+    var _fl=document.getElementById('fLead');if(_fl)_fl.value='';
+    var _ft=document.getElementById('fType');if(_ft)_ft.value='';
+    var _srch=document.getElementById('srch');if(_srch)_srch.value='';
+    var _fv=document.getElementById('fTag');if(_fv)_fv.value='';
+    _globalOwnerFilter='';
+    if(typeof _quickFilter!=='undefined') _quickFilter='';
+    document.querySelectorAll('.filter-chip').forEach(function(el){el.classList.remove('active');});
+
     // نمایش table-wrap اگه hidden بوده
     var tw=document.querySelector('.table-wrap');if(tw)tw.style.display='';
     renderProvTable();
-    showToast('✅ مرکز "'+name+'" اضافه شد');
+    showToast('✅ مرکز "'+name+'" اضافه شد. در صورت فعال بودن فیلترها، فیلترها پاک شدند تا مرکز جدید نمایش داده شود.', 4000);
   }catch(err){
     showToast('❌ خطا: '+err.message,4000);
     console.error('_doAddCenter error:',err);
@@ -4562,7 +4732,7 @@ function _onLeadChange(id,newLead,rtype,rid){
   if(rtype&&rid)setE(rtype,rid,'lead',newLead);
 }
 function _onStatusChange(rtype,rid,newStatus){
-  var needReason=['غیرفعال','قرارداد بسته شد'];
+  var needReason=['غیرفعال','عدم نیاز فاکتور کنسل شد'];
   setE(rtype,rid,'status',newStatus);
   if(needReason.indexOf(newStatus)>=0){
     var existing=getE(rtype,rid).closeReason||'';
@@ -5627,7 +5797,7 @@ function renderWeekPlan(){
   daysEl.innerHTML = days.map(function(d){
     var items = byDay[d.str] || [];
     return '<div class="wp-day'+(d.isToday?' today':'')+'">'
-      + '<div class="wp-day-head">'+d.name+'<br><small>'+d.str.split('/').slice(1).join('/')+'</small>'
+      + '<div class="wp-day-head" onclick="wpOpenTodayPlanModal(\''+d.str+'\')" style="cursor:pointer" title="مشاهده برنامه روزانه با جزئیات">'+d.name+'<br><small>'+d.str.split('/').slice(1).join('/')+'</small>'
       + (items.length?'<span class="wp-cnt">'+items.length+'</span>':'')+'</div>'
       + '<div class="wp-day-body" ondragover="event.preventDefault();this.classList.add(\'wp-drop-over\')" ondragleave="this.classList.remove(\'wp-drop-over\')" ondrop="wpDrop(event,\''+d.str+'\')">'
       + (items.length ? items.map(function(e){return renderWpItem(e,weekId);}).join('') : '<div class="wp-empty">—</div>')
@@ -5937,6 +6107,7 @@ function wpRemoveFromOtherWeeks(recKey, keepWeekId){
     if(keepWeekId && k.startsWith(keepWeekId+':::')) return;
     var we=DB.weekEntries[k];
     if(!we||typeof we!=='object')return;
+    if(we.done) return;
     var rk=we.recKey||(we.rtype+'_'+we.rid);
     if(rk===recKey) _weRemove(k);
   });
@@ -6703,14 +6874,20 @@ function wpOpenAssignAll(){
 
 function saveWpAssign(weekId){
   var actType = document.getElementById('wpAssignActType').value || 'call';
-  Object.keys(DB.weekEntries||{}).filter(function(k){return k.startsWith(weekId+':::');}).forEach(function(k){_weRemove(k);});
+  Object.keys(DB.weekEntries||{}).filter(function(k){
+    var we=DB.weekEntries[k];
+    return k.startsWith(weekId+':::') && we && !we.done;
+  }).forEach(function(k){_weRemove(k);});
+  
   document.querySelectorAll('#wpAList input[type=checkbox]').forEach(function(cb){
     if(!cb.checked)return;
     var rtype=cb.getAttribute('data-rtype');var rid=cb.getAttribute('data-rid');
     var eKey=wpEntryKey(weekId,rtype,rid);
     var _rk=rtype+'_'+rid;
     wpRemoveFromOtherWeeks(_rk, weekId);
-    DB.weekEntries[eKey]={scheduledDate:null,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:rtype+'_'+rid,centerName:getRecLabel(rtype+'_'+rid),actionType:actType,addedBy:currentUser};(function(_k,_we){var _pts=_k.split(':::');fetch('/api/week-entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'we_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),weekId:_pts[0],recKey:_pts[1],rtype:_we.rtype,rid:_we.rid,scheduledDate:_we.scheduledDate||null,actionType:_we.actionType||'call',done:false,doneDate:null,addedBy:_we.addedBy||currentUser,centerName:_we.centerName||''})}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.id&&DB.weekEntries[_k])DB.weekEntries[_k].sqlId=d.id;}).catch(function(){});})(eKey,DB.weekEntries[eKey]);
+    if(!DB.weekEntries[eKey] || !DB.weekEntries[eKey].done){
+      DB.weekEntries[eKey]={scheduledDate:null,done:false,doneDate:null,rtype:rtype,rid:rid,recKey:rtype+'_'+rid,centerName:getRecLabel(rtype+'_'+rid),actionType:actType,addedBy:currentUser};(function(_k,_we){var _pts=_k.split(':::');fetch('/api/week-entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'we_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),weekId:_pts[0],recKey:_pts[1],rtype:_we.rtype,rid:_we.rid,scheduledDate:_we.scheduledDate||null,actionType:_we.actionType||'call',done:false,doneDate:null,addedBy:_we.addedBy||currentUser,centerName:_we.centerName||''})}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.id&&DB.weekEntries[_k])DB.weekEntries[_k].sqlId=d.id;}).catch(function(){});})(eKey,DB.weekEntries[eKey]);
+    }
   });
   saveDB();
   var selWp=document.getElementById('wpSel');
@@ -7467,6 +7644,142 @@ function renderChangelog(){
     _clAutoRefreshTimer = setTimeout(function(){if(currentTab==='changelog')renderChangelog();}, 30000);
   }
 }
+
+function wpOpenTodayPlanModal(dateStr) {
+  var today = dateStr || todayStr();
+  var todayJd = today;
+
+  _buildPCCache();
+  var todayEntries = [];
+
+  if (typeof window._wpTodayModalOwnerF === 'undefined') {
+    window._wpTodayModalOwnerF = '';
+  }
+
+  Object.keys(DB.weekEntries || {}).forEach(function(k) {
+    var we = DB.weekEntries[k];
+    if (we.rtype === 'mtr') return;
+    if (we.scheduledDate !== today) return;
+
+    var rtype = we.rtype || 'center', rid = we.rid || '';
+    var e = getE(rtype, rid);
+    var owner = _wpGetOwner(we);
+
+    if (!_isManager() && owner && owner !== currentUser) return;
+
+    if (_isManager() && window._wpTodayModalOwnerF && owner !== window._wpTodayModalOwnerF) return;
+
+    var rk = we.recKey || (rtype + '_' + rid);
+    var name = we.centerName || getRecLabel(rk) || '?';
+    
+    var notesList = DB.notes[rk] || [];
+    var lastNote = notesList[0] ? notesList[0].text : '—';
+
+    todayEntries.push({
+      key: k,
+      rtype: rtype,
+      rid: rid,
+      recKey: rk,
+      name: name,
+      owner: owner,
+      ownerName: owner ? (USERS[owner] || owner) : 'بدون مسئول',
+      actType: we.actionType || 'call',
+      status: e.status || 'بدون تماس',
+      lastNote: lastNote,
+      done: we.done,
+      doneResult: we.doneResult
+    });
+  });
+
+  var filterHtml = '';
+  if (_isManager()) {
+    var activeUsers = typeof umGetActive === 'function' ? umGetActive() : [];
+    var options = '<option value="">همه کارشناسان</option>' + activeUsers.filter(function(u){ return u.id !== 'guest'; }).map(function(u) {
+      return '<option value="' + esc(u.id) + '"' + (window._wpTodayModalOwnerF === u.id ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+    }).join('');
+    filterHtml = '<div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; background: var(--bg-raised); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border)">'
+      + '<span style="font-size: 11px; font-weight: 700; color: var(--text-secondary)">👤 کارشناس مسئول:</span>'
+      + '<select onchange="window._wpTodayModalOwnerF=this.value; wpOpenTodayPlanModal(\'' + today + '\')" style="padding: 4px 8px; border: 1px solid var(--border-input); border-radius: 5px; font-size: 12px; background: var(--bg-input); color: var(--text-primary)">'
+      + options
+      + '</select>'
+      + '</div>';
+  }
+
+  var listHtml = '';
+  if (todayEntries.length === 0) {
+    listHtml = '<div style="text-align:center;padding:40px;color:var(--text-muted)">برنامه‌ای برای این روز ثبت نشده است.</div>';
+  } else {
+    var rows = todayEntries.map(function(en) {
+      var actBadge = en.actType === 'visit' 
+        ? '<span style="background:#fef3c7;color:#d97706;border:1px solid #fde68a;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">🤝 ملاقات</span>'
+        : '<span style="background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">📞 تماس</span>';
+      
+      var doneHtml = '';
+      if (en.done) {
+        var resText = en.doneResult === 'won' ? 'قرارداد بسته شد' : en.doneResult === 'inactive' ? 'غیرفعال' : 'نیاز به پیگیری';
+        var resBg = en.doneResult === 'won' ? '#dcfce7' : en.doneResult === 'inactive' ? '#fee2e2' : '#f0f9ff';
+        var resFg = en.doneResult === 'won' ? '#15803d' : en.doneResult === 'inactive' ? '#b91c1c' : '#0369a1';
+        doneHtml = '<span style="background:' + resBg + ';color:' + resFg + ';padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600">✓ انجام شد (' + resText + ')</span>';
+      } else {
+        doneHtml = '<button onclick="closeModal(\'todayPlanModal\'); wpMarkDoneKey(\'' + en.key + '\')" style="background:#22c55e;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:600">✓ ثبت نتیجه</button>';
+      }
+
+      var removeBtn = '<button onclick="wpRemoveTodayPlanItem(\'' + en.key + '\', \'' + today + '\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;font-family:inherit" title="حذف از امروز">❌ حذف</button>';
+
+      return '<tr style="border-bottom:1px solid var(--border)">'
+        + '<td style="padding:10px 8px"><a href="#" onclick="closeModal(\'todayPlanModal\'); openCenterModal(\'' + en.rtype + '\',\'' + en.rid + '\'); return false;" style="color:#0ea5e9;text-decoration:none;font-weight:600">' + esc(en.name) + '</a></td>'
+        + '<td style="padding:10px 8px;text-align:center">' + actBadge + '</td>'
+        + '<td style="padding:10px 8px;text-align:center;font-size:11px">' + esc(en.ownerName) + '</td>'
+        + '<td style="padding:10px 8px;text-align:center;font-size:11px">' + esc(en.status) + '</td>'
+        + '<td style="padding:10px 8px;font-size:11px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(en.lastNote) + '">' + esc(en.lastNote) + '</td>'
+        + '<td style="padding:10px 8px;text-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:8px">' + doneHtml + removeBtn + '</td>'
+        + '</tr>';
+    }).join('');
+
+    listHtml = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">'
+      + '<thead><tr style="background:var(--bg-raised);border-bottom:1.5px solid var(--border)">'
+      + '<th style="padding:8px;text-align:right">نام مرکز</th>'
+      + '<th style="padding:8px;text-align:center">نوع اقدام</th>'
+      + '<th style="padding:8px;text-align:center">مسئول</th>'
+      + '<th style="padding:8px;text-align:center">وضعیت</th>'
+      + '<th style="padding:8px;text-align:right">آخرین یادداشت</th>'
+      + '<th style="padding:8px;text-align:center">عملیات</th>'
+      + '</tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '</table></div>';
+  }
+
+  var body = '<div style="direction:rtl;text-align:right">'
+    + filterHtml
+    + listHtml
+    + '</div>';
+
+  var foot = '<button class="btn-secondary" onclick="closeModal(\'todayPlanModal\')">بستن</button>';
+  openModal('todayPlanModal', '📅 جزئیات برنامه روز: ' + today, body, foot, { lg: true });
+}
+
+function wpRemoveTodayPlanItem(eKey, dateStr) {
+  if (!confirm('آیا مطمئن هستید که این مرکز از برنامه امروز حذف شود؟')) return;
+  
+  if (DB.weekEntries[eKey]) {
+    DB.weekEntries[eKey].scheduledDate = null;
+    
+    var _we = DB.weekEntries[eKey];
+    if (_we.sqlId) {
+      fetch('/api/week-entries/' + encodeURIComponent(_we.sqlId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done: _we.done, doneDate: _we.doneDate || null, scheduledDate: null })
+      }).catch(function() {});
+    }
+    
+    saveDB();
+    showToast('❌ از برنامه امروز حذف شد');
+    wpOpenTodayPlanModal(dateStr);
+    renderWeekPlan();
+  }
+}
+
 
 
 /* ═══ public/js/activity.js ═══ */
@@ -10874,7 +11187,7 @@ function renderManagerPanel(){
         if(stCounts[st]!==undefined)stCounts[st]++;
       });
     });
-    var funnelSts=STATUS_LIST.slice(0,-1); // exclude غیرفعال from funnel
+    var funnelSts=STATUS_LIST.filter(function(s){return s!=='غیرفعال'&&s!=='عدم نیاز فاکتور کنسل شد';}); // exclude closed statuses from funnel
     var maxVal=Math.max.apply(null,funnelSts.map(function(s){return stCounts[s]||0;}));
     if(maxVal===0)return;
     var fColors=['#94a3b8','#0ea5e9','#f59e0b','#0284c7','#22c55e'];
@@ -12634,7 +12947,15 @@ function _sseReloadDB(byUser) {
       if (d._serverTs) _dbServerTs = d._serverTs;
       var merged = Object.assign({}, DB, d);
       merged.weekEntries = Object.assign({}, DB.weekEntries, d.weekEntries || {});
-      merged.edits = Object.assign({}, DB.edits, d.edits || {});
+      // Smart merge: local edits with newer _ts take priority over server version
+      var mergedEdits4 = Object.assign({}, d.edits || {});
+      var localEdits4 = DB.edits || {};
+      Object.keys(localEdits4).forEach(function(k) {
+        var le = localEdits4[k] || {}; var se = mergedEdits4[k] || {};
+        if ((le._ts || 0) >= (se._ts || 0)) mergedEdits4[k] = le;
+        else mergedEdits4[k] = Object.assign({}, le, se);
+      });
+      merged.edits = mergedEdits4;
       // Preserve local read=true — SSE must not un-read notifications the user already opened
       if (d.notifications && DB.notifications && DB.notifications.length) {
         var _localRead={};
@@ -17653,10 +17974,14 @@ function renderHCPPanel() {
     + '<option value="خرید">تجهیزات / خرید</option>'
     + '</select>'
     + '</div>'
+    + '<div style="display:flex;gap:6px">'
+    + '<button id="hcpViewGridBtn" onclick="window._hcpView=\'grid\';_renderHCPData()" class="btn-primary" style="padding:6px 12px;border-radius:8px">🗂 کارتی</button>'
+    + '<button id="hcpViewTreeBtn" onclick="window._hcpView=\'tree\';_renderHCPData()" class="btn-secondary" style="padding:6px 12px;border-radius:8px">🌳 درختی</button>'
+    + '</div>'
     + '</div>';
 
   // Directory List Container
-  html += '<div id="hcpListArea" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:12px"></div>';
+  html += '<div id="hcpListArea"></div>';
   html += '</div>';
 
   panel.innerHTML = html;
@@ -17683,50 +18008,153 @@ function _hcpSearch() {
     .then(function(r) { return r.ok ? r.json() : []; })
     .then(function(data) {
       window._hcpCache = data;
-      if (!data.length) {
-        listArea.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);background:var(--bg-card);border:1px dashed var(--border);border-radius:10px">'
-          + '<div style="font-size:24px;margin-bottom:8px">👥</div>'
-          + 'هیچ پزشک یا کارشناسی یافت نشد'
-          + '</div>';
-        return;
-      }
-
-      listArea.innerHTML = data.map(function(hcp) {
-        var phonesHtml = (hcp.phones || []).map(function(ph) {
-          return '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);border:1px solid var(--border);padding:2px 8px;border-radius:12px;font-size:11px;direction:ltr">'
-            + '📞 ' + esc(ph)
-            + ' <a href="tel:'+ph+'" style="text-decoration:none">📞</a>'
-            + ' <a href="https://wa.me/'+_waNum(ph)+'" target="_blank" style="text-decoration:none;font-size:12px">💬</a>'
-            + '</div>';
-        }).join(' ') || '<span style="color:var(--text-muted)">بدون شماره تلفن</span>';
-
-        var tagHtml = hcp.specialty 
-          ? '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(hcp.specialty)+'</span>'
-          : '';
-        var rankHtml = hcp.rank ? '<span style="font-size:11px;color:var(--text-secondary);font-weight:600">'+esc(hcp.rank)+'</span> ' : '';
-
-        return '<div class="card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;justify-content:space-between">'
-          + '<div>'
-          + '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'
-          + '<div>'
-          + '<div style="font-weight:700;font-size:14px;color:var(--text-primary)">' + rankHtml + esc(hcp.name) + '</div>'
-          + (hcp.medical_council_no ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">نظام پزشکی: ' + esc(hcp.medical_council_no) + '</div>' : '')
-          + '</div>'
-          + tagHtml
-          + '</div>'
-          + '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">' + phonesHtml + '</div>'
-          + (hcp.notes ? '<div style="font-size:11px;color:var(--text-secondary);background:var(--bg-raised);padding:6px 8px;border-radius:6px;margin-top:8px;line-height:1.4">' + esc(hcp.notes) + '</div>' : '')
-          + '</div>'
-          + '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
-          + '<button class="btn-secondary" onclick="_hcpShowAffiliations(\''+hcp.id+'\',\''+esc(hcp.name)+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">🏥 مراکز تحت پوشش</button>'
-          + '<div style="display:flex;gap:4px">'
-          + '<button class="btn-secondary" onclick="_hcpOpenEditModal(\''+hcp.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">✏️ ویرایش</button>'
-          + '<button onclick="_hcpDelete(\''+hcp.id+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">🗑 حذف</button>'
-          + '</div>'
-          + '</div>'
-          + '</div>';
-      }).join('');
+      _renderHCPData();
     });
+}
+
+function _renderHCPData() {
+  var data = window._hcpCache || [];
+  var listArea = document.getElementById('hcpListArea');
+  if (!listArea) return;
+  
+  window._hcpView = window._hcpView || 'grid';
+  
+  var gridBtn = document.getElementById('hcpViewGridBtn');
+  var treeBtn = document.getElementById('hcpViewTreeBtn');
+  if (gridBtn && treeBtn) {
+    gridBtn.className = window._hcpView === 'grid' ? 'btn-primary' : 'btn-secondary';
+    treeBtn.className = window._hcpView === 'tree' ? 'btn-primary' : 'btn-secondary';
+  }
+
+  if (!data.length) {
+    listArea.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);background:var(--bg-card);border:1px dashed var(--border);border-radius:10px">'
+      + '<div style="font-size:24px;margin-bottom:8px">👥</div>'
+      + 'هیچ پزشک یا کارشناسی یافت نشد'
+      + '</div>';
+    listArea.style.display = 'block';
+    return;
+  }
+
+  if (window._hcpView === 'grid') {
+    listArea.style.display = 'grid';
+    listArea.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
+    listArea.style.gap = '12px';
+    listArea.innerHTML = data.map(function(hcp) {
+      var phonesHtml = (hcp.phones || []).map(function(ph) {
+        return '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);border:1px solid var(--border);padding:2px 8px;border-radius:12px;font-size:11px;direction:ltr">'
+          + '📞 ' + esc(ph)
+          + ' <a href="tel:'+ph+'" style="text-decoration:none">📞</a>'
+          + ' <a href="https://wa.me/'+_waNum(ph)+'" target="_blank" style="text-decoration:none;font-size:12px">💬</a>'
+          + '</div>';
+      }).join(' ') || '<span style="color:var(--text-muted)">بدون شماره تلفن</span>';
+
+      var tagHtml = hcp.specialty 
+        ? '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;padding:2px 8px;border-radius:10px;font-weight:600">'+esc(hcp.specialty)+'</span>'
+        : '';
+      var rankHtml = hcp.rank ? '<span style="font-size:11px;color:var(--text-secondary);font-weight:600">'+esc(hcp.rank)+'</span> ' : '';
+
+      return '<div class="card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;justify-content:space-between">'
+        + '<div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'
+        + '<div>'
+        + '<div style="font-weight:700;font-size:14px;color:var(--text-primary)">' + rankHtml + esc(hcp.name) + '</div>'
+        + (hcp.medical_council_no ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px">نظام پزشکی: ' + esc(hcp.medical_council_no) + '</div>' : '')
+        + '</div>'
+        + tagHtml
+        + '</div>'
+        + '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">' + phonesHtml + '</div>'
+        + (hcp.notes ? '<div style="font-size:11px;color:var(--text-secondary);background:var(--bg-raised);padding:6px 8px;border-radius:6px;margin-top:8px;line-height:1.4">' + esc(hcp.notes) + '</div>' : '')
+        + '</div>'
+        + '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+        + '<button class="btn-secondary" onclick="_hcpShowAffiliations(\''+hcp.id+'\',\''+esc(hcp.name)+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">🏥 مراکز تحت پوشش</button>'
+        + '<div style="display:flex;gap:4px">'
+        + '<button onclick="_hcpToggleActive(\''+hcp.id+'\', '+(hcp.is_active === false ? 'true' : 'false')+')" style="background:'+(hcp.is_active === false ? '#dcfce7' : '#fef9c3')+';color:'+(hcp.is_active === false ? '#166534' : '#854d0e')+';border:1px solid '+(hcp.is_active === false ? '#bbf7d0' : '#fef08a')+';border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">'+(hcp.is_active === false ? '✅ فعال' : '🚫 غیرفعال')+'</button>'
+        + '<button class="btn-secondary" onclick="_hcpOpenEditModal(\''+hcp.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px">✏️ ویرایش</button>'
+        + '<button onclick="_hcpDelete(\''+hcp.id+'\')" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-size:10px;padding:4px 8px;font-family:inherit">🗑 حذف</button>'
+        + '</div>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  } else {
+    // Tree View
+    _renderHCPTreeView(data, listArea);
+  }
+}
+
+function _renderHCPTreeView(data, listArea) {
+  listArea.style.display = 'block';
+  var tree = {};
+  
+  // Group by Province -> Center
+  data.forEach(function(hcp) {
+    var affs = hcp.affiliations || [];
+    if (!affs.length) affs = [{ center_key: 'no_center' }];
+    
+    affs.forEach(function(aff) {
+      var centerName = 'بدون مرکز';
+      var provName = 'نامشخص';
+      var cKey = aff.center_key;
+      
+      if (cKey !== 'no_center') {
+        var rtype = cKey.split('_')[0] || cKey.split('||')[0];
+        var id = cKey.replace(rtype+'_','').replace(rtype+'||','');
+        var centerObj = (typeof getProvCenters === 'function') ? null : null; // we need to find the center
+        // Let's look up in DB.edits or window.DATA if available
+        var centerData = window.DB && window.DB.edits && window.DB.edits[cKey];
+        var baseName = (window.DATA || []).find(c => String(c.id) === id && c.rtype === rtype);
+        if (baseName) {
+           centerName = baseName.name;
+           if (window.PROVINCES) {
+             var p = window.PROVINCES.find(x => x.id == baseName.province_id);
+             if (p) provName = p.name;
+           }
+        } else if (centerData && centerData.name) {
+           centerName = centerData.name;
+        }
+      }
+      
+      if (!tree[provName]) tree[provName] = {};
+      if (!tree[provName][centerName]) tree[provName][centerName] = [];
+      tree[provName][centerName].push(hcp);
+    });
+  });
+
+  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  var provKeys = Object.keys(tree).sort();
+  
+  provKeys.forEach(function(prov) {
+    html += '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+    html += '<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'" style="padding:12px 16px;background:var(--bg-raised);cursor:pointer;font-weight:700;display:flex;justify-content:space-between;align-items:center">';
+    html += '<span>📍 استان ' + esc(prov) + '</span><span style="font-size:12px;color:var(--text-muted)">▼</span></div>';
+    html += '<div style="display:block;padding:12px">';
+    
+    var centerKeys = Object.keys(tree[prov]).sort();
+    centerKeys.forEach(function(center) {
+      html += '<div style="margin-bottom:12px;border:1px solid var(--border-input);border-radius:8px;overflow:hidden">';
+      html += '<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'" style="padding:10px 12px;background:rgba(0,0,0,0.02);cursor:pointer;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-input)">';
+      html += '<span>🏥 ' + esc(center) + ' <span style="font-size:11px;font-weight:normal;color:var(--text-secondary)">(' + tree[prov][center].length + ' مخاطب)</span></span><span style="font-size:10px;color:var(--text-muted)">▼</span></div>';
+      html += '<div style="display:none;padding:8px">';
+      
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+      tree[prov][center].forEach(function(hcp) {
+        var inactiveStyle = hcp.is_active === false ? 'opacity:0.6;text-decoration:line-through' : '';
+        html += '<tr style="border-bottom:1px solid var(--border-input)">';
+        html += '<td style="padding:8px;'+inactiveStyle+'">👤 ' + esc(hcp.name) + '</td>';
+        html += '<td style="padding:8px;color:var(--text-secondary)">' + esc(hcp.specialty || '-') + '</td>';
+        html += '<td style="padding:8px;direction:ltr;text-align:right">' + (hcp.phones||[]).join(', ') + '</td>';
+        html += '<td style="padding:8px;text-align:left"><button onclick="_hcpOpenEditModal(\''+hcp.id+'\')" class="btn-secondary" style="font-size:10px;padding:2px 6px">ویرایش</button></td>';
+        html += '</tr>';
+      });
+      html += '</table>';
+      
+      html += '</div></div>';
+    });
+    
+    html += '</div></div>';
+  });
+  
+  html += '</div>';
+  listArea.innerHTML = html;
 }
 
 // ── SHOW HCP INFLUENCE SPHERE (AFFILIATIONS) ────────────────────────────────
@@ -17922,15 +18350,32 @@ function _hcpSubmitForm(id) {
 }
 
 function _hcpDelete(id) {
-  if (!confirm('آیا از حذف این پزشک/کارشناس و تمامی ارتباطات مرکز درمانی او مطمئن هستید؟')) return;
+  if (!confirm('آیا از حذف این پزشک/کارشناس مطمئن هستید؟ (این عمل قابل بازگشت نیست)')) return;
   fetch('/api/hcps/' + id, { method: 'DELETE' })
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(d) {
-      if (d && d.ok) {
+      if (d && (d.ok || d.success)) {
         showToast('🗑 پزشک حذف شد');
         _hcpSearch();
       } else {
         showToast('❌ خطا در حذف پزشک');
+      }
+    });
+}
+
+function _hcpToggleActive(id, activate) {
+  fetch('/api/hcps/' + id + '/active', { 
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: activate })
+  })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      if (d && (d.ok || d.success)) {
+        showToast(activate ? '✅ پزشک فعال شد' : '🚫 پزشک غیرفعال شد');
+        _hcpSearch();
+      } else {
+        showToast('❌ خطا در تغییر وضعیت');
       }
     });
 }
@@ -18029,6 +18474,20 @@ function _hcpOpenLinkModal(rtype, rid, domId) {
   openModal('hcpLinkModal', title, body, '<button class="btn-secondary" onclick="closeModal(\'hcpLinkModal\');window._hcpPendingLinkCenterKey=null;">انصراف</button>');
 }
 
+function getProvNameFromKey(recKey) {
+  if (!recKey) return '';
+  var pts = recKey.split('_');
+  var tp = pts[0];
+  var id = pts.slice(1).join('_');
+  if (tp === 'center') return 'تهران';
+  if (tp === 'pc') {
+    var provId = id.split('||')[0];
+    var p = (typeof PROVINCES !== 'undefined' ? PROVINCES : []).find(function(x){return x.id === provId;});
+    return p ? p.name : '';
+  }
+  return '';
+}
+
 function _hcpLinkAutocomplete(val) {
   var container = document.getElementById('hcpAutocompleteResults');
   if (!container) return;
@@ -18048,9 +18507,41 @@ function _hcpLinkAutocomplete(val) {
       }
 
       container.innerHTML = data.map(function(hcp) {
-        var specLabel = hcp.specialty ? ' (' + esc(hcp.specialty) + ')' : '';
-        return '<div class="autocomplete-item" onclick="_hcpLinkAndClose(\''+hcp.id+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-primary)" onmouseover="this.style.background=\'var(--bg-raised)\'" onmouseout="this.style.background=\'none\'">'
-          + '👤 ' + esc(hcp.name) + specLabel
+        var rankLabel = hcp.rank ? esc(hcp.rank) + ' ' : '';
+        var specLabel = hcp.specialty ? '<span style="background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:4px;padding:1px 6px;font-size:10px;margin-right:4px">' + esc(hcp.specialty) + '</span>' : '';
+        var mcLabel = hcp.medical_council_no ? '<span style="font-size:10px;color:var(--text-muted)"> | نظام پزشکی: ' + esc(hcp.medical_council_no) + '</span>' : '';
+        
+        var affs = (hcp.affiliations || []).filter(function(a){ return a && a.center_key; });
+        var affsLabel = '';
+        if (affs.length > 0) {
+          // Use stored center_name/province_name from DB, fall back to client-side resolve
+          var parts = affs.map(function(a) {
+            var cname = a.center_name;
+            var pname = a.province_name;
+            // Fallback to client-side resolve if not stored yet
+            if (!cname && typeof getRecLabel === 'function') {
+              var resolved = getRecLabel(a.center_key);
+              if (resolved && resolved !== a.center_key) cname = resolved;
+            }
+            if (!pname && typeof getProvNameFromKey === 'function') {
+              pname = getProvNameFromKey(a.center_key);
+            }
+            if (cname && pname) return esc(cname) + ' <span style="opacity:.7">(' + esc(pname) + ')</span>';
+            if (cname) return esc(cname);
+            if (pname) return '<span style="opacity:.7">(' + esc(pname) + ')</span>';
+            return '';
+          }).filter(Boolean);
+          
+          if (parts.length > 0) {
+            affsLabel = '<div style="font-size:10px;color:var(--text-muted);margin-top:3px">🏥 ' + parts.join(' · ') + '</div>';
+          }
+        } else {
+          affsLabel = '<div style="font-size:10px;color:var(--text-muted);margin-top:3px">🏥 بدون اتصال قبلی</div>';
+        }
+        
+        return '<div class="autocomplete-item" onclick="_hcpLinkAndClose(\''+hcp.id+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text-primary)" onmouseover="this.style.background=\'var(--bg-raised)\'" onmouseout="this.style.background=\'none\'">'
+          + '<div style="font-weight:600;font-size:13px">👤 ' + rankLabel + esc(hcp.name) + '&nbsp;&nbsp;' + specLabel + mcLabel + '</div>'
+          + affsLabel
           + '</div>';
       }).join('');
       container.style.display = 'block';
@@ -18095,13 +18586,35 @@ function _hcpLinkAndClose(hcpId) {
 }
 
 function _hcpSaveAffiliation(centerKey, hcpId, rtype, rid, domId) {
+  // Resolve center name and province name from client-side data for storage
+  var cname = '';
+  var pname = '';
+  try {
+    if (typeof getRecLabel === 'function') cname = getRecLabel(centerKey) || '';
+    if (typeof getProvNameFromKey === 'function') pname = getProvNameFromKey(centerKey) || '';
+    // If getRecLabel returns raw key (not resolved), try direct lookup
+    if (cname === centerKey || !cname) {
+      var pts = centerKey.split('_'); var tp = pts[0]; var id2 = pts.slice(1).join('_');
+      if (tp === 'center' && typeof CENTERS !== 'undefined') {
+        var cc = CENTERS.find(function(x){ return x.id === id2; });
+        if (cc) cname = cc.name || '';
+      }
+      if (!cname && typeof DB !== 'undefined' && DB.extra) {
+        var ex = DB.extra.find(function(x){ return x.id === id2; });
+        if (ex) cname = ex.name || '';
+      }
+    }
+  } catch(e) {}
+
   var payload = {
     centerKey: centerKey,
     hcpId: hcpId,
     role: document.getElementById('affFormRole') ? document.getElementById('affFormRole').value.trim() : '',
     influenceLevel: document.getElementById('affFormInfluence') ? document.getElementById('affFormInfluence').value : 'Decision Maker',
     workingHours: document.getElementById('affFormHours') ? document.getElementById('affFormHours').value.trim() : '',
-    notes: document.getElementById('affFormNotes') ? document.getElementById('affFormNotes').value.trim() : ''
+    notes: document.getElementById('affFormNotes') ? document.getElementById('affFormNotes').value.trim() : '',
+    centerName: cname,
+    provinceName: pname
   };
 
   fetch('/api/hcps/affiliations', {

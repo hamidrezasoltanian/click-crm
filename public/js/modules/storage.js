@@ -108,7 +108,15 @@ function _sseReloadDB(byUser) {
     if (!d || typeof d !== 'object') return;
     var merged = Object.assign({}, DB, d);
     merged.weekEntries = Object.assign({}, DB.weekEntries, d.weekEntries || {});
-    merged.edits = Object.assign({}, DB.edits, d.edits || {});
+    // Smart merge: local edits with newer _ts take priority over server version
+    var mergedEdits = Object.assign({}, d.edits || {});
+    var localEdits3 = DB.edits || {};
+    Object.keys(localEdits3).forEach(function(k) {
+      var le = localEdits3[k] || {}; var se = mergedEdits[k] || {};
+      if ((le._ts || 0) >= (se._ts || 0)) mergedEdits[k] = le;
+      else mergedEdits[k] = Object.assign({}, le, se);
+    });
+    merged.edits = mergedEdits;
     Object.keys(merged).forEach(function(k) { DB[k] = merged[k]; });
     if (currentTab === 'weekplan') renderWeekPlan();
     else if (currentTab === 'provinces') { renderDashboard(); renderTable(); }

@@ -81,7 +81,69 @@ function renderProvList(){
   if(_provSort==='alpha'){filtProvs=filtProvs.slice().sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});}
   else if(_provSort==='potential'){filtProvs=filtProvs.slice().sort(function(a,b){return (a.potential||9)-(b.potential||9);});}
   else if(_provSort==='owner'){filtProvs=filtProvs.slice().sort(function(a,b){var oa=USERS[(getE('pc',a.id).owner||a.owner||'')]||'ω';var ob=USERS[(getE('pc',b.id).owner||b.owner||'')]||'ω';return oa<ob?-1:oa>ob?1:0;});}
-  var rows=filtProvs.map(function(p){
+  else if(_provSort==='custom'){
+    var cOrder = localStorage.getItem('prov_custom_sort');
+    if(cOrder) {
+      try {
+        var arr = JSON.parse(cOrder);
+        filtProvs=filtProvs.slice().sort(function(a,b){
+          var ia=arr.indexOf(a.id); var ib=arr.indexOf(b.id);
+          if(ia===-1)ia=999; if(ib===-1)ib=999;
+          return ia-ib;
+        });
+      } catch(e){}
+    }
+  }
+
+  // هید/نمایش table
+  var tbl=document.getElementById('mainTable');if(tbl)tbl.style.display='none';
+  var kb=document.getElementById('kanbanView');if(kb)kb.style.display='none';
+  var cv=document.getElementById('cardView');if(cv)cv.style.display='none';
+  var pg=document.getElementById('provGrid');if(!pg)return;
+  pg.style.display='';
+
+  var treeBtn = document.getElementById('provTreeBtn');
+  if(treeBtn) {
+    treeBtn.style.display = '';
+    treeBtn.className = window._provViewTree ? 'btn-primary' : 'btn-secondary';
+  }
+
+  if(window._provViewTree) {
+    // نمای درختی
+    pg.style.display = 'block';
+    pg.innerHTML = '';
+    
+    var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+    filtProvs.forEach(function(p){
+      var centers = getProvCenters(p.id);
+      html += '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+      html += '<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'" style="padding:12px 16px;background:var(--bg-raised);cursor:pointer;font-weight:700;display:flex;justify-content:space-between;align-items:center">';
+      html += '<span>📍 استان ' + esc(p.name) + ' ('+centers.length+' مرکز)</span><span style="font-size:12px;color:var(--text-muted)">▼</span></div>';
+      html += '<div style="display:none;padding:12px">';
+      
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:8px">';
+      centers.forEach(function(c){
+        var e = getE(getProvType(p.id), c.id);
+        var st = e.status||'بدون تماس';
+        html += '<div onclick="openCenterModal(\''+getProvType(p.id)+'\',\''+c.id+'\')" style="padding:8px 10px;background:var(--bg-raised);border:1px solid var(--border-input);border-radius:8px;cursor:pointer;font-size:11px">';
+        html += '<div style="font-weight:600;margin-bottom:4px">🏥 '+esc(c.name)+'</div>';
+        html += '<div style="color:var(--text-secondary)">'+esc(st)+'</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      
+      html += '</div></div>';
+    });
+    html += '</div>';
+    pg.innerHTML = html;
+
+    var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent=filtProvs.length+' استان';
+    return;
+  }
+
+  // نمای Grid
+  pg.style.display='grid';
+  var rows=filtProvs.map(function(p, i){
     var e=getE('pc',p.id);
     var owner=e.owner||p.owner||'';
     var _owMem=_DEFAULT_MEMBERS&&_DEFAULT_MEMBERS.find(function(m){return m.id===owner;});
@@ -89,14 +151,12 @@ function renderProvList(){
     var ownerName=owner?((USERS[owner]||owner)+(_owInactive?' ⚠️ (غیرفعال)':'')):'بدون مسئول';
     var ownerColor=owner&&typeof umGetColor==='function'?umGetColor(owner):'#e2e8f0';
     var isMyProv=(owner===currentUser);
-    var dimmed=false; // پنهان نمی‌کنیم، فقط highlight می‌کنیم
+    var dimmed=false;
     var tp=getProvType(p.id);
-    // count از DB.edits بدون iterate همه مراکز
     var contracted=0,meetings=0,overdueCount=0;
     var today2=todayStr();
     Object.keys(DB.edits||{}).forEach(function(k){
       var e=DB.edits[k];
-      // بررسی کن آیا مال این استان است
       var pts=k.split('_');var ktp=pts[0];var kid=pts.slice(1).join('_');
       var belongsHere=false;
       if(p.id==='tehran'&&ktp==='center')belongsHere=true;
@@ -107,19 +167,28 @@ function renderProvList(){
       else if(st==='ملاقات انجام شد')meetings++;
       if(e.followupDate&&e.followupDate<today2&&st!=='قرارداد بسته شد'&&st!=='غیرفعال')overdueCount++;
     });
-    var centers=getProvCenters(p.id); // برای تعداد کل مراکز
+    var centers=getProvCenters(p.id);
     var _heatRatio=centers.length>0?overdueCount/centers.length:0;
     var _heatCls=contracted>0&&_heatRatio<0.1?' heat-green':_heatRatio>=0.3?' heat-red':_heatRatio>=0.1?' heat-yellow':'';
     var cls='prov-card'+(p.id==='tehran'?' tehran':'')+(isMyProv&&_globalOwnerFilter?' prov-mine':'')+(dimmed?' prov-dimmed':'')+_heatCls;
     var style=dimmed?'opacity:.4;pointer-events:none':'';
-    var ownerColor=owner?(isMyProv||!_globalOwnerFilter?'#0369a1':'#94a3b8'):'#cbd5e1';
     var cntLabel=String(centers.length);
     var div=document.createElement('div');
     div.className=cls;if(style)div.style.cssText=style;
     div.setAttribute('data-pid',p.id);
     div.onclick=function(){openProvince(this.getAttribute('data-pid'));};
+    
+    var upDownHtml = '';
+    if(_provSort === 'custom') {
+      upDownHtml = '<div style="position:absolute;top:5px;left:5px;display:flex;flex-direction:column;gap:2px" onclick="event.stopPropagation()">'
+        + '<button onclick="moveProvCustomSort(\''+p.id+'\', -1)" style="border:none;background:rgba(0,0,0,0.1);cursor:pointer;font-size:10px;border-radius:3px">▲</button>'
+        + '<button onclick="moveProvCustomSort(\''+p.id+'\', 1)" style="border:none;background:rgba(0,0,0,0.1);cursor:pointer;font-size:10px;border-radius:3px">▼</button>'
+        + '</div>';
+    }
+
     div.innerHTML=
-      '<div class="prov-card-name">'+esc(p.name)+(overdueCount?'<span class="risk-badge" title="'+overdueCount+' پیگیری معوق">🟠</span>':'')+'</div>'
+      upDownHtml
+      +'<div class="prov-card-name">'+esc(p.name)+(overdueCount?'<span class="risk-badge" title="'+overdueCount+' پیگیری معوق">🟠</span>':'')+'</div>'
       +'<div style="font-size:11px;font-weight:600;margin:3px 0 6px;display:flex;align-items:center;gap:4px;color:'+ownerColor+'">'
       +'<span>👤</span><span>'+esc(ownerName)+'</span></div>'
       +'<div class="prov-card-stats">'
@@ -148,19 +217,43 @@ function renderProvList(){
       }).join('');
       return '<div style="margin-top:7px;border-top:1px solid var(--border);padding-top:5px">'+bars+'</div>';
     })():'');
+    div.style.position = 'relative';
     return div;
   });
-  // هید/نمایش table
-  var tbl=document.getElementById('mainTable');if(tbl)tbl.style.display='none';
-  var kb=document.getElementById('kanbanView');if(kb)kb.style.display='none';
-  var cv=document.getElementById('cardView');if(cv)cv.style.display='none';
-  var pg=document.getElementById('provGrid');if(!pg)return;
-  pg.style.display='';
-  // DOM-based render (no string)
+
   pg.innerHTML='';
   rows.forEach(function(d){pg.appendChild(d);});
-  var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent=filtProvs.length+' استان'+(filtProvs.length<provs.length?' (فیلتر شده)':'')+(
+  var _rc=document.getElementById('rowCount');if(_rc)_rc.textContent=filtProvs.length+' استان'+(filtProvs.length<getAllowedProvinces(getAllProvinces()).length?' (فیلتر شده)':'')+(
     _globalOwnerFilter?' (فیلتر: '+esc(USERS[_globalOwnerFilter]||_globalOwnerFilter)+')':'');
+}
+
+function toggleProvTreeView() {
+  window._provViewTree = !window._provViewTree;
+  renderProvList();
+}
+
+function moveProvCustomSort(id, direction) {
+  var cOrder = localStorage.getItem('prov_custom_sort');
+  var arr = [];
+  if(cOrder) {
+    try { arr = JSON.parse(cOrder); } catch(e){}
+  }
+  if (!arr.length) {
+    arr = getAllProvinces().map(function(p){return p.id;});
+  }
+  var idx = arr.indexOf(id);
+  if(idx === -1) return;
+  var newIdx = idx + direction;
+  if(newIdx < 0 || newIdx >= arr.length) return;
+  
+  // swap
+  var tmp = arr[idx];
+  arr[idx] = arr[newIdx];
+  arr[newIdx] = tmp;
+  
+  localStorage.setItem('prov_custom_sort', JSON.stringify(arr));
+  renderProvList();
+
 }
 // ════════════════════════ PROVINCE TABLE ═════════════
 function renderProvTable(){
@@ -406,6 +499,30 @@ function addCenter(){
   setTimeout(function(){var n=document.getElementById('ac_name');if(n)n.focus();},100);
 }
 
+function getAllCentersAcrossAllProvinces() {
+  _buildPCCache();
+  var list = [];
+  if (_PC_CACHE) {
+    for (var provId in _PC_CACHE) {
+      list = list.concat(_PC_CACHE[provId]||[]);
+    }
+  }
+  list = list.concat(DB.extra || []);
+  var seen = {};
+  return list.filter(function(c) {
+    if (!c || !c.id) return false;
+    if (seen[c.id]) return false;
+    seen[c.id] = true;
+    return true;
+  });
+}
+
+function getProvNameFromId(provId) {
+  if (provId === 'tehran') return 'تهران';
+  var p = (typeof PROVINCES !== 'undefined' ? PROVINCES : []).find(function(x){return x.id === provId;});
+  return p ? p.name : provId;
+}
+
 function _doAddCenter(){
   try{
     if(!_currentProvId){showToast('⚠ استان مشخص نیست');return;}
@@ -415,11 +532,21 @@ function _doAddCenter(){
     if(!name){showToast('نام مرکز را وارد کنید');return;}
     name=name.replace(/[ي]/g,'ی').replace(/[ك]/g,'ک');
 
-    var centers=getProvCenters(_currentProvId);
-    var dup=centers.find(function(c){return fNorm(c.name)===fNorm(name);});
-    var similar=!dup&&centers.find(function(c){return _centerNameSimilar(c.name,name);});
-    if(dup){showToast('⚠ مرکز «'+dup.name+'» قبلاً ثبت شده',3000);return;}
-    if(similar){if(!confirm('⚠ مرکز مشابه «'+similar.name+'» در این استان وجود دارد.\nآیا می‌خواهید «'+name+'» را اضافه کنید؟'))return;}
+    var allCents = getAllCentersAcrossAllProvinces();
+    var dup = allCents.find(function(c){return fNorm(c.name)===fNorm(name);});
+    var similar = !dup && allCents.find(function(c){return _centerNameSimilar(c.name,name);});
+
+    if(dup){
+      var dpId = dup.province_id || (dup.id && dup.id.indexOf('||') >= 0 ? dup.id.split('||')[0] : 'tehran');
+      var pName = getProvNameFromId(dpId);
+      showToast('⚠ مرکز «'+dup.name+'» قبلاً در استان «'+(pName||dpId)+'» ثبت شده است',4000);
+      return;
+    }
+    if(similar){
+      var dpId = similar.province_id || (similar.id && similar.id.indexOf('||') >= 0 ? similar.id.split('||')[0] : 'tehran');
+      var pName = getProvNameFromId(dpId);
+      if(!confirm('⚠ مرکز مشابه «'+similar.name+'» در استان «'+(pName||dpId)+'» وجود دارد.\nآیا مطمئن هستید که می‌خواهید «'+name+'» را اضافه کنید؟')) return;
+    }
 
     var type=(document.getElementById('ac_type').value||'').trim()||'سایر';
     var pot=parseInt((document.getElementById('ac_pot')||{}).value)||2;
@@ -433,10 +560,22 @@ function _doAddCenter(){
     DB.extra.push({id:id,row:maxRow+1,name:name,potential:pot,type:type,lead:lead,province_id:_currentProvId,owner:owner});
     saveDB();
     closeModal('addCenterModal');
+    // Clear filters to ensure the new center is visible
+    var _fp=document.getElementById('fPot');if(_fp)_fp.value='';
+    var _fo=document.getElementById('fOwner');if(_fo)_fo.value='';
+    var _fs=document.getElementById('fStatus');if(_fs)_fs.value='';
+    var _fl=document.getElementById('fLead');if(_fl)_fl.value='';
+    var _ft=document.getElementById('fType');if(_ft)_ft.value='';
+    var _srch=document.getElementById('srch');if(_srch)_srch.value='';
+    var _fv=document.getElementById('fTag');if(_fv)_fv.value='';
+    _globalOwnerFilter='';
+    if(typeof _quickFilter!=='undefined') _quickFilter='';
+    document.querySelectorAll('.filter-chip').forEach(function(el){el.classList.remove('active');});
+
     // نمایش table-wrap اگه hidden بوده
     var tw=document.querySelector('.table-wrap');if(tw)tw.style.display='';
     renderProvTable();
-    showToast('✅ مرکز "'+name+'" اضافه شد');
+    showToast('✅ مرکز "'+name+'" اضافه شد. در صورت فعال بودن فیلترها، فیلترها پاک شدند تا مرکز جدید نمایش داده شود.', 4000);
   }catch(err){
     showToast('❌ خطا: '+err.message,4000);
     console.error('_doAddCenter error:',err);

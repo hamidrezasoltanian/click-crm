@@ -860,7 +860,7 @@ function _onLeadChange(id,newLead,rtype,rid){
   if(rtype&&rid)setE(rtype,rid,'lead',newLead);
 }
 function _onStatusChange(rtype,rid,newStatus){
-  var needReason=['غیرفعال','قرارداد بسته شد'];
+  var needReason=['غیرفعال','عدم نیاز فاکتور کنسل شد'];
   setE(rtype,rid,'status',newStatus);
   if(needReason.indexOf(newStatus)>=0){
     var existing=getE(rtype,rid).closeReason||'';

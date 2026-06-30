@@ -197,7 +197,15 @@ function _sseReloadDB(byUser) {
       if (d._serverTs) _dbServerTs = d._serverTs;
       var merged = Object.assign({}, DB, d);
       merged.weekEntries = Object.assign({}, DB.weekEntries, d.weekEntries || {});
-      merged.edits = Object.assign({}, DB.edits, d.edits || {});
+      // Smart merge: local edits with newer _ts take priority over server version
+      var mergedEdits4 = Object.assign({}, d.edits || {});
+      var localEdits4 = DB.edits || {};
+      Object.keys(localEdits4).forEach(function(k) {
+        var le = localEdits4[k] || {}; var se = mergedEdits4[k] || {};
+        if ((le._ts || 0) >= (se._ts || 0)) mergedEdits4[k] = le;
+        else mergedEdits4[k] = Object.assign({}, le, se);
+      });
+      merged.edits = mergedEdits4;
       // Preserve local read=true — SSE must not un-read notifications the user already opened
       if (d.notifications && DB.notifications && DB.notifications.length) {
         var _localRead={};

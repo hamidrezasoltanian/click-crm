@@ -121,6 +121,8 @@ async function initSchema() {
       phones TEXT[],
       email VARCHAR(250),
       notes TEXT,
+      is_active BOOLEAN DEFAULT TRUE,
+      deleted_at TIMESTAMPTZ,
       created_by VARCHAR(100),
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -128,6 +130,10 @@ async function initSchema() {
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_hcp_name ON healthcare_professionals(name)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_hcp_specialty ON healthcare_professionals(specialty)`);
+  // Migration: add columns that may be missing in existing installations
+  await query(`ALTER TABLE healthcare_professionals ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`).catch(()=>{});
+  await query(`ALTER TABLE healthcare_professionals ADD COLUMN IF NOT EXISTS medical_council_no VARCHAR(100)`).catch(()=>{});
+  await query(`ALTER TABLE healthcare_professionals ADD COLUMN IF NOT EXISTS rank VARCHAR(100)`).catch(()=>{});
 
   // HCP Affiliations (HCO-HCP Relationship)
   await query(`
@@ -139,6 +145,8 @@ async function initSchema() {
       influence_level VARCHAR(100),
       working_hours VARCHAR(300),
       notes TEXT,
+      center_name VARCHAR(300),
+      province_name VARCHAR(150),
       updated_by VARCHAR(100),
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       CONSTRAINT uq_center_hcp UNIQUE (center_key, hcp_id)
@@ -146,6 +154,9 @@ async function initSchema() {
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_aff_center ON hcp_affiliations(center_key)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_aff_hcp ON hcp_affiliations(hcp_id)`);
+  // Add center_name / province_name columns if missing (migration for existing installs)
+  await query(`ALTER TABLE hcp_affiliations ADD COLUMN IF NOT EXISTS center_name VARCHAR(300)`).catch(()=>{});
+  await query(`ALTER TABLE hcp_affiliations ADD COLUMN IF NOT EXISTS province_name VARCHAR(150)`).catch(()=>{});
 
   // Products catalog
   await query(`

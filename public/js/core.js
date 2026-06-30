@@ -6,12 +6,12 @@ var PC_RAW = {}; // loaded from IndexedDB
 
 /* ══ BLOCK 2: Main Application Code ══ */
 // ════════════════════════ CONSTANTS ═══════════════════════
-var STATUS_LIST=['بدون تماس','تماس اولیه','ملاقات انجام شد','پیشنهاد ارسال شد','قرارداد بسته شد','غیرفعال'];
-var STATUS_CLS=['st-0','st-1','st-2','st-3','st-4','st-5'];
-var H_CLS=['h-st-0','h-st-1','h-st-2','h-st-3','h-st-4','h-st-5'];
+var STATUS_LIST=['بدون تماس','تماس اولیه','ملاقات انجام شد','پیشنهاد ارسال شد','قرارداد بسته شد','عدم نیاز فاکتور کنسل شد','غیرفعال'];
+var STATUS_CLS=['st-0','st-1','st-2','st-3','st-4','st-5','st-5'];
+var H_CLS=['h-st-0','h-st-1','h-st-2','h-st-3','h-st-4','h-st-5','h-st-5'];
 var LEAD_LIST=['مشتری','لید','فرصت','سرنخ','ندارد','بدون مصرف'];
 var TYPE_LIST=['بیمارستان','کلینیک','درمانگاه','مطب','آزمایشگاه','داروخانه','دیگر'];
-var _PIPELINE_META={'بدون تماس':{ic:'⬜',c:'#94a3b8'},'تماس اولیه':{ic:'📞',c:'#0ea5e9'},'ملاقات انجام شد':{ic:'📋',c:'#8b5cf6'},'پیشنهاد ارسال شد':{ic:'📄',c:'#06b6d4'},'قرارداد بسته شد':{ic:'✅',c:'#22c55e'},'غیرفعال':{ic:'🚫',c:'#ef4444'}};
+var _PIPELINE_META={'بدون تماس':{ic:'⬜',c:'#94a3b8'},'تماس اولیه':{ic:'📞',c:'#0ea5e9'},'ملاقات انجام شد':{ic:'📋',c:'#8b5cf6'},'پیشنهاد ارسال شد':{ic:'📄',c:'#06b6d4'},'قرارداد بسته شد':{ic:'✅',c:'#22c55e'},'عدم نیاز فاکتور کنسل شد':{ic:'❌',c:'#f43f5e'},'غیرفعال':{ic:'🚫',c:'#ef4444'}};
 var LEAD_CLS={'مشتری':'lead-cust','لید':'lead-lid','فرصت':'lead-opp','سرنخ':'lead-srnkh','ندارد':'lead-none','بدون مصرف':'lead-nouse'};
 var J_MONTHS=['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 var J_DAYS=['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه'];
@@ -171,30 +171,47 @@ function _saveDBNow(){
   return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(payload)})
     .then(function(r){
       if(r.status===409){
-        // Merge latest server data and retry once — no page reload
-        return fetch('/api/data/db').then(function(r2){return r2.ok?r2.json():null;}).then(function(d){
-          if(!d||typeof d!=='object'){showToast('⚠ خطای همگام‌سازی — لطفاً صفحه را رفرش کنید',5000);return;}
-          if(d._serverTs)_dbServerTs=d._serverTs;
-          // Merge: local edits + weekEntries win over server (preserve unsaved work)
-          var merged=Object.assign({},DB,d);
-          merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
-          // Don't let server revive locally-deleted entries
-          (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
-          merged.edits=Object.assign({},d.edits||{},DB.edits||{});
-          // Preserve local read=true for notifications on 409 retry
-          if(DB.notifications&&d.notifications){
-            var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
-            merged.notifications=(d.notifications||[]).map(function(n){return _lr409[n.id]?Object.assign({},n,{read:true}):n;});
-          }
-          delete merged._serverTs;delete merged._clientTs;
-          Object.keys(merged).forEach(function(k){DB[k]=merged[k];});
-          // Retry save with updated timestamp
-          var p2=JSON.parse(JSON.stringify(DB));
-          if(_dbServerTs)p2._clientTs=_dbServerTs;
-          return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(p2)})
-            .then(function(r3){if(!r3.ok)return;return r3.json().then(function(res){if(res&&res._serverTs)_dbServerTs=res._serverTs;if(seq===_saveSeq)DB._weDeletedKeys=[];});})
-            .catch(function(){});
-        }).catch(function(){showToast('⚠ خطای شبکه — لطفاً صفحه را رفرش کنید',5000);});
+        // 409 means another user saved since our last known timestamp — merge and retry
+        return r.json().catch(function(){return {};}).then(function(errData){
+          var conflictBy = errData && errData.by ? (USERS && USERS[errData.by] ? USERS[errData.by] : errData.by) : null;
+          return fetch('/api/data/db').then(function(r2){return r2.ok?r2.json():null;}).then(function(d){
+            if(!d||typeof d!=='object'){showToast('⚠ خطای همگام‌سازی — لطفاً صفحه را رفرش کنید',5000);return;}
+            if(d._serverTs)_dbServerTs=d._serverTs;
+            // Merge: local edits + weekEntries win over server (preserve unsaved work)
+            var merged=Object.assign({},DB,d);
+            merged.weekEntries=Object.assign({},d.weekEntries||{},DB.weekEntries||{});
+            // Don't let server revive locally-deleted entries
+            (DB._weDeletedKeys||[]).forEach(function(dk){delete merged.weekEntries[dk];});
+            // Smart edits merge using timestamps
+            var mEd=Object.assign({},d.edits||{});
+            var lEd=DB.edits||{};
+            Object.keys(lEd).forEach(function(k){
+              var le=lEd[k]||{};var se=mEd[k]||{};
+              if((le._ts||0)>=(se._ts||0))mEd[k]=le;
+              else mEd[k]=Object.assign({},le,se);
+            });
+            merged.edits=mEd;
+            // Preserve local new centers (DB.extra)
+            var _extMap={};
+            (d.extra||[]).forEach(function(x){_extMap[x.id]=x;});
+            (DB.extra||[]).forEach(function(x){_extMap[x.id]=x;});
+            merged.extra=Object.keys(_extMap).map(function(k){return _extMap[k];});
+            // Preserve local read=true for notifications on 409 retry
+            if(DB.notifications&&d.notifications){
+              var _lr409={};DB.notifications.forEach(function(n){if(n.read)_lr409[n.id]=true;});
+              merged.notifications=(d.notifications||[]).map(function(n){return _lr409[n.id]?Object.assign({},n,{read:true}):n;});
+            }
+            delete merged._serverTs;delete merged._clientTs;
+            Object.keys(merged).forEach(function(k){DB[k]=merged[k];});
+            if(conflictBy)showToast('🔄 تغییرات '+conflictBy+' ادغام شد',3000);
+            // Retry save with updated timestamp
+            var p2=JSON.parse(JSON.stringify(DB));
+            if(_dbServerTs)p2._clientTs=_dbServerTs;
+            return fetch('/api/data/db',{method:'PUT',headers:{'Content-Type':'application/json','X-Cid':_sseClientId},body:JSON.stringify(p2)})
+              .then(function(r3){if(!r3.ok)return;return r3.json().then(function(res){if(res&&res._serverTs)_dbServerTs=res._serverTs;if(seq===_saveSeq)DB._weDeletedKeys=[];});})
+              .catch(function(){});
+          }).catch(function(){showToast('⚠ خطای شبکه — لطفاً صفحه را رفرش کنید',5000);});
+        });
       }
       return r.json().then(function(result){
         if(result&&result._serverTs&&seq===_saveSeq)_dbServerTs=result._serverTs;

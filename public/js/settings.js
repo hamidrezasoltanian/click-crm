@@ -799,12 +799,26 @@ function setE(type,id,field,val){var k=recK(type,id);if(!DB.edits[k])DB.edits[k]
   var _cFields=['contactName','contactTitle','phones','address','contacts'];
   if(_cFields.indexOf(field)>=0){
     var _ce=DB.edits[k];
+    var _names=[],_titles=[],_phns=[];
+    if(_ce.contacts&&_ce.contacts.length){
+      _ce.contacts.forEach(function(c){
+        if(c.name)_names.push(c.name);
+        if(c.title)_titles.push(c.title);
+        if(c.phones)_phns=_phns.concat(c.phones);
+      });
+    }else{
+      if(_ce.contactName)_names.push(_ce.contactName);
+      if(_ce.contactTitle)_titles.push(_ce.contactTitle);
+      if(_ce.phones)_phns=_phns.concat(_ce.phones);
+    }
     fetch('/api/contacts/'+encodeURIComponent(k),{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         centerName:_getCenterName(type,id),
-        contacts:_ce.contacts||[],
+        contactName:_names.join(' - '),
+        contactTitle:_titles.join(' - '),
+        phones:_phns,
         address:_ce.address||''
       })
     }).catch(function(){});

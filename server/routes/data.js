@@ -158,20 +158,23 @@ router.put('/db', async (req, res) => {
     await client.query('BEGIN');
 
     const _clientTs = body._clientTs || null;
+    const user = req.user.username;
 
-    // Conflict detection via _db_meta row (replaces 'main' updated_at)
+    // Conflict detection: only block if a DIFFERENT user made changes since client's last known timestamp
+    // Same-user rapid sequential saves (dedup, auto-reminders, etc.) should never 409-loop
     const metaRow = await client.query(
-      "SELECT updated_at FROM app_data WHERE key = '_db_meta' FOR UPDATE"
+      "SELECT updated_at, updated_by FROM app_data WHERE key = '_db_meta' FOR UPDATE"
     );
     if (_clientTs && metaRow.rows.length && metaRow.rows[0].updated_at) {
       const serverTs = metaRow.rows[0].updated_at.toISOString();
-      if (serverTs !== _clientTs) {
+      const lastSaveBy = metaRow.rows[0].updated_by || null;
+      // Only 409 if: timestamp mismatch AND the last save was by a DIFFERENT user
+      if (serverTs !== _clientTs && lastSaveBy && lastSaveBy !== user) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'تغییرات توسط کاربر دیگری ذخیره شده' });
+        return res.status(409).json({ error: 'تغییرات توسط کاربر دیگری ذخیره شده', by: lastSaveBy });
       }
     }
 
-    const user = req.user.username;
     const { edits, notes, rTags, tags, settings, events, checklist, kpiTargets,
             extra, salesLog, callLog, visitLog, missionLog, provHistory, kpiHistory,
             weekEntries, _weDeletedKeys, _mtr } = body;
@@ -182,7 +185,7 @@ router.put('/db', async (req, res) => {
         `INSERT INTO center_edits (center_key, data, updated_at, updated_by)
          SELECT key, value, NOW(), $2 FROM jsonb_each($1::jsonb)
          ON CONFLICT (center_key) DO UPDATE
-           SET data = EXCLUDED.data, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+           SET data = center_edits.data || EXCLUDED.data, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
         [JSON.stringify(edits), user]
       );
     }

@@ -15,25 +15,40 @@ router.get('/', async (req, res) => {
     const q = (req.query.q || '').trim();
     const specialty = (req.query.specialty || '').trim();
     
-    let sql = 'SELECT * FROM healthcare_professionals';
+    let sql = `
+      SELECT h.*, 
+             COALESCE(
+               json_agg(
+                 json_build_object(
+                   'center_key', a.center_key,
+                   'role', a.role,
+                   'influence_level', a.influence_level,
+                   'center_name', a.center_name,
+                   'province_name', a.province_name
+                 )
+               ) FILTER (WHERE a.center_key IS NOT NULL), '[]'
+             ) as affiliations
+      FROM healthcare_professionals h
+      LEFT JOIN hcp_affiliations a ON h.id = a.hcp_id
+    `;
     const params = [];
-    const conditions = [];
+    const conditions = ['h.deleted_at IS NULL'];
 
     if (q) {
       params.push('%' + q + '%');
-      conditions.push(`(name ILIKE $${params.length} OR EXISTS (SELECT 1 FROM unnest(phones) p WHERE p ILIKE $${params.length}))`);
+      conditions.push(`(h.name ILIKE $${params.length} OR EXISTS (SELECT 1 FROM unnest(h.phones) p WHERE p ILIKE $${params.length}))`);
     }
 
     if (specialty) {
       params.push('%' + specialty + '%');
-      conditions.push(`specialty ILIKE $${params.length}`);
+      conditions.push(`h.specialty ILIKE $${params.length}`);
     }
 
     if (conditions.length) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    sql += ' ORDER BY name ASC LIMIT 200';
+    sql += ' GROUP BY h.id ORDER BY h.name ASC LIMIT 500';
 
     const result = await query(sql, params);
     return res.json(result.rows);
@@ -193,19 +208,21 @@ router.get('/centers/:centerKey/affiliations', async (req, res) => {
 // POST /api/affiliations - link HCP to center
 router.post('/affiliations', async (req, res) => {
   try {
-    const { centerKey, hcpId, role, influenceLevel, workingHours, notes } = req.body || {};
+    const { centerKey, hcpId, role, influenceLevel, workingHours, notes, centerName, provinceName } = req.body || {};
     if (!centerKey || !hcpId) {
       return res.status(400).json({ error: 'فیلدهای centerKey و hcpId الزامی هستند' });
     }
 
     const result = await query(
-      `INSERT INTO hcp_affiliations (center_key, hcp_id, role, influence_level, working_hours, notes, updated_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO hcp_affiliations (center_key, hcp_id, role, influence_level, working_hours, notes, center_name, province_name, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (center_key, hcp_id) DO UPDATE SET
          role = EXCLUDED.role,
          influence_level = EXCLUDED.influence_level,
          working_hours = EXCLUDED.working_hours,
          notes = EXCLUDED.notes,
+         center_name = COALESCE(EXCLUDED.center_name, hcp_affiliations.center_name),
+         province_name = COALESCE(EXCLUDED.province_name, hcp_affiliations.province_name),
          updated_by = EXCLUDED.updated_by,
          updated_at = NOW()
        RETURNING *`,
@@ -216,6 +233,8 @@ router.post('/affiliations', async (req, res) => {
         influenceLevel ? influenceLevel.trim() : 'Decision Maker',
         workingHours ? workingHours.trim() : null,
         notes ? notes.trim() : null,
+        centerName ? centerName.trim() : null,
+        provinceName ? provinceName.trim() : null,
         req.user.username,
       ]
     );
@@ -273,6 +292,43 @@ router.delete('/affiliations/:id', async (req, res) => {
   } catch (e) {
     console.error('[HCP DELETE /affiliations/:id]', e.message);
     return res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// DELETE /api/hcps/:id - Soft delete an HCP
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query(`UPDATE healthcare_professionals SET deleted_at = NOW(), is_active = FALSE WHERE id = $1`, [id]);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('[HCP DELETE /:id]', e.message);
+    return res.status(500).json({ error: 'خطای سرور در حذف مخاطب' });
+  }
+});
+
+// PUT /api/hcps/:id/active - Toggle active status
+router.put('/:id/active', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+    await query(`UPDATE healthcare_professionals SET is_active = $1 WHERE id = $2`, [is_active, id]);
+    return res.json({ success: true, is_active });
+  } catch (e) {
+    console.error('[HCP PUT /:id/active]', e.message);
+    return res.status(500).json({ error: 'خطای سرور در تغییر وضعیت مخاطب' });
+  }
+});
+
+// DELETE /api/hcps/centers/:centerKey/affiliations/:hcpId - Remove affiliation
+router.delete('/centers/:centerKey/affiliations/:hcpId', async (req, res) => {
+  try {
+    const { centerKey, hcpId } = req.params;
+    await query(`DELETE FROM hcp_affiliations WHERE center_key = $1 AND hcp_id = $2`, [centerKey, hcpId]);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('[HCP DELETE affiliation]', e.message);
+    return res.status(500).json({ error: 'خطای سرور در حذف ارتباط مخاطب' });
   }
 });
 

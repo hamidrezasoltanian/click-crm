@@ -7,7 +7,7 @@
 <!-- cache-bust: v2.1 -->
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){});}</script>
 <!-- Vazirmatn از jsDelivr — npm package، بدون Google dependency -->
-<link rel="stylesheet" href="/css/app.css?v=20260628f">
+<link rel="stylesheet" href="/css/app.css?v=20260630a">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('XLSX CDN failed - only TSV format supported offline')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 </head>
@@ -60,7 +60,7 @@
     <button class="tab-btn" id="tab_proforma" onclick="switchTab('proforma')" title="پیشفاکتور"><span class="sb-icon">📄</span><span class="sb-label">پیشفاکتور</span></button>
     <a href="/wms" class="tab-btn" title="انبار WMS" style="text-decoration:none"><span class="sb-icon">🏭</span><span class="sb-label">انبار</span></a>
     <button class="tab-btn" id="tab_support" onclick="switchTab('support')" title="پشتیبان فروش"><span class="sb-icon">🎧</span><span class="sb-label">پشتیبانی</span></button>
-    <button class="tab-btn" id="tab_hcp" onclick="switchTab('hcp')" title="پزشکان و کارشناسان"><span class="sb-icon">👨‍⚕️</span><span class="sb-label">پزشکان</span></button>
+    <button class="tab-btn" id="tab_hcp" onclick="switchTab('hcp')" title="مخاطبین و پزشکان"><span class="sb-icon">👨‍⚕️</span><span class="sb-label">مخاطبین و پزشکان</span></button>
     <button class="tab-btn sb-manager-wrap" id="tab_hr" onclick="switchTab('hr')" title="منابع انسانی" style="display:none"><span class="sb-icon">👥</span><span class="sb-label">HR</span></button>
     <button class="tab-btn sb-trade-wrap" id="tab_trade_kpi" onclick="switchTab('trade-kpi')" title="بازرگانی و KPI" style="display:none"><span class="sb-icon">🏭</span><span class="sb-label">بازرگانی</span></button>
     <div class="sb-divider sb-manager-wrap" style="display:none"></div>
@@ -131,7 +131,9 @@
     <option value="alpha">الفبا</option>
     <option value="potential">پتانسیل</option>
     <option value="owner">کارشناس</option>
+    <option value="custom">شخصی</option>
   </select>
+  <button id="provTreeBtn" style="display:none;padding:4px 9px;border:1px solid var(--border-input);border-radius:6px;background:var(--bg-input);color:var(--text-primary);font-size:12px;cursor:pointer" onclick="toggleProvTreeView()" title="نمای درختی استان‌ها">🌳 درختی</button>
   <select id="sortSel" style="display:none;padding:4px 7px;border:1px solid var(--border-input);border-radius:5px;font-size:11px;background:var(--bg-input);color:var(--text-primary);font-family:inherit" onchange="setCenterSortFromSel(this.value)">
     <option value="">⇅ مرتب‌سازی</option>
     <option value="name_asc">نام ↑ (الف→ی)</option>
@@ -229,6 +231,7 @@
       <button class="cal-nb" onclick="wpNav(1)" title="هفته بعد">›</button>
     </div>
     <button class="cal-nb cal-today-btn" onclick="wpGoThisWeek()" style="font-size:11px;padding:5px 10px">این هفته</button>
+    <button onclick="wpOpenTodayPlanModal()" style="background:rgba(99,102,241,.85);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit" title="برنامه امروز با جزئیات بیشتر">📋 برنامه امروز</button>
     <button onclick="wpExportExcel()" style="background:#16a34a;color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit" title="دانلود Excel برنامه هفته">⬇ Excel</button>
     <button id="wpDailyMonBtn" onclick="openDailyMonitor()" style="background:rgba(139,92,246,.85);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;display:none" title="گزارش فعالیت امروز">📊 گزارش امروز</button>
   </div>
@@ -298,27 +301,27 @@
 <div class="toast" id="toast"></div>
 
 <!-- DATA — split from app.bundle.js into modules -->
-<script src="/js/core.js?v=20260628c"></script>
-<script src="/js/settings.js?v=20260628c"></script>
-<script src="/js/data.js?v=20260628c"></script>
-<script src="/js/ui-core.js?v=20260628c"></script>
-<script src="/js/dashboard.js?v=20260628c"></script>
-<script src="/js/provinces.js?v=20260628c"></script>
-<script src="/js/center-modal.js?v=20260628c"></script>
-<script src="/js/pricing.js?v=20260628c"></script>
-<script src="/js/weekplan.js?v=20260629c"></script>
-<script src="/js/tasks.js?v=20260628c"></script>
-<script src="/js/calendar.js?v=20260628c"></script>
-<script src="/js/checklist.js?v=20260628c"></script>
-<script src="/js/activity-log.js?v=20260628c"></script>
-<script src="/js/backup.js?v=20260628c"></script>
-<script src="/js/manager.js?v=20260629b"></script>
-<script src="/js/onboarding.js?v=20260628c"></script>
-<script src="/js/kpi.js?v=20260628c"></script>
-<script src="/js/manager-tasks.js?v=20260628c"></script>
-<script src="/js/mtr.js?v=20260628c"></script>
-<script src="/js/hcp.js?v=20260629a"></script>
-<script src="/js/proforma.js?v=20260628b"></script>
+<script src="/js/core.js?v=20260630a"></script>
+<script src="/js/settings.js?v=20260630a"></script>
+<script src="/js/data.js?v=20260630a"></script>
+<script src="/js/ui-core.js?v=20260630a"></script>
+<script src="/js/dashboard.js?v=20260630a"></script>
+<script src="/js/provinces.js?v=20260630b"></script>
+<script src="/js/center-modal.js?v=20260630a"></script>
+<script src="/js/pricing.js?v=20260630a"></script>
+<script src="/js/weekplan.js?v=20260630b"></script>
+<script src="/js/tasks.js?v=20260630a"></script>
+<script src="/js/calendar.js?v=20260630a"></script>
+<script src="/js/checklist.js?v=20260630a"></script>
+<script src="/js/activity-log.js?v=20260630a"></script>
+<script src="/js/backup.js?v=20260630a"></script>
+<script src="/js/manager.js?v=20260630a"></script>
+<script src="/js/onboarding.js?v=20260630a"></script>
+<script src="/js/kpi.js?v=20260630a"></script>
+<script src="/js/manager-tasks.js?v=20260630a"></script>
+<script src="/js/mtr.js?v=20260630a"></script>
+<script src="/js/hcp.js?v=20260630b"></script>
+<script src="/js/proforma.js?v=20260630a"></script>
 <script src="/js/support.js?v=20260619a"></script>
 <script src="/js/hr.js?v=20260619a"></script>
 <script src="/js/trade-kpi.js?v=20260620a"></script>
