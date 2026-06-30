@@ -233,6 +233,10 @@ tbody tr:last-child td{border-bottom:none;}
         <span class="ico">🖼</span>
         <span class="lbl">سربرگ نامه</span>
       </div>
+      <div class="nav" onclick="openOrgModal()">
+        <span class="ico">🏢</span>
+        <span class="lbl">اطلاعات سازمان</span>
+      </div>
     </div>
 
     <div class="sb-sect" style="margin-top:auto;padding-bottom:12px;">
@@ -349,6 +353,21 @@ tbody tr:last-child td{border-bottom:none;}
     <div class="mb" id="mo-bg-body"></div>
     <div class="mf">
       <button class="btn btn-ghost btn-sm" onclick="closeMo('mo-bg')">بستن</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Organization Info -->
+<div class="mo" id="mo-org">
+  <div class="md" style="width:480px;">
+    <div class="mh">
+      <span class="mt-m">🏢 اطلاعات سازمان (سربرگ چاپ)</span>
+      <button class="mx" onclick="closeMo('mo-org')">✕</button>
+    </div>
+    <div class="mb" id="mo-org-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost btn-sm" onclick="closeMo('mo-org')">انصراف</button>
+      <button class="btn btn-success btn-sm" onclick="_orgSave()">ذخیره</button>
     </div>
   </div>
 </div>
@@ -1027,48 +1046,106 @@ async function deleteLetter(id) {
 function printLetter(letter) {
   var TYPE_LABELS = { outgoing: 'نامه صادره', incoming: 'نامه وارده', internal: 'مکاتبه داخلی' };
   var PRIO_LABELS = { normal: 'عادی', high: 'فوری', urgent: 'آنی' };
+  var CLASS_LABELS = { normal: 'عادی', confidential: 'محرمانه' };
+
+  var org = _getOrgInfo();
   var bgCss = localStorage.getItem('letter_bg_css') || '';
-  var sigUser = S.user ? S.user.username : '';
-  var sigImg = sigUser ? (localStorage.getItem('letter_sig_' + sigUser) || '') : '';
-  var sigName = S.user ? (S.user.name || S.user.username || '') : '';
-  var sigRole = S.user ? (S.user.role || '') : '';
+
+  // Preparer identity: the letter's actual creator, not whoever is viewing/printing it.
+  var creatorUsername = letter.createdBy || '';
+  var creatorUser = null;
+  (S.users || []).some(function(u) { if (u.username === creatorUsername) { creatorUser = u; return true; } return false; });
+  var preparerName = creatorUser ? (creatorUser.display_name || creatorUser.username)
+    : (creatorUsername || (S.user ? (S.user.name || S.user.username || '') : ''));
+  var preparerRole = creatorUser ? (creatorUser.role || '') : (S.user ? (S.user.role || '') : '');
+  var sigImg = creatorUsername ? (localStorage.getItem('letter_sig_' + creatorUsername) || '') : '';
+
+  var isConfidential = letter.classification === 'confidential';
+  var isUrgent = letter.priority === 'urgent' || letter.priority === 'high';
+
   var recvHtml = '';
   if (letter.receivers && letter.receivers.length) {
-    recvHtml = '<div style="margin-bottom:12px;font-size:12px;color:#555;border-right:3px solid #0284c7;padding-right:8px;">' +
-      'گیرندگان: ' + letter.receivers.map(function(r) { return r.name || r.key; }).join(' | ') + '</div>';
+    recvHtml = '<div class="recv-box"><span class="recv-lbl">گیرنده' + (letter.receivers.length > 1 ? '/رونوشت' : '') + ':</span> ' +
+      letter.receivers.map(function(r) { return esc(r.name || r.key); }).join('، ') + '</div>';
   }
-  var bodyContent = letter.body || '';
+
+  var bodyContent = letter.body || '<p style="color:#94a3b8;">—</p>';
+
+  var regBox = '<table class="reg-box"><tr>' +
+    '<td><div class="reg-lbl">شماره</div><div class="reg-val">' + esc(letter.indicatorNumber || '(ثبت نشده)') + '</div></td>' +
+    '<td><div class="reg-lbl">تاریخ</div><div class="reg-val">' + fmtDate(letter.registeredAt || letter.createdAt) + '</div></td>' +
+    '<td><div class="reg-lbl">پیوست</div><div class="reg-val">ندارد</div></td>' +
+    '</tr></table>';
+
   var letterHtml = '<!DOCTYPE html><html lang="fa" dir="rtl">' +
-    '<head><meta charset="utf-8"><title>نامه ' + esc(letter.indicatorNumber || '') + '</title>' +
+    '<head><meta charset="utf-8"><title>نامه ' + esc(letter.indicatorNumber || letter.subject || '') + '</title>' +
     '<link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.003.0/Vazirmatn-font-face.css" rel="stylesheet">' +
     '<style>' +
-    'body{font-family:Vazirmatn,sans-serif;margin:0;padding:0;direction:rtl;background:#f0f0f0;}' +
-    '.letter-page{width:21cm;min-height:29.7cm;margin:0 auto;padding:2.5cm 2cm;position:relative;box-sizing:border-box;background:#fff;' + bgCss + '}' +
-    '.lh{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px double #1e3a5f;padding-bottom:14px;margin-bottom:20px;}' +
+    '@page{size:A4;margin:0;}' +
+    '*{box-sizing:border-box;}' +
+    'body{font-family:Vazirmatn,sans-serif;margin:0;padding:0;direction:rtl;background:#e2e8f0;}' +
+    '.print-toolbar{position:sticky;top:0;z-index:50;background:#1e293b;color:#fff;padding:10px 16px;display:flex;justify-content:center;gap:10px;}' +
+    '.print-toolbar button{font-family:Vazirmatn,sans-serif;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer;}' +
+    '.pt-print{background:#0284c7;color:#fff;}.pt-close{background:#475569;color:#fff;}' +
+    '.letter-page{width:21cm;min-height:29.7cm;margin:16px auto;padding:2.2cm 2cm 2.5cm;position:relative;box-sizing:border-box;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15);' + bgCss + '}' +
+    '.confidential-stamp{position:absolute;top:46%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.14);transform:rotate(-22deg);letter-spacing:8px;pointer-events:none;user-select:none;z-index:1;}' +
+    '.lh{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px double #1e3a5f;padding-bottom:14px;margin-bottom:14px;position:relative;z-index:2;}' +
     '.lh-org{font-size:20px;font-weight:800;color:#1e3a5f;letter-spacing:-0.5px;}' +
     '.lh-sub{font-size:12px;color:#64748b;margin-top:4px;}' +
-    '.lh-meta{text-align:left;font-size:12px;color:#334155;line-height:2;}' +
-    '.lh-meta strong{color:#1e3a5f;}' +
-    '.type-bar{background:#1e3a5f;color:#fff;text-align:center;padding:6px;border-radius:4px;margin-bottom:18px;font-weight:700;font-size:14px;letter-spacing:1px;}' +
-    '.subject{font-size:16px;font-weight:700;text-align:center;margin:18px 0;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:10px;}' +
-    '.sender-row{font-size:12px;color:#475569;margin-bottom:14px;}' +
-    '.body-sec{font-size:14px;line-height:2.2;min-height:14cm;color:#1e293b;}' +
-    '.sigs{display:flex;justify-content:space-between;margin-top:2cm;padding-top:16px;border-top:1px solid #e2e8f0;}' +
+    '.lh-addr{font-size:10.5px;color:#94a3b8;margin-top:2px;}' +
+    '.reg-box{border-collapse:collapse;font-size:11px;}' +
+    '.reg-box td{border:1px solid #cbd5e1;padding:4px 12px;text-align:center;}' +
+    '.reg-lbl{color:#64748b;font-size:10px;}' +
+    '.reg-val{color:#1e3a5f;font-weight:700;margin-top:2px;}' +
+    '.meta-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#334155;margin-bottom:14px;position:relative;z-index:2;}' +
+    '.urgent-stamp{display:inline-block;border:2px solid #dc2626;color:#dc2626;font-weight:800;font-size:13px;padding:3px 14px;border-radius:6px;transform:rotate(-4deg);}' +
+    '.type-bar{background:#1e3a5f;color:#fff;text-align:center;padding:6px;border-radius:4px;margin-bottom:16px;font-weight:700;font-size:14px;letter-spacing:1px;position:relative;z-index:2;}' +
+    '.subject{font-size:16px;font-weight:700;text-align:center;margin:16px 0;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:10px;position:relative;z-index:2;}' +
+    '.sender-row{font-size:12px;color:#475569;margin-bottom:10px;position:relative;z-index:2;}' +
+    '.recv-box{font-size:12px;color:#334155;margin-bottom:14px;border-right:3px solid #0284c7;padding-right:8px;position:relative;z-index:2;}' +
+    '.recv-lbl{font-weight:700;color:#0284c7;}' +
+    '.body-sec{font-size:14px;line-height:2.2;min-height:11cm;color:#1e293b;position:relative;z-index:2;}' +
+    '.body-sec p{margin:0 0 .6em;}' +
+    '.body-sec strong,.body-sec b{font-weight:700;}' +
+    '.body-sec em,.body-sec i{font-style:italic;}' +
+    '.body-sec u{text-decoration:underline;}' +
+    '.body-sec s{text-decoration:line-through;}' +
+    '.body-sec a{color:#0284c7;}' +
+    '.body-sec ol,.body-sec ul{padding-right:1.6em;margin:.4em 0;}' +
+    '.body-sec .ql-align-center{text-align:center;}' +
+    '.body-sec .ql-align-right{text-align:right;}' +
+    '.body-sec .ql-align-left{text-align:left;}' +
+    '.body-sec .ql-align-justify{text-align:justify;}' +
+    '.body-sec .ql-indent-1{padding-right:3em;}.body-sec .ql-indent-2{padding-right:6em;}' +
+    '.body-sec .ql-indent-3{padding-right:9em;}.body-sec .ql-indent-4{padding-right:12em;}' +
+    '.body-sec .ql-indent-5{padding-right:15em;}.body-sec .ql-indent-6{padding-right:18em;}' +
+    '.body-sec .ql-indent-7{padding-right:21em;}.body-sec .ql-indent-8{padding-right:24em;}' +
+    '.sigs{display:flex;justify-content:space-between;margin-top:1.8cm;padding-top:16px;border-top:1px solid #e2e8f0;position:relative;z-index:2;}' +
     '.sig-blk{text-align:center;width:30%;}' +
     '.sig-title{font-size:12px;font-weight:700;color:#334155;margin-bottom:8px;}' +
     '.sig-img{max-width:110px;max-height:55px;display:block;margin:0 auto 6px;}' +
     '.sig-line{border-top:1px solid #94a3b8;margin:8px auto 4px;width:80%;}' +
     '.sig-name{font-size:12px;color:#475569;}' +
-    '@media print{body{background:#fff;}.letter-page{margin:0;width:100%;min-height:auto;box-shadow:none;}}' +
+    '.ft{margin-top:1.2cm;padding-top:10px;border-top:1px solid #e2e8f0;text-align:center;font-size:10px;color:#94a3b8;position:relative;z-index:2;}' +
+    '.ft .ft-org{color:#64748b;}' +
+    '.ft .ft-disc{margin-top:4px;}' +
+    '@media print{body{background:#fff;}.print-toolbar{display:none;}.letter-page{margin:0;width:100%;min-height:auto;box-shadow:none;}}' +
     '</style></head><body>' +
+    '<div class="print-toolbar"><button class="pt-print" onclick="window.print()">🖨 چاپ</button><button class="pt-close" onclick="window.close()">✕ بستن</button></div>' +
     '<div class="letter-page">' +
+      (isConfidential ? '<div class="confidential-stamp">محرمانه</div>' : '') +
       '<div class="lh">' +
-        '<div><div class="lh-org">آتنا زیست درمان</div><div class="lh-sub">دبیرخانه مرکزی</div></div>' +
-        '<div class="lh-meta">' +
-          '<div>شماره: <strong>' + esc(letter.indicatorNumber || '(ثبت نشده)') + '</strong></div>' +
-          '<div>تاریخ: <strong>' + fmtDate(letter.registeredAt || letter.createdAt) + '</strong></div>' +
-          '<div>اولویت: ' + (PRIO_LABELS[letter.priority] || letter.priority) + '</div>' +
+        '<div><div class="lh-org">' + esc(org.name) + '</div>' +
+          (org.sub ? '<div class="lh-sub">' + esc(org.sub) + '</div>' : '') +
+          (org.address ? '<div class="lh-addr">' + esc(org.address) + '</div>' : '') +
         '</div>' +
+        regBox +
+      '</div>' +
+      '<div class="meta-row">' +
+        '<div>طبقه‌بندی: <strong>' + (CLASS_LABELS[letter.classification] || 'عادی') + '</strong>' +
+          (letter.departmentPrefix ? ' &nbsp;|&nbsp; شاخه: <strong>' + esc(letter.departmentPrefix) + '</strong>' : '') +
+        '</div>' +
+        (isUrgent ? '<span class="urgent-stamp">' + (PRIO_LABELS[letter.priority] || letter.priority) + '</span>' : '<div>اولویت: ' + (PRIO_LABELS[letter.priority] || letter.priority) + '</div>') +
       '</div>' +
       '<div class="type-bar">' + (TYPE_LABELS[letter.type] || letter.type) + '</div>' +
       '<div class="subject">موضوع: ' + esc(letter.subject) + '</div>' +
@@ -1080,14 +1157,22 @@ function printLetter(letter) {
           '<div class="sig-title">تهیه‌کننده</div>' +
           (sigImg ? '<img class="sig-img" src="' + sigImg + '" />' : '<div style="height:55px;"></div>') +
           '<div class="sig-line"></div>' +
-          '<div class="sig-name">' + esc(sigName) + '</div>' +
-          '<div style="font-size:11px;color:#94a3b8;">' + esc(sigRole) + '</div>' +
+          '<div class="sig-name">' + esc(preparerName) + '</div>' +
+          '<div style="font-size:11px;color:#94a3b8;">' + esc(preparerRole) + '</div>' +
         '</div>' +
         '<div class="sig-blk"><div class="sig-title">تأییدکننده</div><div style="height:55px;"></div><div class="sig-line"></div><div class="sig-name"></div></div>' +
         '<div class="sig-blk"><div class="sig-title">مدیر</div><div style="height:55px;"></div><div class="sig-line"></div><div class="sig-name"></div></div>' +
       '</div>' +
+      '<div class="ft">' +
+        '<div class="ft-org">' + esc(org.name) +
+          (org.phone ? ' &nbsp;·&nbsp; تلفن: ' + esc(org.phone) : '') +
+          (org.email ? ' &nbsp;·&nbsp; ایمیل: ' + esc(org.email) : '') +
+          (org.website ? ' &nbsp;·&nbsp; ' + esc(org.website) : '') +
+        '</div>' +
+        '<div class="ft-disc">این نامه از طریق سامانه دبیرخانه الکترونیک ثبت و در تاریخ ' + fmtDate(new Date()) + ' چاپ شده است.</div>' +
+      '</div>' +
     '</div>' +
-    '<script>window.onload=function(){window.print();};<\/script>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print();},150);};<\/script>' +
     '</body></html>';
 
   var w = window.open('', '_blank', 'width=900,height=700');
@@ -1187,6 +1272,45 @@ function _bgDelete() {
   localStorage.removeItem('letter_bg_css');
   closeMo('mo-bg');
   showToast('سربرگ حذف شد');
+}
+
+// ── Organization info (used in print header/footer) ────────────────────────
+function _getOrgInfo() {
+  var def = { name: 'آتنا زیست درمان', sub: 'دبیرخانه مرکزی', address: '', phone: '', email: '', website: '' };
+  try {
+    var saved = JSON.parse(localStorage.getItem('letter_org_info') || '{}');
+    for (var k in def) { if (!saved[k]) saved[k] = def[k]; }
+    return saved;
+  } catch (e) { return def; }
+}
+
+function openOrgModal() {
+  var o = _getOrgInfo();
+  var html =
+    '<div class="fg"><label class="fl">نام سازمان</label><input class="fi" id="org-name" value="' + esc(o.name) + '"></div>' +
+    '<div class="fg"><label class="fl">زیرعنوان (مثلاً دبیرخانه مرکزی)</label><input class="fi" id="org-sub" value="' + esc(o.sub) + '"></div>' +
+    '<div class="fg"><label class="fl">آدرس</label><input class="fi" id="org-address" value="' + esc(o.address) + '"></div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<div class="fg" style="flex:1"><label class="fl">تلفن</label><input class="fi" id="org-phone" value="' + esc(o.phone) + '"></div>' +
+      '<div class="fg" style="flex:1"><label class="fl">ایمیل</label><input class="fi" id="org-email" value="' + esc(o.email) + '"></div>' +
+    '</div>' +
+    '<div class="fg"><label class="fl">وب‌سایت</label><input class="fi" id="org-website" value="' + esc(o.website) + '"></div>';
+  document.getElementById('mo-org-body').innerHTML = html;
+  openMo('mo-org');
+}
+
+function _orgSave() {
+  var o = {
+    name: (document.getElementById('org-name').value || '').trim() || 'آتنا زیست درمان',
+    sub: (document.getElementById('org-sub').value || '').trim(),
+    address: (document.getElementById('org-address').value || '').trim(),
+    phone: (document.getElementById('org-phone').value || '').trim(),
+    email: (document.getElementById('org-email').value || '').trim(),
+    website: (document.getElementById('org-website').value || '').trim()
+  };
+  localStorage.setItem('letter_org_info', JSON.stringify(o));
+  closeMo('mo-org');
+  showToast('اطلاعات سازمان ذخیره شد');
 }
 
 function showToast(msg) {
