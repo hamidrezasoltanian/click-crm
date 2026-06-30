@@ -2186,40 +2186,158 @@ async function _wpfDelete(id){
 
 function wpfPrint(id){
   wmsApi('GET','/wms-proforma/'+id).then(pf=>{
+    const org=_getWpfOrg();
+    const subtotal=Number(pf.subtotal||0),discAmt=Number(pf.discAmt||0),taxAmt=Number(pf.taxAmt||0),total=Number(pf.total||0);
+    const taxBase=subtotal-discAmt;
     const w=window.open('','_blank');
-    w.document.write(`<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>پیشفاکتور ${pf.no}</title>
+    w.document.write(`<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>پیش‌فاکتور ${esc2(pf.no)}</title>
     <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
-    <style>body{font-family:Vazirmatn,sans-serif;direction:rtl;padding:24px;color:#000;font-size:13px;}
-    table{width:100%;border-collapse:collapse;margin-bottom:12px;}th,td{padding:7px;border:1px solid #999;text-align:right;}
+    <style>
+    @page{size:A4;margin:0;}
+    *{box-sizing:border-box;}
+    body{font-family:Vazirmatn,sans-serif;direction:rtl;margin:0;padding:0;color:#0f172a;font-size:12.5px;background:#e2e8f0;}
+    .toolbar{position:sticky;top:0;z-index:50;background:#1a2744;color:#fff;padding:10px 16px;display:flex;justify-content:center;gap:10px;}
+    .toolbar button{font-family:Vazirmatn,sans-serif;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer;}
+    .tb-print{background:#0284c7;color:#fff;}.tb-close{background:#475569;color:#fff;}
+    .sheet{width:21cm;min-height:29.7cm;margin:16px auto;padding:1.6cm;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15);position:relative;}
+    .doc-title{text-align:center;font-size:17px;font-weight:800;color:#1a2744;letter-spacing:1px;margin-bottom:2px;}
+    .doc-subtitle{text-align:center;font-size:10.5px;color:#dc2626;font-weight:700;margin-bottom:14px;}
+    .pbox{display:flex;justify-content:space-between;gap:14px;border:1px solid #999;border-radius:6px;padding:10px 14px;margin-bottom:12px;}
+    .pbox-col{flex:1;font-size:11.5px;line-height:1.9;}
+    .pbox-col b{color:#1a2744;}
+    .num-box{border:2px solid #1a2744;border-radius:6px;padding:6px 18px;text-align:center;min-width:140px;}
+    .num-box .n{font-size:18px;font-weight:800;color:#1a2744;}
+    .num-box .d{font-size:11px;color:#555;margin-top:2px;}
+    .parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+    .pcard{border:1px solid #999;border-radius:6px;padding:8px 12px;font-size:11.5px;}
+    .pcard h4{margin:0 0 6px;font-size:11px;color:#fff;background:#1a2744;padding:4px 8px;border-radius:4px;display:inline-block;}
+    .pcard .row{display:flex;gap:6px;padding:2px 0;border-bottom:1px dashed #e2e8f0;}
+    .pcard .row span:first-child{color:#64748b;min-width:48px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+    th,td{padding:6px 7px;border:1px solid #999;text-align:right;font-size:11.5px;}
     th{background:#1a2744;color:#fff;font-weight:700;}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:14px;}
+    td.num,th.num{font-family:monospace;text-align:left;}
+    .total-tbl{width:60%;margin-right:0;margin-left:auto;}
+    .total-tbl td{border:1px solid #999;}
+    .total-tbl td:first-child{background:#f0f4f8;font-weight:600;}
+    .total-tbl td:last-child{font-family:monospace;text-align:left;}
     .total-row{font-weight:800;background:#f0f4f8;}
-    .sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;}
-    .sig{text-align:center;border-top:1px solid #000;padding-top:8px;}
+    .words-row{font-size:11px;color:#334155;border:1px dashed #999;border-radius:6px;padding:8px 12px;margin:10px 0;}
+    .legal{font-size:10px;color:#b91c1c;border:1px dashed #fca5a5;background:#fef2f2;border-radius:6px;padding:8px 12px;margin:10px 0;}
+    .note-box{border:1px dashed #ccc;padding:8px 12px;margin-bottom:10px;font-size:11.5px;border-radius:6px;}
+    .sigs{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:30px;}
+    .sig{text-align:center;}
+    .sig .t{font-weight:700;font-size:12px;margin-bottom:4px;}
+    .sig .s{font-size:10px;color:#555;margin-bottom:36px;}
+    .sig .line{border-top:1px solid #000;padding-top:6px;font-size:10px;color:#555;}
+    .ft{margin-top:18px;padding-top:8px;border-top:1px solid #e2e8f0;text-align:center;font-size:9.5px;color:#94a3b8;}
+    @media print{body{background:#fff;}.toolbar{display:none;}.sheet{margin:0;width:100%;min-height:auto;box-shadow:none;}}
     </style></head><body>
-    <div class="head"><div><div style="font-size:18px;font-weight:800">آتنا زیست درمان</div><div style="font-size:11px;color:#555">پیشفاکتور فروش WMS</div></div>
-    <div style="border:2px solid #000;padding:8px 16px;text-align:center"><div style="font-size:20px;font-weight:800">${pf.no}</div><div style="font-size:11px">${pf.jalaliDate||''}</div></div></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;font-size:12px">
-    <div><strong>مشتری:</strong> ${esc2(pf.customerName||'—')}</div>
-    <div><strong>انبار:</strong> ${esc2(pf.warehouseName||'—')}</div>
-    <div><strong>وضعیت:</strong> ${WPF_STATUS_LABELS[pf.status]||pf.status}</div>
-    <div><strong>ایجادکننده:</strong> ${esc2(pf.createdBy||'')}</div></div>
-    <table><thead><tr><th>ردیف</th><th>محصول</th><th>لات</th><th>تعداد</th><th>قیمت واحد</th><th>جمع</th></tr></thead><tbody>
-    ${(pf.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${esc2(it.productName||'')}</td><td style="font-family:monospace">${esc2(it.lotNo||'')}</td><td>${it.qty}</td><td>${Number(it.unitPrice||0).toLocaleString('fa-IR')}</td><td>${(it.qty*Number(it.unitPrice||0)).toLocaleString('fa-IR')}</td></tr>`).join('')}
-    <tr class="total-row"><td colspan="5" style="text-align:left">جمع کل</td><td>${Number(pf.subtotal).toLocaleString('fa-IR')}</td></tr>
-    <tr><td colspan="5" style="text-align:left">تخفیف (${pf.discountPct}%)</td><td>${Number(pf.discAmt).toLocaleString('fa-IR')}</td></tr>
-    <tr><td colspan="5" style="text-align:left">مالیات (${pf.taxPct}%)</td><td>${Number(pf.taxAmt).toLocaleString('fa-IR')}</td></tr>
-    <tr class="total-row"><td colspan="5" style="text-align:left;font-size:15px">قابل پرداخت</td><td style="font-size:15px">${Number(pf.total).toLocaleString('fa-IR')} ﷼</td></tr>
-    </tbody></table>
-    ${pf.note?`<div style="border:1px dashed #ccc;padding:8px;margin-bottom:12px;font-size:12px">یادداشت: ${esc2(pf.note)}</div>`:''}
-    <div class="sigs"><div class="sig"><div style="font-weight:700">ایجادکننده</div><div style="font-size:11px;color:#555;margin:6px 0 40px">${esc2(pf.createdBy||'')}</div><div style="font-size:10px;color:#555">امضا</div></div>
-    <div class="sig"><div style="font-weight:700">انبارداری</div><div style="margin:6px 0 40px"></div><div style="font-size:10px;color:#555">امضا</div></div>
-    <div class="sig"><div style="font-weight:700">مدیر</div><div style="margin:6px 0 40px"></div><div style="font-size:10px;color:#555">امضا</div></div></div>
-    <script>window.print();setTimeout(()=>window.close(),1200);<\/script></body></html>`);
+    <div class="toolbar"><button class="tb-print" onclick="window.print()">🖨 چاپ</button><button class="tb-close" onclick="window.close()">✕ بستن</button></div>
+    <div class="sheet">
+      <div class="doc-title">پیش‌فاکتور فروش</div>
+      <div class="doc-subtitle">این سند، پیش‌فاکتور است و فاقد ارزش مالیاتی و قانونی رسمی می‌باشد؛ صرفاً جهت اطلاع از قیمت و شرایط فروش صادر شده است.</div>
+      <div class="pbox">
+        <div class="pbox-col">
+          <div><b>${esc2(org.name)}</b></div>
+          ${org.address?`<div>نشانی: ${esc2(org.address)}</div>`:''}
+          ${org.phone?`<div>تلفن: ${esc2(org.phone)}</div>`:''}
+          ${(org.nationalId||org.economicId||org.postalCode)?`<div>${org.nationalId?'شناسه ملی: '+esc2(org.nationalId)+'&nbsp;&nbsp;':''}${org.economicId?'کد اقتصادی: '+esc2(org.economicId)+'&nbsp;&nbsp;':''}${org.postalCode?'کدپستی: '+esc2(org.postalCode):''}</div>`:''}
+        </div>
+        <div class="num-box"><div class="n">${esc2(pf.no)}</div><div class="d">تاریخ: ${esc2(pf.jalaliDate||'—')}</div><div class="d">وضعیت: ${WPF_STATUS_LABELS[pf.status]||pf.status}</div></div>
+      </div>
+      <div class="parties">
+        <div class="pcard">
+          <h4>فروشنده</h4>
+          <div class="row"><span>نام:</span><span>${esc2(org.name)}</span></div>
+          <div class="row"><span>تهیه‌کننده:</span><span>${esc2(pf.createdBy||'—')}</span></div>
+          <div class="row"><span>انبار:</span><span>${esc2(pf.warehouseName||'—')}</span></div>
+        </div>
+        <div class="pcard">
+          <h4>خریدار</h4>
+          <div class="row"><span>نام:</span><span>${esc2(pf.customerName||'—')}</span></div>
+          <div class="row"><span>نشانی:</span><span>&nbsp;</span></div>
+          <div class="row"><span>تلفن:</span><span>&nbsp;</span></div>
+        </div>
+      </div>
+      <table><thead><tr><th>ردیف</th><th>شرح کالا</th><th>شماره لات</th><th class="num">تعداد</th><th class="num">قیمت واحد (ریال)</th><th class="num">مبلغ کل (ریال)</th></tr></thead><tbody>
+      ${(pf.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${esc2(it.productName||'')}</td><td class="num" style="text-align:center">${esc2(it.lotNo||'—')}</td><td class="num">${Number(it.qty||0).toLocaleString('fa-IR')}</td><td class="num">${Number(it.unitPrice||0).toLocaleString('fa-IR')}</td><td class="num">${(Number(it.qty||0)*Number(it.unitPrice||0)).toLocaleString('fa-IR')}</td></tr>`).join('')}
+      </tbody></table>
+      <table class="total-tbl"><tbody>
+      <tr><td>جمع جزء (قبل از تخفیف)</td><td>${subtotal.toLocaleString('fa-IR')}</td></tr>
+      <tr><td>تخفیف (${pf.discountPct||0}%)</td><td>${discAmt.toLocaleString('fa-IR')}</td></tr>
+      <tr><td>مبلغ مشمول مالیات</td><td>${taxBase.toLocaleString('fa-IR')}</td></tr>
+      <tr><td>مالیات بر ارزش افزوده (${pf.taxPct||0}%)</td><td>${taxAmt.toLocaleString('fa-IR')}</td></tr>
+      <tr class="total-row"><td style="font-size:13px">جمع کل قابل پرداخت (ریال)</td><td style="font-size:13px">${total.toLocaleString('fa-IR')}</td></tr>
+      </tbody></table>
+      <div class="words-row">مبلغ به حروف: ${numToPersianWords(total)} ریال</div>
+      ${pf.note?`<div class="note-box">📝 ملاحظات: ${esc2(pf.note)}</div>`:''}
+      <div class="legal">قیمت‌های فوق تا اطلاع ثانوی معتبر بوده و در صورت تغییر نرخ ارز یا قیمت بازار قابل تغییر می‌باشند. صدور فاکتور رسمی منوط به تأیید نهایی این پیش‌فاکتور است.</div>
+      <div class="sigs">
+        <div class="sig"><div class="t">مهر و امضای فروشنده</div><div class="s"></div><div class="line">${esc2(org.name)}</div></div>
+        <div class="sig"><div class="t">تأیید و امضای خریدار</div><div class="s"></div><div class="line">${esc2(pf.customerName||'')}</div></div>
+      </div>
+      <div class="ft">این سند به‌صورت سیستمی از طریق سامانه انبارداری آتنا صادر شده است · چاپ‌شده در ${new Date().toLocaleDateString('fa-IR')}</div>
+    </div>
+    </body></html>`);
     w.document.close();
   }).catch(e=>alert(e.message));
 }
 function esc2(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function esc(s){return esc2(s);}
+
+// Persian number → words (used for "مبلغ به حروف" on official-style printouts)
+function numToPersianWords(num){
+  num=Math.round(Number(num)||0);
+  if(num===0) return 'صفر';
+  if(num<0) return 'منفی '+numToPersianWords(-num);
+  var ones=['','یک','دو','سه','چهار','پنج','شش','هفت','هشت','نه'];
+  var teens=['ده','یازده','دوازده','سیزده','چهارده','پانزده','شانزده','هفده','هجده','نوزده'];
+  var tens=['','','بیست','سی','چهل','پنجاه','شصت','هفتاد','هشتاد','نود'];
+  var hundreds=['','صد','دویست','سیصد','چهارصد','پانصد','ششصد','هفتصد','هشتصد','نهصد'];
+  var scales=['',' هزار',' میلیون',' میلیارد',' بیلیون',' بیلیارد'];
+  function threeDigits(n){
+    var parts=[];
+    var h=Math.floor(n/100),t=n%100;
+    if(h) parts.push(hundreds[h]);
+    if(t>=10&&t<20) parts.push(teens[t-10]);
+    else{
+      var te=Math.floor(t/10),o=t%10;
+      if(te) parts.push(tens[te]);
+      if(o) parts.push(ones[o]);
+    }
+    return parts.join(' و ');
+  }
+  var groups=[],n=num;
+  while(n>0){groups.push(n%1000);n=Math.floor(n/1000);}
+  var words=[];
+  for(var i=groups.length-1;i>=0;i--){
+    if(groups[i]>0) words.push(threeDigits(groups[i])+scales[i]);
+  }
+  return words.join(' و ');
+}
+
+// ── Seller org info (used in proforma print header) ────────────────────────
+function _getWpfOrg(){
+  var def={name:'آتنا زیست درمان',address:'',phone:'',nationalId:'',economicId:'',postalCode:''};
+  try{
+    var saved=JSON.parse(localStorage.getItem('wms_org_info')||'{}');
+    for(var k in def){ if(!saved[k]) saved[k]=def[k]; }
+    return saved;
+  }catch(e){ return def; }
+}
+function _wpfOrgSave(){
+  var o={
+    name:(document.getElementById('wpfOrg-name').value||'').trim()||'آتنا زیست درمان',
+    address:(document.getElementById('wpfOrg-address').value||'').trim(),
+    phone:(document.getElementById('wpfOrg-phone').value||'').trim(),
+    nationalId:(document.getElementById('wpfOrg-nid').value||'').trim(),
+    economicId:(document.getElementById('wpfOrg-eid').value||'').trim(),
+    postalCode:(document.getElementById('wpfOrg-pc').value||'').trim()
+  };
+  localStorage.setItem('wms_org_info',JSON.stringify(o));
+  toast('اطلاعات فروشنده ذخیره شد','s');
+}
 
 // ══════════════════════════════════════════
 // WMS PROFORMA — RECEIVABLES (مطالبات)
@@ -5371,7 +5489,21 @@ function openCustDetail(custId){
 // ══════════════════════════════════════════
 function renderSystem(){
   const stats={lots:S.lots.length,txns:S.transactions.length,prods:S.products.length,users:S.users.length,logs:(S.auditLog||[]).length};
+  const o=_getWpfOrg();
   document.getElementById('systemContent').innerHTML=`
+    <div class="sys-card">
+      <h3>🏢 اطلاعات فروشنده (سربرگ پیشفاکتور)</h3>
+      <p>این اطلاعات در چاپ پیشفاکتور به‌عنوان مشخصات فروشنده نمایش داده می‌شود.</p>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="fg"><label class="fl">نام شرکت/واحد</label><input class="fi" id="wpfOrg-name" value="${esc(o.name)}"></div>
+        <div class="fg"><label class="fl">نشانی</label><input class="fi" id="wpfOrg-address" value="${esc(o.address)}"></div>
+        <div class="fg"><label class="fl">تلفن</label><input class="fi" id="wpfOrg-phone" value="${esc(o.phone)}"></div>
+        <div class="fg"><label class="fl">شناسه ملی</label><input class="fi" id="wpfOrg-nid" value="${esc(o.nationalId)}"></div>
+        <div class="fg"><label class="fl">کد اقتصادی</label><input class="fi" id="wpfOrg-eid" value="${esc(o.economicId)}"></div>
+        <div class="fg"><label class="fl">کد پستی</label><input class="fi" id="wpfOrg-pc" value="${esc(o.postalCode)}"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="_wpfOrgSave()">💾 ذخیره اطلاعات فروشنده</button>
+    </div>
     <div class="sys-card">
       <h3>📤 بک‌آپ</h3>
       <p>تمام داده‌های سیستم را به صورت فایل JSON دانلود کنید</p>

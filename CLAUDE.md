@@ -375,6 +375,7 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | WMS proforma reports: per-user (date range, optional all-versions) and per-product/category sales | server/routes/wms-proforma.js (`GET /report/by-user`, `GET /report/by-product`) + wms.html «گزارش پیشفاکتور» page | ✅ |
 | WMS proforma low-stock alarm: items flagged when requested qty exceeds current lot stock, shown on list row + detail view | server/routes/wms-proforma.js (`enrichStock`) + wms.html | ✅ |
 | Center-profile proforma tab: read-only list of a center's proformas (number, date, total, status, version) loaded async via IIFE, link out to /wms | public/js/app.bundle.js `openCenterModal` (`cmWpf_` placeholder) | ✅ |
+| WMS proforma print template (official Iranian پیش‌فاکتور grade): A4 layout, registration number/date box, seller + buyer party boxes, itemized table with lot numbers, totals breakdown (subtotal→تخفیف→مبلغ مشمول مالیات→مالیات بر ارزش افزوده→جمع کل), amount spelled out in Persian words (`numToPersianWords`), explicit legal disclaimer distinguishing پیش‌فاکتور from فاکتور رسمی, two-party signature boxes, configurable seller org info (`🏢 اطلاعات فروشنده` card on system-settings page → `localStorage.wms_org_info` via `_getWpfOrg`/`_wpfOrgSave`), on-screen print/close toolbar (no forced auto-print/auto-close); also fixed a pre-existing `esc()` undefined ReferenceError bug (only `esc2()` existed) | public/wms.html (`wpfPrint`, `renderSystem`) | ✅ |
 
 ## Planned Integration: Accounting Software → Receivables (مطالبات)
 
