@@ -566,3 +566,482 @@ var ACTION_TYPE_LABELS = {
 3. `node --check public/js/app.js` — must pass.
 4. Commit with a descriptive message; push to the designated branch.
 5. Update this file's Feature Inventory / Function Map / Roadmap if they changed.
+
+---
+
+## راهنمای افزودن ماژول جدید (Module Integration Blueprint)
+
+> این بخش برای هوش مصنوعی نوشته شده است. هر بار که می‌خواهی ماژول جدیدی به این پروژه اضافه کنی، این راهنما را از اول تا آخر بخوان.
+
+### اصل پایه: ایزولاسیون کامل
+
+**هیچ‌وقت app.bundle.js را لمس نکن.** این فایل ستون فقرات اپ اصلی است و NBSP دارد.
+هر ماژول جدید = یک صفحه HTML مستقل (`public/NEW.html`) + یک route فایل (`server/routes/new.js`) + جداول DB جدید.
+تنها اتصال به اپ اصلی: **یک لینک `<a>` در sidebar سمت راست `index.html`** + سه خط در `server/index.js`.
+
+### گام ۱ — ساختار فایل‌های جدید (۶ فایل)
+
+```
+public/
+  YOUR_MODULE.html           ← صفحه مستقل (کپی الگو از letters.html)
+server/
+  routes/
+    your-module.js           ← Express router (کپی الگو از letters.js)
+```
+
+در `server/db.js` داخل `initSchema()` جداول جدید اضافه می‌شوند (همان فایل، بدون فایل جدید).
+در `server/index.js` دو خط mount اضافه می‌شود (همان فایل، بدون فایل جدید).
+در `public/index.html` یک لینک `<a>` در sidebar اضافه می‌شود (همان فایل، فقط یک خط).
+
+---
+
+### گام ۲ — جداول PostgreSQL (در `server/db.js` → `initSchema()`)
+
+```sql
+-- همیشه IF NOT EXISTS؛ ایمن روی DB زنده
+CREATE TABLE IF NOT EXISTS your_module_items (
+  id          VARCHAR(50)  PRIMARY KEY,      -- تولید با _genId()
+  ...فیلدها...
+  created_by  VARCHAR(100),                  -- username از session
+  created_at  TIMESTAMPTZ  DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ  DEFAULT NOW(),
+  is_deleted  BOOLEAN      DEFAULT false     -- حذف نرم، نه DELETE واقعی
+);
+CREATE INDEX IF NOT EXISTS idx_ymi_created_at ON your_module_items(created_at DESC);
+```
+
+**قوانین DB:**
+- هیچ‌وقت `ALTER TABLE ... DROP COLUMN` یا `DROP TABLE` نزن — فقط `ADD COLUMN IF NOT EXISTS`.
+- `id` را server-side با `_genId()` تولید کن، نه auto-increment.
+- هر جدول حداقل: `id`, `created_by`, `created_at`, `is_deleted`.
+- برای workflow statuses: `CHECK(status IN ('draft','sent','approved'))`.
+- برای counters atomic (مثل شماره‌های اندیکاتور): جدول جداگانه با `ON CONFLICT DO UPDATE`.
+
+---
+
+### گام ۳ — route فایل (`server/routes/your-module.js`)
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const { pool } = require('../db');
+const { requireAuth, requireManager } = require('../auth');
+
+// helper: UUID-like id
+function _genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// لیست (GET /)
+router.get('/', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM your_module_items WHERE is_deleted=false ORDER BY created_at DESC`
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ایجاد (POST /)
+router.post('/', requireAuth, async (req, res) => {
+  const { field1, field2 } = req.body;
+  if (!field1) return res.status(400).json({ error: 'field1 required' });
+  try {
+    const id = _genId();
+    const { rows } = await pool.query(
+      `INSERT INTO your_module_items (id, field1, field2, created_by)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [id, field1, field2 || null, req.session.username]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ویرایش (PUT /:id)
+router.put('/:id', requireAuth, async (req, res) => {
+  // مطمئن شو status=draft است قبل از ویرایش (اگر workflow دارد)
+  try {
+    const { rows } = await pool.query(
+      `UPDATE your_module_items SET field1=$1, updated_at=NOW() WHERE id=$2 AND is_deleted=false RETURNING *`,
+      [req.body.field1, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// حذف نرم (DELETE /:id)
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE your_module_items SET is_deleted=true WHERE id=$1`, [req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// اگر workflow action نیاز است (POST /:id/action)
+router.post('/:id/action', requireAuth, async (req, res) => {
+  const { action } = req.body;
+  const VALID = { draft: ['send'], sent: ['approve', 'reject'], approved: ['cancel'] };
+  // بررسی کن وضعیت فعلی اجازه این action را می‌دهد
+  // سپس UPDATE وضعیت
+});
+
+// برای عملیات حساس مثل تأیید مدیر: requireManager
+router.post('/:id/approve', requireManager, async (req, res) => { /* ... */ });
+
+module.exports = router;
+```
+
+**قوانین route:**
+- هر endpoint با `try/catch` و `res.status(500).json({error:e.message})` پوشش داده شود.
+- هیچ‌وقت raw user input را در SQL query string interpolate نکن — همیشه `$1,$2,...` parametrized.
+- حذف = `is_deleted=true`، نه `DELETE FROM`.
+- برای `requireAuth` و `requireManager` از `../auth` import کن.
+- اگر چند عملیات باید atomic باشند: `const client = await pool.connect()` + `BEGIN/COMMIT/ROLLBACK`.
+
+---
+
+### گام ۴ — mount در `server/index.js`
+
+فقط سه خط در جای مناسب (بعد از routes موجود):
+```javascript
+// ---- NEW MODULE ----
+app.get('/your-module', (req, res) => res.sendFile(path.join(__dirname, '../public/YOUR_MODULE.html')));
+app.use('/api/your-module', require('./routes/your-module'));
+```
+
+این خط‌ها را **قبل از** خط `app.get('*', ...)` یا هر catch-all route بگذار.
+
+---
+
+### گام ۵ — صفحه مستقل HTML (`public/YOUR_MODULE.html`)
+
+**الگو**: کپی ساختار `public/letters.html` (نه wms.html — letters.html تمیزتر و جدیدتر است).
+
+#### ۵.۱ ساختار کلی HTML
+```html
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>نام ماژول · آتنا</title>
+  <link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.003.0/Vazirmatn-font-face.css" rel="stylesheet">
+  <style>
+    /* CSS Variables — همیشه یکسان در همه standalone pages */
+    :root {
+      --brand:#6366f1; --brand-d:#4f46e5; --brand-light:#e0e7ff;
+      --surface:#fff; --surface2:#f8fafc; --border:#e2e8f0;
+      --text:#0f172a; --text2:#64748b; --radius:10px;
+    }
+    /* Reset + RTL base */
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Vazirmatn,sans-serif; direction:rtl; background:var(--surface2); color:var(--text); }
+    /* ... بقیه styles */
+  </style>
+</head>
+<body>
+  <!-- Layout: sidebar + main -->
+  <div id="app" style="display:flex;height:100vh;overflow:hidden">
+    <aside id="sidebar">...</aside>
+    <main id="main" style="flex:1;overflow-y:auto;padding:24px">
+      <div id="content"></div>
+    </main>
+  </div>
+  <div id="toast-container" style="position:fixed;bottom:24px;right:24px;z-index:9999"></div>
+  <script>
+    /* --- helpers --- */
+    /* --- state --- */
+    /* --- init --- */
+    /* --- render functions --- */
+  </script>
+</body>
+</html>
+```
+
+#### ۵.۲ Auth در standalone page (الزامی)
+
+```javascript
+// خواندن token از cookie — همیشه این الگو
+function _getToken() {
+  return document.cookie.split(';').map(c => c.trim())
+    .find(c => c.startsWith('atena_token='))?.split('=').slice(1).join('=') || '';
+}
+
+// API call helper — همیشه این الگو
+async function api(method, path, body) {
+  const opts = {
+    method, credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch('/api' + path, opts);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || r.statusText);
+  }
+  return r.json();
+}
+
+// بررسی login در init
+async function init() {
+  try {
+    const me = await api('GET', '/auth/me');
+    // me = { username, name, role }
+    if (!me || !me.username) { window.location.href = '/'; return; }
+    S.user = me;
+    // ...ادامه init
+  } catch(e) {
+    window.location.href = '/';
+  }
+}
+document.addEventListener('DOMContentLoaded', init);
+```
+
+**نکته**: `credentials:'include'` الزامی است — session cookie را می‌فرستد.
+
+#### ۵.۳ Helper‌های استاندارد (کپی مستقیم)
+
+```javascript
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type) {
+  const t = document.createElement('div');
+  t.style.cssText = `background:${type==='e'?'#ef4444':type==='s'?'#22c55e':'#1a2744'};color:#fff;padding:10px 18px;border-radius:8px;margin-top:8px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.2)`;
+  t.textContent = msg;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function fmtDate(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr);
+  return d.toLocaleDateString('fa-IR');
+}
+```
+
+#### ۵.۴ اتصال به مراکز CRM (typeahead)
+
+هر وقت کاربر باید یک «مرکز» یا «طرف حساب» از CRM اصلی انتخاب کند:
+
+```javascript
+let _crmCenters = []; // [{key, name}]
+
+function _flatCenters(d) {
+  const list = [];
+  (d.CENTERS || []).forEach(c => list.push({ key: c.id, name: c.name }));
+  Object.entries(d.PC_RAW || {}).forEach(([provId, rows]) => {
+    (rows || []).forEach((row, i) => list.push({ key: provId+'||'+i, name: row[1]||row[0]||'' }));
+  });
+  return list;
+}
+
+// در init() بعد از auth:
+try {
+  const cr = await api('GET', '/data/centers/master');
+  _crmCenters = _flatCenters(cr);
+} catch(e) { /* ادامه بده بدون مراکز */ }
+
+// HTML typeahead:
+// <input id="my-txt" oninput="_searchCenter(this.value,'my-drop','my-key','my-txt')" />
+// <input type="hidden" id="my-key" />
+// <div id="my-drop" class="csd-drop"></div>
+
+function _searchCenter(q, dropId, keyId, txtId) {
+  const drop = document.getElementById(dropId);
+  if (!drop) return;
+  if (!q.trim()) { drop.innerHTML = ''; return; }
+  const results = _crmCenters.filter(c => c.name.includes(q.trim())).slice(0, 8);
+  drop.innerHTML = results.map(c =>
+    `<div class="csd-item" onclick="_pickCenter('${esc(c.key)}','${esc(c.name)}','${dropId}','${keyId}','${txtId}')">${esc(c.name)}</div>`
+  ).join('');
+}
+
+function _pickCenter(key, name, dropId, keyId, txtId) {
+  document.getElementById(txtId).value = name;
+  document.getElementById(keyId).value = key;
+  document.getElementById(dropId).innerHTML = '';
+}
+```
+
+CSS برای dropdown (اضافه به `<style>`):
+```css
+.csd-drop { position:absolute; top:100%; right:0; left:0; background:var(--surface); border:1px solid var(--border); border-radius:8px; z-index:200; max-height:220px; overflow-y:auto; box-shadow:0 4px 16px rgba(0,0,0,.15); }
+.csd-item { padding:8px 12px; cursor:pointer; font-size:13px; }
+.csd-item:hover { background:var(--surface2); }
+```
+
+#### ۵.۵ Modal pattern
+
+```javascript
+let _moStack = []; // برای اینکه چند modal داشته باشیم
+
+function openMo(id, title, body, footer) {
+  const existing = document.getElementById(id);
+  if (existing) existing.remove();
+  const mo = document.createElement('div');
+  mo.id = id;
+  mo.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  mo.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:600px;max-height:90vh;overflow-y:auto">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <strong>${esc(title)}</strong>
+        <button onclick="closeMo('${id}')" style="border:none;background:none;font-size:18px;cursor:pointer">×</button>
+      </div>
+      <div style="padding:20px">${body}</div>
+      ${footer ? `<div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">${footer}</div>` : ''}
+    </div>`;
+  document.body.appendChild(mo);
+  _moStack.push(id);
+}
+
+function closeMo(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+  _moStack = _moStack.filter(m => m !== id);
+}
+```
+
+#### ۵.۶ Print template pattern
+
+```javascript
+function printItem(item) {
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html lang="fa" dir="rtl"><head>
+    <meta charset="UTF-8"><title>چاپ</title>
+    <link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.003.0/Vazirmatn-font-face.css" rel="stylesheet">
+    <style>
+      @page { size:A4; margin:0; }
+      * { box-sizing:border-box; }
+      body { font-family:Vazirmatn,sans-serif; direction:rtl; margin:0; }
+      .toolbar { position:sticky;top:0;z-index:50;background:#1a2744;color:#fff;padding:10px 16px;display:flex;justify-content:center;gap:10px; }
+      .toolbar button { font-family:Vazirmatn,sans-serif;border:none;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer; }
+      .sheet { width:21cm;min-height:29.7cm;margin:16px auto;padding:1.6cm;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15); }
+      @media print { .toolbar { display:none; } .sheet { margin:0;width:100%;box-shadow:none; } }
+    </style>
+  </head><body>
+    <div class="toolbar">
+      <button style="background:#0284c7;color:#fff" onclick="window.print()">🖨 چاپ</button>
+      <button style="background:#475569;color:#fff" onclick="window.close()">✕ بستن</button>
+    </div>
+    <div class="sheet">
+      <!-- محتوا -->
+    </div>
+  </body></html>`);
+  w.document.close();
+  // هیچ‌وقت window.print() یا setTimeout close نزن — کاربر خودش کلیک می‌کند
+}
+```
+
+#### ۵.۷ تنظیمات localStorage
+
+اگر ماژول نیاز به پیکربندی قابل ذخیره دارد (مثل اطلاعات فروشنده در WMS proforma):
+```javascript
+const LS_KEY = 'your_module_config';
+
+function _getCfg() {
+  const def = { name: '', setting1: '', setting2: '' };
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    return { ...def, ...saved };
+  } catch(e) { return def; }
+}
+
+function _saveCfg() {
+  const cfg = {
+    name: document.getElementById('cfg-name').value.trim(),
+    setting1: document.getElementById('cfg-s1').value.trim()
+  };
+  localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+  showToast('تنظیمات ذخیره شد', 's');
+}
+```
+
+---
+
+### گام ۶ — لینک در sidebar اپ اصلی (`public/index.html`)
+
+فقط یک خط `<a>` در sidebar (جستجو کن `href="/wms"` تا موقعیت مناسب پیدا شود):
+
+```html
+<a href="/your-module" class="tab-btn" title="نام ماژول" target="_blank">
+  <span class="sb-icon">🔧</span><span class="sb-label">نام ماژول</span>
+</a>
+```
+
+**نکته مهم**: `index.html` را با Python ویرایش نکن (آن NBSP ندارد و Edit tool امن است). اما `app.bundle.js` را هرگز لمس نکن.
+
+---
+
+### گام ۷ — راستی‌آزمایی قبل از commit
+
+```bash
+# ۱. بررسی NBSP (فقط برای app.bundle.js مهم است، اما برای همه چک کن)
+python3 -c "
+with open('public/YOUR_MODULE.html','r',encoding='utf-8') as f: c=f.read()
+print('NBSP count:', c.count('\xa0'))
+"
+
+# ۲. بررسی syntax JavaScript
+python3 -c "
+import re
+with open('public/YOUR_MODULE.html','r',encoding='utf-8') as f: c=f.read()
+scripts = re.findall(r'<script[^>]*>(.*?)</script>', c, re.S)
+with open('/tmp/check_module.js','w',encoding='utf-8') as f:
+    [f.write(s+'\n;\n') for s in scripts]
+" && node --check /tmp/check_module.js && echo "SYNTAX OK"
+
+# ۳. بررسی route syntax
+node --check server/routes/your-module.js && echo "ROUTE OK"
+```
+
+---
+
+### جدول تصمیم‌گیری: backend نیاز به چی دارد؟
+
+| سوال | پاسخ بله | پاسخ خیر |
+|---|---|---|
+| داده‌ها ساده و بدون workflow هستند؟ | CRUD ساده (GET/POST/PUT/DELETE) | ادامه به سوال بعدی |
+| workflow چند مرحله‌ای نیاز است؟ | `POST /:id/action` + جدول statuses | — |
+| نیاز به تأیید مدیر دارد؟ | `requireManager` روی endpoint مربوطه | `requireAuth` کافی است |
+| عملیات atomic نیاز است (تغییر موجودی + ثبت تراکنش)؟ | PostgreSQL transaction (`BEGIN/COMMIT`) | query های مجزا |
+| شماره‌گذاری serial و منحصربه‌فرد نیاز است؟ | جدول sequence جداگانه + `ON CONFLICT DO UPDATE` | UUID/timestamp id کافی است |
+| فایل آپلود نیاز است؟ | `multer` middleware + مسیر آپلود | — |
+| گزارش پیچیده نیاز است؟ | endpoint گزارش جداگانه (`GET /report/...`) | aggregate در list endpoint |
+
+---
+
+### اشتباهات رایج — از هیچ‌کدام نکن
+
+| اشتباه | درست |
+|---|---|
+| `app.bundle.js` را با Edit tool ویرایش کن | همیشه Python `content.replace()` |
+| `esc()` را فراموش کن در innerHTML | همه user data را از `esc()` رد کن |
+| `DELETE FROM table WHERE id=...` بنویس | `UPDATE SET is_deleted=true` |
+| String interpolation در SQL: `WHERE id='${id}'` | همیشه `$1`, `$2` parametrized |
+| `window.print()` و `setTimeout(close,1200)` در print | toolbar با دکمه دستی |
+| یک `<select>` بزرگ برای مراکز CRM بساز | typeahead با `_searchCenter` |
+| مقدار نداشتن `credentials:'include'` در fetch | اضافه کن — session cookie لازم است |
+| modal با `prompt()` یا `confirm()` | `openMo()` با HTML سفارشی |
+| تنظیمات ماژول را در DB ذخیره کن (schema change) | `localStorage` برای تنظیمات سمت client |
+| commit بدون `node --check` | همیشه syntax check قبل از commit |
+
+---
+
+### نمونه کامل: ماژول جدید «صورت‌حساب» در ۵ دقیقه
+
+```
+1. DB: در initSchema() جدول invoices + idx اضافه کن
+2. Route: server/routes/invoices-new.js — CRUD + workflow
+3. Serve: server/index.js — app.get('/invoices') + app.use('/api/invoices-new')
+4. HTML: public/invoices.html — کپی letters.html، تغییر title + sidebar + render functions
+5. Link: public/index.html — یک <a href="/invoices"> در sidebar
+6. Check: NBSP=0، syntax OK، node --check route OK
+7. Commit + push
+```
+
+**مدت واقعی**: اگر این راهنما را دنبال کنی و از letters.html کپی کنی، ۲-۳ ساعت کافی است برای یک ماژول ساده با CRUD.
