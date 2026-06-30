@@ -15,6 +15,8 @@ const TRANSITIONS = {
   cancelled:['reopen'],
 };
 
+const MANAGER_ROLES = ['مدیر', 'سوپر ادمین'];
+
 function rowToObj(r) {
   return {
     id:            r.id,
@@ -41,6 +43,13 @@ function rowToObj(r) {
     sentAt:        r.sent_at,
     respondedAt:   r.responded_at,
     respondedBy:   r.responded_by,
+    parentId:      r.parent_id,
+    rootId:        r.root_id || r.id,
+    version:       r.version || 1,
+    isLatest:      r.is_latest !== false,
+    ownerAtApproval:          r.owner_at_approval || null,
+    commissionPctSnapshot:    r.commission_pct_snapshot !== null && r.commission_pct_snapshot !== undefined ? Number(r.commission_pct_snapshot) : null,
+    commissionAmountSnapshot: r.commission_amount_snapshot !== null && r.commission_amount_snapshot !== undefined ? Number(r.commission_amount_snapshot) : null,
   };
 }
 
@@ -52,25 +61,183 @@ function calcTotals(items, discountPct, taxPct) {
   return { subtotal, discAmt, taxAmt, total };
 }
 
+// مسئول فعلی مرکز — همان زنجیره تشخیص مالک که در app اصلی استفاده می‌شود
+// (center_edits override → centers_master استاتیک)
+async function resolveCenterOwner(centerId) {
+  if (!centerId) return '';
+  try {
+    const r = await query(`SELECT data->>'owner' AS owner FROM center_edits WHERE center_key = $1`, [centerId]);
+    if (r.rows[0] && r.rows[0].owner) return r.rows[0].owner;
+  } catch (e) {}
+  try {
+    const cm = await query(`SELECT data FROM centers_master WHERE key = 'CENTERS'`);
+    const centers = (cm.rows[0] && cm.rows[0].data) || [];
+    const c = Array.isArray(centers) ? centers.find(function(x) { return x.id === centerId; }) : null;
+    if (c && c.owner) return c.owner;
+  } catch (e) {}
+  return '';
+}
+
+async function resolveCommissionPct(username) {
+  if (!username) return 0;
+  try {
+    const r = await query(`SELECT commission_pct FROM app_users WHERE username = $1`, [username]);
+    return r.rows[0] ? (Number(r.rows[0].commission_pct) || 0) : 0;
+  } catch (e) { return 0; }
+}
+
+// موجودی فعلی لات‌ها را روی آیتم‌ها سوار می‌کند تا کمبود موجودی نسبت به تاریخ صدور پیشفاکتور مشخص شود
+async function enrichStock(itemsList) {
+  const lotIds = [];
+  itemsList.forEach(function(items) {
+    (items || []).forEach(function(i) { if (i.lotId) lotIds.push(i.lotId); });
+  });
+  if (!lotIds.length) return;
+  const uniq = Array.from(new Set(lotIds));
+  const r = await query(`SELECT id, qty FROM wms_lots WHERE id = ANY($1::text[])`, [uniq]);
+  const map = {};
+  r.rows.forEach(function(l) { map[l.id] = Number(l.qty); });
+  itemsList.forEach(function(items, idx) {
+    itemsList[idx] = (items || []).map(function(i) {
+      if (!i.lotId || !(i.lotId in map)) return i;
+      const stock = map[i.lotId];
+      return Object.assign({}, i, { currentStock: stock, lowStock: stock < Number(i.qty) });
+    });
+  });
+}
+
+// ── GET /api/wms-proforma/receivables — مطالبات از پیشفاکتورهای تأییدشده ────
+router.get('/receivables', requireAuth, async (req, res) => {
+  try {
+    const isManager = MANAGER_ROLES.includes(req.user.role);
+    const conditions = [`status IN ('approved','voucher_issued')`, `is_latest = true`];
+    const params = [];
+    if (!isManager) { conditions.push(`created_by = $1`); params.push(req.user.username); }
+    const rows = await query(
+      `SELECT * FROM wms_proformas WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`,
+      params
+    );
+    const ids = rows.rows.map(function(r) { return r.id; });
+    let paidMap = {};
+    if (ids.length) {
+      const pr = await query(
+        `SELECT proforma_id, SUM(amount)::bigint AS paid FROM wms_proforma_payments WHERE proforma_id = ANY($1::text[]) GROUP BY proforma_id`,
+        [ids]
+      );
+      pr.rows.forEach(function(p) { paidMap[p.proforma_id] = Number(p.paid); });
+    }
+    const out = rows.rows.map(function(r) {
+      const o = rowToObj(r);
+      o.paid = paidMap[r.id] || 0;
+      o.remaining = o.total - o.paid;
+      return o;
+    });
+    res.json(out);
+  } catch (e) {
+    console.error('[wms-proforma receivables]', e.message);
+    res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// ── GET /api/wms-proforma/report/by-user ─────────────────────────────────────
+router.get('/report/by-user', requireAuth, async (req, res) => {
+  try {
+    const isManager = MANAGER_ROLES.includes(req.user.role);
+    const { user, from, to, allVersions } = req.query;
+    const targetUser = isManager ? (user || null) : req.user.username;
+
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (targetUser) { conditions.push(`created_by = $${idx++}`); params.push(targetUser); }
+    if (!allVersions) conditions.push('is_latest = true');
+    if (from) { conditions.push(`jalali_date >= $${idx++}`); params.push(from); }
+    if (to)   { conditions.push(`jalali_date <= $${idx++}`); params.push(to); }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const rows = await query(
+      `SELECT * FROM wms_proformas ${where} ORDER BY created_by, root_id, version`,
+      params
+    );
+    res.json(rows.rows.map(rowToObj));
+  } catch (e) {
+    console.error('[wms-proforma report/by-user]', e.message);
+    res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// ── GET /api/wms-proforma/report/by-product — گزارش فروش بر اساس کالا/دسته ──
+router.get('/report/by-product', requireAuth, async (req, res) => {
+  try {
+    const { from, to, groupBy } = req.query;
+    const conditions = [`p.status IN ('approved','voucher_issued')`, `p.is_latest = true`];
+    const params = [];
+    let idx = 1;
+    if (from) { conditions.push(`p.jalali_date >= $${idx++}`); params.push(from); }
+    if (to)   { conditions.push(`p.jalali_date <= $${idx++}`); params.push(to); }
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    if (groupBy === 'category') {
+      const sql = `
+        SELECT COALESCE(wp.category, 'بدون دسته') AS label,
+               SUM((item->>'qty')::numeric) AS total_qty,
+               SUM((item->>'lineTotal')::numeric) AS total_amount
+        FROM wms_proformas p, jsonb_array_elements(p.items) AS item
+        LEFT JOIN wms_products wp ON wp.id = item->>'productId'
+        ${where}
+        GROUP BY wp.category
+        ORDER BY total_amount DESC`;
+      const r = await query(sql, params);
+      res.json(r.rows.map(row => ({ label: row.label, totalQty: Number(row.total_qty || 0), totalAmount: Number(row.total_amount || 0) })));
+    } else {
+      const sql = `
+        SELECT item->>'productId' AS product_id,
+               MAX(item->>'productName') AS label,
+               SUM((item->>'qty')::numeric) AS total_qty,
+               SUM((item->>'lineTotal')::numeric) AS total_amount
+        FROM wms_proformas p, jsonb_array_elements(p.items) AS item
+        ${where}
+        GROUP BY item->>'productId'
+        ORDER BY total_amount DESC`;
+      const r = await query(sql, params);
+      res.json(r.rows.map(row => ({ label: row.label, totalQty: Number(row.total_qty || 0), totalAmount: Number(row.total_amount || 0) })));
+    }
+  } catch (e) {
+    console.error('[wms-proforma report/by-product]', e.message);
+    res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
 // ── GET /api/wms-proforma ────────────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { status, customer } = req.query;
-    const isManager = ['مدیر', 'سوپر ادمین'].includes(req.user.role);
+    const { status, customer, createdBy, from, to, allVersions } = req.query;
+    const isManager = MANAGER_ROLES.includes(req.user.role);
     const conditions = [];
     const params = [];
     let idx = 1;
 
     if (status)   { conditions.push(`status = $${idx++}`);      params.push(status); }
     if (customer) { conditions.push(`customer_id = $${idx++}`); params.push(customer); }
-    if (!isManager) { conditions.push(`created_by = $${idx++}`); params.push(req.user.username); }
+    if (!allVersions) conditions.push('is_latest = true');
+    if (from) { conditions.push(`jalali_date >= $${idx++}`); params.push(from); }
+    if (to)   { conditions.push(`jalali_date <= $${idx++}`); params.push(to); }
+    if (!isManager) {
+      conditions.push(`created_by = $${idx++}`); params.push(req.user.username);
+    } else if (createdBy) {
+      conditions.push(`created_by = $${idx++}`); params.push(createdBy);
+    }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const rows = await query(
       `SELECT * FROM wms_proformas ${where} ORDER BY created_at DESC LIMIT 300`,
       params
     );
-    res.json(rows.rows.map(rowToObj));
+    const objs = rows.rows.map(rowToObj);
+    const itemsList = objs.map(function(o) { return o.items; });
+    await enrichStock(itemsList);
+    objs.forEach(function(o, i) { o.items = itemsList[i]; });
+    res.json(objs);
   } catch (e) {
     console.error('[wms-proforma GET]', e.message);
     res.status(500).json({ error: 'خطای سرور' });
@@ -110,8 +277,8 @@ router.post('/', requireAuth, async (req, res) => {
       `INSERT INTO wms_proformas
          (id,no,jalali_date,customer_id,customer_name,warehouse_id,warehouse_name,
           items,subtotal,discount_pct,disc_amt,tax_pct,tax_amt,total,
-          note,status,created_by,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',$16,NOW(),NOW())
+          note,status,created_by,created_at,updated_at,root_id,version,is_latest)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',$16,NOW(),NOW(),$1,1,true)
        RETURNING *`,
       [
         id, no, b.jalaliDate || null,
@@ -138,7 +305,24 @@ router.get('/:id', requireAuth, async (req, res) => {
   try {
     const r = await query('SELECT * FROM wms_proformas WHERE id = $1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
-    res.json(rowToObj(r.rows[0]));
+    const obj = rowToObj(r.rows[0]);
+    const itemsList = [obj.items];
+    await enrichStock(itemsList);
+    obj.items = itemsList[0];
+    res.json(obj);
+  } catch (e) {
+    res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// ── GET /api/wms-proforma/:id/versions — تاریخچهٔ نسخه‌ها ────────────────────
+router.get('/:id/versions', requireAuth, async (req, res) => {
+  try {
+    const cur = await query('SELECT id, root_id FROM wms_proformas WHERE id = $1', [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    const rootId = cur.rows[0].root_id || cur.rows[0].id;
+    const r = await query('SELECT * FROM wms_proformas WHERE root_id = $1 ORDER BY version ASC', [rootId]);
+    res.json(r.rows.map(rowToObj));
   } catch (e) {
     res.status(500).json({ error: 'خطای سرور' });
   }
@@ -150,7 +334,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     const existing = await query('SELECT * FROM wms_proformas WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
     if (existing.rows[0].status !== 'draft') {
-      return res.status(400).json({ error: 'فقط پیش‌نویس قابل ویرایش است' });
+      return res.status(400).json({ error: 'فقط پیش‌نویس قابل ویرایش است؛ برای ویرایش نسخه‌های ارسال‌شده از «ویرایش با نسخه جدید» استفاده کنید' });
     }
 
     const b = req.body;
@@ -191,11 +375,58 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ── POST /api/wms-proforma/:id/revise — ایجاد نسخه جدید با حفظ نسخه قبلی ────
+router.post('/:id/revise', requireAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT * FROM wms_proformas WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (!existing.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    }
+    const old = existing.rows[0];
+    if (old.status === 'draft') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'پیش‌نویس را مستقیماً ویرایش کنید' });
+    }
+
+    const newId = genId('wpf');
+    const newNo = await nextWpfNo(client);
+    const rootId = old.root_id || old.id;
+    const newVersion = (old.version || 1) + 1;
+
+    const r = await client.query(
+      `INSERT INTO wms_proformas
+         (id,no,jalali_date,customer_id,customer_name,warehouse_id,warehouse_name,
+          items,subtotal,discount_pct,disc_amt,tax_pct,tax_amt,total,
+          note,status,created_by,created_at,updated_at,parent_id,root_id,version,is_latest)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',$16,NOW(),NOW(),$17,$18,$19,true)
+       RETURNING *`,
+      [
+        newId, newNo, old.jalali_date, old.customer_id, old.customer_name,
+        old.warehouse_id, old.warehouse_name, JSON.stringify(old.items || []),
+        old.subtotal, old.discount_pct, old.disc_amt, old.tax_pct, old.tax_amt, old.total,
+        old.note, req.user.username, old.id, rootId, newVersion,
+      ]
+    );
+    await client.query(`UPDATE wms_proformas SET is_latest = false WHERE id = $1`, [old.id]);
+    await client.query('COMMIT');
+    res.status(201).json(rowToObj(r.rows[0]));
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('[wms-proforma revise]', e.message);
+    res.status(500).json({ error: 'خطای سرور' });
+  } finally {
+    client.release();
+  }
+});
+
 // ── POST /api/wms-proforma/:id/action — workflow ─────────────────────────────
 router.post('/:id/action', requireAuth, async (req, res) => {
   try {
     const { action, note } = req.body;
-    const isManager = ['مدیر', 'سوپر ادمین'].includes(req.user.role);
+    const isManager = MANAGER_ROLES.includes(req.user.role);
 
     const existing = await query('SELECT * FROM wms_proformas WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
@@ -216,8 +447,14 @@ router.post('/:id/action', requireAuth, async (req, res) => {
       params = [req.params.id];
     } else if (action === 'approve') {
       if (!isManager) return res.status(403).json({ error: 'فقط مدیر می‌تواند تأیید کند' });
-      updateSQL = `SET status='approved', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW() WHERE id=$1`;
-      params = [req.params.id, req.user.username, note || ''];
+      // مالک فعلی مرکز و درصد پورسانتش در لحظه تأیید snapshot می‌شود — تغییر بعدی مسئول مرکز این مقدار را تغییر نمی‌دهد
+      const owner = await resolveCenterOwner(pf.customer_id);
+      const commissionPct = await resolveCommissionPct(owner);
+      const commissionAmt = Math.round(Number(pf.total) * commissionPct / 100);
+      updateSQL = `SET status='approved', responded_at=NOW(), responded_by=$2, manager_note=$3,
+                       owner_at_approval=$4, commission_pct_snapshot=$5, commission_amount_snapshot=$6,
+                       updated_at=NOW() WHERE id=$1`;
+      params = [req.params.id, req.user.username, note || '', owner, commissionPct, commissionAmt];
     } else if (action === 'reject') {
       if (!isManager) return res.status(403).json({ error: 'فقط مدیر می‌تواند رد کند' });
       updateSQL = `SET status='rejected', responded_at=NOW(), responded_by=$2, manager_note=$3, updated_at=NOW() WHERE id=$1`;
@@ -226,7 +463,9 @@ router.post('/:id/action', requireAuth, async (req, res) => {
       updateSQL = `SET status='cancelled', updated_at=NOW() WHERE id=$1`;
       params = [req.params.id];
     } else if (action === 'reopen') {
-      updateSQL = `SET status='draft', responded_at=NULL, responded_by=NULL, manager_note='', updated_at=NOW() WHERE id=$1`;
+      updateSQL = `SET status='draft', responded_at=NULL, responded_by=NULL, manager_note='',
+                       owner_at_approval=NULL, commission_pct_snapshot=NULL, commission_amount_snapshot=NULL,
+                       updated_at=NOW() WHERE id=$1`;
       params = [req.params.id];
     }
 
@@ -234,6 +473,41 @@ router.post('/:id/action', requireAuth, async (req, res) => {
     res.json(rowToObj(r.rows[0]));
   } catch (e) {
     console.error('[wms-proforma action]', e.message);
+    res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// ── POST /api/wms-proforma/:id/payments — ثبت پرداخت کامل یا جزئی ───────────
+router.post('/:id/payments', requireAuth, async (req, res) => {
+  try {
+    const amt = Number(req.body.amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: 'مبلغ نامعتبر است' });
+
+    const existing = await query('SELECT status FROM wms_proformas WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'پیشفاکتور یافت نشد' });
+    if (!['approved', 'voucher_issued'].includes(existing.rows[0].status)) {
+      return res.status(400).json({ error: 'فقط برای پیشفاکتور تأییدشده می‌توان پرداخت ثبت کرد' });
+    }
+
+    const id = genId('pay');
+    const r = await query(
+      `INSERT INTO wms_proforma_payments (id, proforma_id, amount, jalali_date, method, note, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [id, req.params.id, amt, req.body.jalaliDate || null, req.body.method || '', req.body.note || '', req.user.username]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    console.error('[wms-proforma payments POST]', e.message);
+    res.status(500).json({ error: 'خطای سرور' });
+  }
+});
+
+// ── GET /api/wms-proforma/:id/payments ───────────────────────────────────────
+router.get('/:id/payments', requireAuth, async (req, res) => {
+  try {
+    const r = await query('SELECT * FROM wms_proforma_payments WHERE proforma_id = $1 ORDER BY created_at ASC', [req.params.id]);
+    res.json(r.rows);
+  } catch (e) {
     res.status(500).json({ error: 'خطای سرور' });
   }
 });

@@ -1653,6 +1653,32 @@ async function initSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_wpf_created_by ON wms_proformas(created_by)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_wpf_created_at ON wms_proformas(created_at DESC)`);
 
+  // ── WMS Proforma: versioning + owner/commission snapshot ───────────────────
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS parent_id VARCHAR(50)`).catch(()=>{});
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS root_id VARCHAR(50)`).catch(()=>{});
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1`).catch(()=>{});
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true`).catch(()=>{});
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS owner_at_approval VARCHAR(100)`).catch(()=>{});
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS commission_pct_snapshot DECIMAL(5,2)`).catch(()=>{});
+  await query(`ALTER TABLE wms_proformas ADD COLUMN IF NOT EXISTS commission_amount_snapshot BIGINT`).catch(()=>{});
+  await query(`UPDATE wms_proformas SET root_id = id WHERE root_id IS NULL`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpf_root   ON wms_proformas(root_id)`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpf_latest ON wms_proformas(is_latest)`).catch(()=>{});
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS wms_proforma_payments (
+      id            VARCHAR(50)  PRIMARY KEY,
+      proforma_id   VARCHAR(50)  NOT NULL REFERENCES wms_proformas(id) ON DELETE CASCADE,
+      amount        BIGINT       NOT NULL,
+      jalali_date   VARCHAR(20),
+      method        VARCHAR(50)  DEFAULT '',
+      note          TEXT         DEFAULT '',
+      created_by    VARCHAR(100),
+      created_at    TIMESTAMPTZ  DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_wpfpay_proforma ON wms_proforma_payments(proforma_id)`);
+
   // ── Workflows (visual workflow designer) ───────────────────────────────────
   await query(`
     CREATE TABLE IF NOT EXISTS workflows (

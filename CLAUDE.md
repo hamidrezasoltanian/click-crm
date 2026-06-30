@@ -49,7 +49,11 @@ Sales-Portal/
                               dashboard.js, kpi.js, manager.js, manager-tasks.js,
                               mtr.js, onboarding.js, pricing.js, provinces.js,
                               settings.js, tasks.js, ui-core.js, weekplan.js
-    wms.html                ← WMS warehouse app (served at /wms); uses REST endpoints
+    wms.html                ← WMS warehouse app (served at /wms); uses REST endpoints;
+                              includes proforma sub-module (list/version/payments/reports UI)
+    letters.html             ← دبیرخونه (letters/correspondence) standalone app (served at /letters);
+                              Quill WYSIWYG editor, print template, canvas signature, letterhead
+    admin.html                ← SVG-based visual workflow designer (served at /admin, manager-only)
     sw.js                   ← service worker (CDN caching)
     fonts/                  ← Vazirmatn font files
   src/                      ← Vue 3 + TypeScript (Vite builds → public/dist/)
@@ -78,6 +82,21 @@ Sales-Portal/
       notifications.js      ← /api/notifications  (SQL-backed)
       changelog.js          ← /api/changelog  (SQL-backed)
       migrate.js            ← /api/migrate/blob-to-sql  (one-shot blob→SQL migration)
+      hr.js, trade-kpi.js, payroll.js, invoices.js, reports.js, faradis.js,
+      faradis-match.js, faradis-data.js, support.js, missions.js, hcps.js, files.js
+                             ← see individual route files; mounted in server/index.js
+      letters.js             ← /api/letters  (دبیرخونه: CRUD, atomic indicator numbering
+                              via letter_indicator_seq, referrals/کارتابل, templates)
+      wms-proforma.js        ← /api/wms-proforma  (CRUD + send/approve/reject/cancel/reopen
+                              workflow + issue-voucher; versioning via POST /:id/revise
+                              (root_id/parent_id/version/is_latest); commission snapshot on
+                              approve (owner_at_approval/commission_pct_snapshot/
+                              commission_amount_snapshot, immutable, cleared on reopen);
+                              receivables (GET /receivables) + payments (POST/GET
+                              /:id/payments); reports (GET /report/by-user,
+                              GET /report/by-product); low-stock enrichment (enrichStock)
+                              on list + single-fetch)
+      admin.js                ← /api/admin  (workflow designer config, manager-only)
   scripts/
     discover_centers.py ← CLI scraper (nobat.ir, doctorto.ir, --ai, --enrich modes)
   vite.config.ts        ← Vite 6 config: Vue plugin, src/ → public/dist/, dev proxy → :3000
@@ -137,6 +156,12 @@ attribute. Always run `node --check public/js/app.bundle.js` after editing.
 | PostgreSQL `wms_purchase_orders` | — | WMS purchase orders (JSONB items) |
 | PostgreSQL `wms_recalls` | — | WMS product recalls |
 | PostgreSQL `wms_audit_log` | — | WMS immutable audit trail |
+| PostgreSQL `wms_proformas` | — | WMS proforma invoices; versioned (`root_id`/`parent_id`/`version`/`is_latest`); commission snapshot (`owner_at_approval`, `commission_pct_snapshot`, `commission_amount_snapshot`) frozen at `approve` |
+| PostgreSQL `wms_proforma_payments` | — | Payments recorded against approved/voucher_issued proformas (full or partial) — receivables (مطالبات) are derived from this + `wms_proformas`, no separate ledger table |
+| PostgreSQL `letters` | — | دبیرخونه correspondence (outgoing/incoming/internal), atomic indicator numbering |
+| PostgreSQL `letter_referrals` | — | کارتابل — letter referral chain (from→to user, read/complete status) |
+| PostgreSQL `letter_templates` | — | Reusable letter templates |
+| PostgreSQL `letter_indicator_seq` | (prefix, type_code, year_month) | Atomic per-month indicator-number counter (`INSERT ... ON CONFLICT DO UPDATE`) |
 | PostgreSQL `wms_settings` | key | WMS key-value config |
 | `localStorage` `atena_crm_v2` | — | Client-side cache of `DB` |
 | IndexedDB `atenaCRM_master` | — | Master center list cache |
@@ -173,6 +198,7 @@ Key sub-structures:
 **Owner resolution chain** (used everywhere a center's responsible expert is needed — keep all copies consistent):
 1. `getE(rtype,id).owner` → 2. static center `owner` (CENTERS / `_PC_CACHE`) → 3. `DB.extra[].owner` → 4. `we.addedBy` (week entries only).
 Canonical implementation: `_wpGetOwner(we)` (~line 5996). Inline copies exist in `renderWeekPlan` and `renderWpFullCenterList`.
+Server-side equivalent (no `DB.extra`/`we.addedBy` access, used for the commission snapshot): `resolveCenterOwner(centerId)` in `server/routes/wms-proforma.js` — checks `center_edits.data->>'owner'` first, falls back to `centers_master` key=`'CENTERS'` JSON array.
 
 ### Global State Variables
 
@@ -321,7 +347,7 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | 🎯 Pre-call brief: last notes, changes, competitor, address before calling | center list row (🎯), modal footer | ✅ |
 | 🗺 Navigation: map button next to address textarea → Google Maps | center modal | ✅ |
 | 🤖 Competitor tracking: text field in center modal + orange badge in list row | center modal, list | ✅ |
-| Commission placeholder div (cmCommission_) next to competitor field | center modal | ✅ (placeholder) |
+| Commission level selector (cmCommission_) wired to pricing.commission_level + member commissionPct display | center modal | ✅ (live, not a placeholder) |
 | 9 UX confusion fixes (banner role tag, kanban empty states, etc.) | various | ✅ |
 | UI Polish v2: custom scrollbar, tab underline animation, card hover lift, pill buttons, input focus ring, modal entrance, notification pulse | css/app.css | ✅ |
 | Comprehensive bug-fix pass: 15+ bugs fixed across backend routes + frontend modules | all files | ✅ |
@@ -338,6 +364,16 @@ The receivables AI tab calls `https://api.anthropic.com/v1/messages` directly fr
 | Telegram bot: long-polling, CRM auth, proforma approve/reject inline keyboard, inventory check, QR scan | server/bot/telegram.js | ✅ |
 | Security middleware: helmet (CSP off) + compression (graceful fallback) | server/index.js | ✅ |
 | Vite + TypeScript + Vue 3 scaffold for incremental frontend migration | src/ + vite.config.ts + tsconfig.json | ✅ (placeholder) |
+| دبیرخونه (letters/correspondence): standalone app at /letters, isolated from app.bundle.js | public/letters.html + server/routes/letters.js | ✅ |
+| Letters: atomic indicator numbering (الف/ص-001-40312 format), referrals/کارتابل, templates, Quill WYSIWYG body editor, print template, canvas signature (signature_pad), letterhead background | public/letters.html | ✅ |
+| Letters/WMS-proforma counterparty: typeahead search over CRM centers (GET /api/data/centers/master, flattened Tehran + province lists) instead of a plain `<select>` | public/letters.html, public/wms.html | ✅ |
+| Admin visual workflow designer (SVG-based, manager-only): WMS Proforma / Letters / Tasks / CRM Centers sections | /admin + server/routes/admin.js | ✅ |
+| WMS proforma versioning: editing a sent/approved proforma creates a new linked version (`POST /:id/revise`) instead of mutating the original; old version preserved, `GET /:id/versions` lists full chain | server/routes/wms-proforma.js + public/wms.html | ✅ |
+| WMS proforma commission snapshot: on manager approval, center owner + commission % + commission amount are frozen into immutable columns (not recalculated if the center's owner later changes); cleared only on reopen | server/routes/wms-proforma.js | ✅ |
+| WMS proforma receivables (مطالبات): derived from approved/voucher_issued proformas + payments table; full or partial payment recording | server/routes/wms-proforma.js (`GET /receivables`, `POST/GET /:id/payments`) + wms.html «مطالبات» page | ✅ |
+| WMS proforma reports: per-user (date range, optional all-versions) and per-product/category sales | server/routes/wms-proforma.js (`GET /report/by-user`, `GET /report/by-product`) + wms.html «گزارش پیشفاکتور» page | ✅ |
+| WMS proforma low-stock alarm: items flagged when requested qty exceeds current lot stock, shown on list row + detail view | server/routes/wms-proforma.js (`enrichStock`) + wms.html | ✅ |
+| Center-profile proforma tab: read-only list of a center's proformas (number, date, total, status, version) loaded async via IIFE, link out to /wms | public/js/app.bundle.js `openCenterModal` (`cmWpf_` placeholder) | ✅ |
 
 ## Planned Integration: Accounting Software → Receivables (مطالبات)
 
@@ -362,7 +398,7 @@ The product owner (hamidreza.soltanian@gmail.com) wants to connect the accountin
 
 Priorities expressed by the product owner (hamidreza.soltanian@gmail.com), roughly ordered:
 
-0. **Salesperson workflow polish** — `competitor` field is now tracked; commission view is a placeholder (`cmCommission_` div) — wire it to actual commission_rules table or pricing margins. Pre-call brief and quick-log are live; consider adding "call timer" or "call history" count to the brief.
+0. **Salesperson workflow polish** — `competitor` field is now tracked; commission level is wired to pricing config + member `commissionPct`, and WMS proforma approval now snapshots owner+commission immutably (`owner_at_approval`/`commission_pct_snapshot`/`commission_amount_snapshot`). Pre-call brief and quick-log are live; consider adding "call timer" or "call history" count to the brief. Remaining gap: a proper `commission_rules` table for tiered/per-product commission instead of the flat per-level percentage.
 1. **Manager drill-down depth** — keep extending کلی→جزئی: from expert detail down to full written reports per center (currently shows last note + 5 changeLog entries; owner wants full report reading). Consider a dedicated per-expert report page aggregating done-modal structured logs (نتیجه/یادداشت/اقدام بعدی) by date range.
 2. **Dashboard & overdue follow-up tracking** — keep making overdue work more actionable; possible next steps: overdue aging buckets, one-click reschedule from overdue list, weekly digest notification to manager.
 3. **Task system maturity** — column reordering (drag), per-column WIP hints, task comments/activity, recurring tasks.

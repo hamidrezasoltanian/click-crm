@@ -4799,6 +4799,7 @@ function openCenterModal(rtype,id){
         +'</div></div>';
     })()
     +'<div id="cmPricingInfo_'+r.id+'" style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);font-size:11px"><span style="color:var(--text-muted)">در حال بارگذاری قیمت‌گذاری...</span></div>'
+    +'<div id="cmWpf_'+r.id+'" style="background:var(--bg-raised);border-radius:8px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);font-size:11px"><span style="color:var(--text-muted)">در حال بارگذاری پیشفاکتورها...</span></div>'
    // برنامه هفته
     +(wkEntries.length?'<label>برنامه هفته</label><div style="background:var(--bg-raised);border-radius:5px;padding:7px;font-size:11px">'
     +wkEntries.map(function(we){
@@ -4888,6 +4889,29 @@ function openCenterModal(rtype,id){
   var elCom=document.getElementById('cmCommission_'+_rid);if(elCom){var _curLvl=cfg&&cfg.commission_level?String(cfg.commission_level):'';elCom.innerHTML='<div style="display:flex;align-items:center;gap:5px"><label style="font-size:10px;color:var(--text-muted);flex-shrink:0">💼 پورسانت:</label><select onchange="(function(sel,nm){fetch(\'/api/pricing/center/\'+encodeURIComponent(nm),{method:\'PUT\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({commission_level:sel.value||null})}).then(function(){showToast(sel.value?\'💼 سطح پورسانت ذخیره شد\':\'💼 پورسانت حذف شد\');}).catch(function(){showToast(\'خطا در ذخیره پورسانت\');});})(this,\''+esc(_rname)+'\')" style="font-size:10px;padding:2px 5px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);font-family:inherit;color:var(--text-primary)"><option value="">---</option><option value="1"'+(_curLvl==='1'?' selected':'')+'>سطح ۱</option><option value="2"'+(_curLvl==='2'?' selected':'')+'>سطح ۲</option><option value="3"'+(_curLvl==='3'?' selected':'')+'>سطح ۳</option></select>'+(function(){var _owId=e.owner||r.owner||'';var _owM=_DEFAULT_MEMBERS&&_DEFAULT_MEMBERS.find(function(mm){return mm.id===_owId;});return(_owM&&_owM.commissionPct)?'<span style="font-size:10px;color:#7c3aed;background:#f5f3ff;border:1px solid #e9d5ff;border-radius:4px;padding:1px 6px;margin-right:4px"> 👤 نرخ: '+_owM.commissionPct+'٪</span>':'';})()+' </div>';}
       }).catch(function(){var el=document.getElementById('cmPricingInfo_'+_rid);if(el)el.style.display='none';});
   })(r.id, r.name);
+  // ── پیشفاکتورها ──
+  (function(_rid){
+    fetch('/api/wms-proforma?customer='+encodeURIComponent(_rid)+'&allVersions=0')
+      .then(function(res){return res.json();})
+      .then(function(list){
+        var el=document.getElementById('cmWpf_'+_rid);
+        if(!el)return;
+        if(!Array.isArray(list)||!list.length){el.innerHTML='<span style="color:var(--text-muted);font-size:10px">پیشفاکتوری ثبت نشده</span>';return;}
+        var WPF_ST={draft:'پیش‌نویس',sent:'ارسال‌شده',approved:'تأییدشده',rejected:'ردشده',cancelled:'لغوشده',voucher_issued:'حواله صادرشده'};
+        var WPF_CLR={draft:'#94a3b8',sent:'#3b82f6',approved:'#16a34a',rejected:'#dc2626',cancelled:'#64748b',voucher_issued:'#7c3aed'};
+        var rows=list.slice(0,8).map(function(pf){
+          var c=WPF_CLR[pf.status]||'#64748b';
+          var stLbl=WPF_ST[pf.status]||pf.status;
+          var verBadge=(pf.version&&pf.version>1)?' <span style="font-size:9px;color:var(--text-muted)">v'+pf.version+'</span>':'';
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px">'
+            +'<span><b>'+esc(pf.no||'')+'</b>'+verBadge+' <span style="color:var(--text-muted)">'+esc(pf.jalaliDate||'')+'</span></span>'
+            +'<span><span style="background:'+c+'22;color:'+c+';border-radius:4px;padding:1px 6px;font-size:9px;font-weight:600">'+stLbl+'</span>'
+            +' <b>'+(Number(pf.total)||0).toLocaleString()+'</b></span></div>';
+        }).join('');
+        el.innerHTML='<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:5px">📄 پیشفاکتورها</div>'+rows
+          +'<div style="margin-top:6px;text-align:left"><a href="/wms" target="_blank" style="font-size:10px;color:var(--brand)">مشاهده در WMS →</a></div>';
+      }).catch(function(){var el=document.getElementById('cmWpf_'+_rid);if(el)el.style.display='none';});
+  })(r.id);
 }
 
 function _mrgSearch(){
