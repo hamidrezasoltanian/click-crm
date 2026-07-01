@@ -1,4 +1,15 @@
 /* ═══ public/js/manager.js ═══ */
+// ═══ Safety fallbacks: these are defined in core.js / onboarding.js but guard
+//     against any loading-order or cache issue so init() never throws ReferenceError ═══
+if (typeof initSSE === 'undefined') {
+  window.initSSE = function() { console.warn('[CRM] initSSE stub — will retry'); };
+}
+if (typeof checkEmptyDB === 'undefined') {
+  window.checkEmptyDB = function() {};
+}
+if (typeof cleanupOrphanedEntries === 'undefined') {
+  window.cleanupOrphanedEntries = function() { return {removedWP:0,removedFU:0}; };
+}
 // ════════════════════════ INIT ════════════════════════
 var _typeFilterBuilt=false;
 function buildTypeFilter(){

@@ -87,6 +87,135 @@ var _actPage=0;
 var DB={edits:{},notes:{},tags:[],rTags:{},weekTags:[],weekEntries:{},_weDeletedKeys:[],events:[],checklist:{},extra:[],settings:null,kpiTargets:{},callLog:[],visitLog:[],salesLog:[],missionLog:[],provHistory:[],mtrFollower:{},mtrFollowerMap:{},changeLog:[],mtrTrend:[],notifications:[],tasks:[],kpiHistory:[]};
 var _DEFAULT_MEMBERS=[]; // loaded from server via buildUSERS()
 
+// ════════════════════════ SSE (Server-Sent Events) ════════════════════════
+var _sse = null;
+var _sseReconnectTimer = null;
+var _sseReloadTimer = null;
+var _ssePendingBy = null;
+
+function initSSE() {
+  if (_sse) return;
+  _sse = new EventSource('/api/events/stream?cid='+_sseClientId);
+  _sse.onmessage = function(e) {
+    try {
+      var data = JSON.parse(e.data);
+      if (data.type === 'db-updated') {
+        _sseReloadDB(data.by);
+      } else if (data.type === 'notif_new' && data.to === currentUser) {
+        if (typeof _refreshNotifs === 'function') _refreshNotifs();
+        if (data.msg && typeof _firePushNotif === 'function') _firePushNotif('\uD83D\uDD14 اعلان جدید', data.msg, 'notif-' + Date.now());
+      }
+    } catch(err) {}
+  };
+  _sse.onerror = function() {
+    _sse.close(); _sse = null;
+    clearTimeout(_sseReconnectTimer);
+    _sseReconnectTimer = setTimeout(initSSE, 8000);
+  };
+}
+window.initSSE = initSSE;
+
+function _sseReloadDB(byUser) {
+  if (!byUser) return;
+  var _isTgBot = byUser && byUser.indexOf(':bot') !== -1;
+  if (!_isTgBot && byUser === currentUser) return;
+  _ssePendingBy = _isTgBot ? byUser.replace(':bot','') : byUser;
+  clearTimeout(_sseReloadTimer);
+  _sseReloadTimer = setTimeout(function() {
+    var triggeredBy = _ssePendingBy;
+    _ssePendingBy = null;
+    fetch('/api/data/db').then(function(r){ return r.ok ? r.json() : null; }).then(function(d) {
+      if (!d || typeof d !== 'object') return;
+      if (d._serverTs) _dbServerTs = d._serverTs;
+      var merged = Object.assign({}, DB, d);
+      merged.weekEntries = Object.assign({}, DB.weekEntries, d.weekEntries || {});
+      var mergedEdits4 = Object.assign({}, d.edits || {});
+      var localEdits4 = DB.edits || {};
+      Object.keys(localEdits4).forEach(function(k) {
+        var le = localEdits4[k] || {}; var se = mergedEdits4[k] || {};
+        if ((le._ts || 0) >= (se._ts || 0)) mergedEdits4[k] = le;
+        else mergedEdits4[k] = Object.assign({}, le, se);
+      });
+      merged.edits = mergedEdits4;
+      if (d.notifications && DB.notifications && DB.notifications.length) {
+        var _localRead={};
+        DB.notifications.forEach(function(n){if(n.read)_localRead[n.id]=true;});
+        merged.notifications=(d.notifications||[]).map(function(n){
+          return _localRead[n.id]?Object.assign({},n,{read:true}):n;
+        });
+      }
+      delete merged._serverTs; delete merged._clientTs;
+      Object.keys(merged).forEach(function(k) { DB[k] = merged[k]; });
+      if (!_saveDebounceTimer) {
+        if (currentTab === 'weekplan' && typeof renderWeekPlan === 'function') renderWeekPlan();
+        else if (currentTab === 'provinces' && typeof renderDashboard === 'function') { renderDashboard(); if(typeof renderTable==='function')renderTable(); }
+        else if (currentTab === 'activity' && typeof renderActivity === 'function') renderActivity();
+        else if (currentTab === 'kpi' && typeof renderKPIPanel === 'function') renderKPIPanel();
+        else if (currentTab === 'manager' && typeof renderManagerPanel === 'function') renderManagerPanel();
+      }
+      var _tgSuffix = triggeredBy && triggeredBy.endsWith(':bot') ? ' (تلگرام)' : '';
+      var _tgBy = triggeredBy ? triggeredBy.replace(':bot','') : null;
+      var name = _tgBy ? (USERS[_tgBy] || _tgBy) : 'کاربر دیگری';
+      if (typeof showToast === 'function') showToast('\uD83D\uDD04 ' + name + _tgSuffix + ' تغییراتی اعمال کرد', 2500);
+    }).catch(function() {});
+  }, 1500);
+}
+
+// نمایش راهنما اگر دیتابیس خالی است
+function checkEmptyDB(){
+  try{
+    var totalCenters=CENTERS.length+Object.values(PC_RAW).reduce(function(s,a){return s+a.length;},0)+(DB.extra||[]).length;
+    var msg=document.getElementById('emptyDBMsg');
+    if(!msg)return;
+    var tw=document.querySelector('.table-wrap');
+    var pg=document.getElementById('provGrid');
+    if(totalCenters===0){
+      msg.style.display='block';
+      if(pg)pg.style.display='none';
+      if(tw)tw.style.display='none';
+    }else{
+      msg.style.display='none';
+      if(tw)tw.style.display='';
+    }
+  }catch(e){}
+}
+window.checkEmptyDB = checkEmptyDB;
+
+// ── پاک‌سازی ورودی‌های منسوخ (orphaned) ─────────────────────────────
+function _getAllValidRecKeys(){
+  var valid=new Set();
+  CENTERS.forEach(function(c){valid.add('center_'+c.id);});
+  if(typeof _buildPCCache==='function')_buildPCCache();
+  if(_PC_CACHE)Object.keys(_PC_CACHE).forEach(function(provId){
+    (_PC_CACHE[provId]||[]).forEach(function(c){valid.add('pc_'+c.id);});
+  });
+  (DB.extra||[]).forEach(function(c){
+    var rtype=c.province_id==='tehran'?'center':'pc';
+    valid.add(rtype+'_'+c.id);
+  });
+  return valid;
+}
+function cleanupOrphanedEntries(showReport){
+  var valid=_getAllValidRecKeys();
+  if(!valid.size)return;
+  var removedWP=0,removedFU=0;
+  Object.keys(DB.weekEntries||{}).forEach(function(k){
+    var we=DB.weekEntries[k];
+    var rk=we.recKey||(we.rtype?we.rtype+'_'+we.rid:'');
+    if(rk&&!valid.has(rk)){_weRemove(k);removedWP++;}
+  });
+  Object.keys(DB.edits||{}).forEach(function(k){
+    if(!valid.has(k)&&DB.edits[k].followupDate){delete DB.edits[k].followupDate;removedFU++;}
+  });
+  if(removedWP||removedFU){
+    saveDB();
+    if(showReport)showToast('🧹 پاک‌سازی: '+removedWP+' ورودی هفته و '+removedFU+' پیگیری منسوخ حذف شد',4000);
+  }else if(showReport){showToast('✅ هیچ ورودی منسوخی یافت نشد');}
+  return{removedWP:removedWP,removedFU:removedFU};
+}
+window.cleanupOrphanedEntries = cleanupOrphanedEntries;
+// ════════════════════════ END SSE / DB helpers ═══════════════════════
+
 // ── Login/Auth helpers ────────────────────────────────────────
 function showLoginOverlay(){
   var o=document.getElementById('loginOverlay');
